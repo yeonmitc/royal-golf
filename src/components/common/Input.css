@@ -1,0 +1,76 @@
+/* 컨테이너 */
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* 라벨 */
+.input-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 2px 0;
+}
+
+/* 인풋 본체 – 유리 느낌 */
+.input-field {
+  width: 100%;
+  padding: 10px 16px;
+
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.35); /* 골드 라인 */
+  background: rgba(10, 10, 18, 0.75); /* 어두운 유리 */
+  backdrop-filter: blur(10px);
+
+  font-size: 14px;
+  color: #ffffff;
+
+  outline: none;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.55);
+}
+
+/* 사이즈 라벨 전용 스타일 */
+.size-label .input-label {
+  text-transform: uppercase;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* placeholder */
+.input-field::placeholder {
+  color: rgba(230, 230, 230, 0.4);
+}
+
+/* 포커스 시: 골드 빛 강조 */
+.input-field:focus {
+  border-color: var(--gold-soft);
+  box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(212, 175, 55, 0.55);
+  background: rgba(12, 12, 22, 0.9);
+}
+
+/* 에러 상태 */
+.input-field-error {
+  border-color: #f97373;
+  box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(249, 115, 115, 0.55);
+}
+
+/* 힌트 & 에러 텍스트 */
+.input-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.input-error {
+  font-size: 11px;
+  color: #f97373;
+}
+
+/* 비활성화 상태 */
+.input-field:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

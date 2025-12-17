@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Hole No. Pro Shop</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+
+    <!-- 고급스러운 폰트 (Serif + Sans) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Tailwind (Vite Plugin 통해 자동 로드) -->
+    <link rel="stylesheet" href="/src/index.css" />
+
+    <style>
+      /* 전체 배경 & 텍스트 컬러 */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', sans-serif;
+        background: #050505;
+        color: #e9e9e9;
+        overflow: hidden;
+      }
+
+      /* 골드 컬러를 CSS 변수로 지정 (전역 사용) */
+      :root {
+        --gold: #d4af37;
+        --gold-soft: #cfae52;
+        --border-soft: rgba(255, 255, 255, 0.08);
+        --text-muted: rgba(255, 255, 255, 0.5);
+      }
+
+      /* 앱 크기 보정 */
+      #root {
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <!-- Vite 메인 스크립트 -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

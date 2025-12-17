@@ -1,0 +1,688 @@
+{
+  "counts": {
+    "maindb_codes": 146,
+    "products_raw_codes": 146,
+    "mwa_codes": 147,
+    "normalized_products_codes": 157,
+    "normalized_inventory_codes": 157,
+    "maindb_pairs": 276,
+    "mwa_pairs": 277,
+    "inventory_pairs": 332
+  },
+  "missing_in_products": [],
+  "missing_in_inventory": [],
+  "qty_mismatch": [
+    {
+      "code": "GM-BT-AC-WH-01",
+      "size": "2XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "GM-BT-AC-WH-01",
+      "size": "32",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "GM-BT-AC-WH-01",
+      "size": "34",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "GM-BT-AC-WH-01",
+      "size": "36",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "GM-BT-AC-WH-01",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "GM-BT-AC-WH-01",
+      "size": "XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "GM-TP-PX-BK-01",
+      "size": "XL",
+      "maindb_qty": 1,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-01",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-01",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-BK-01",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-01",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-BK-01",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-BK-02",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-02",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-BK-02",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-02",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-BK-02",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-BK-03",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-03",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-BK-03",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-BK-03",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-BK-03",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-NB-01",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-NB-01",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-NB-01",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-NB-01",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-NB-01",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-NB-02",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-NB-02",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-NB-02",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-NB-02",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-NB-02",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-SB-01",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-SB-01",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-SB-01",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-SB-01",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-SB-01",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-WH-01",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-WH-01",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-WH-01",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-WH-01",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-WH-01",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-WH-02",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-WH-02",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-WH-02",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-WH-02",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-WH-02",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-FR-WH-03",
+      "size": "2XL",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-WH-03",
+      "size": "3XL",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-WH-03",
+      "size": "L",
+      "maindb_qty": 0,
+      "mwa_qty": 2
+    },
+    {
+      "code": "LM-TP-FR-WH-03",
+      "size": "M",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-FR-WH-03",
+      "size": "XL",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-KT-MX-01",
+      "size": "50",
+      "maindb_qty": 0,
+      "mwa_qty": 3
+    },
+    {
+      "code": "LM-TP-KT-MX-01",
+      "size": "M",
+      "maindb_qty": 3,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-KT-MX-02",
+      "size": "50",
+      "maindb_qty": 0,
+      "mwa_qty": 4
+    },
+    {
+      "code": "LM-TP-KT-MX-02",
+      "size": "M",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-LP-BW-01",
+      "size": "52",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-LP-BW-01",
+      "size": "L",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-LP-GY-01",
+      "size": "50",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-LP-GY-01",
+      "size": "54",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-LP-GY-01",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-LP-GY-01",
+      "size": "XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-LP-NB-01",
+      "size": "48",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LM-TP-LP-NB-01",
+      "size": "S",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-01",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-01",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-01",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-01",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-01",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-02",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-02",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-02",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-02",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-02",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-03",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-03",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-03",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-03",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-BK-03",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-01",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-01",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-01",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-01",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-01",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-02",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-02",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-02",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-02",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-NB-02",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-SB-01",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-SB-01",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-SB-01",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-SB-01",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-SB-01",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-01",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-01",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-01",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-01",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-01",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-02",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-02",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-02",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-02",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-02",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-03",
+      "size": "2XL",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-03",
+      "size": "3XL",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-03",
+      "size": "L",
+      "maindb_qty": 2,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-03",
+      "size": "M",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LM-TP-PR-WH-03",
+      "size": "XL",
+      "maindb_qty": 4,
+      "mwa_qty": 0
+    },
+    {
+      "code": "LW-TP-FR-MX-01",
+      "size": "Free",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LW-TP-GF-MX-01",
+      "size": "Free",
+      "maindb_qty": 0,
+      "mwa_qty": 1
+    },
+    {
+      "code": "LW-TP-PR-MX-01",
+      "size": "Free",
+      "maindb_qty": 1,
+      "mwa_qty": 0
+    }
+  ]
+}

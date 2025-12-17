@@ -1,0 +1,280 @@
+{
+  "category": [
+    {
+      "label": "golf",
+      "code": "G"
+    },
+    {
+      "label": "luxury",
+      "code": "L"
+    }
+  ],
+  "gender": [
+    {
+      "label": "man",
+      "code": "M"
+    },
+    {
+      "label": "woman",
+      "code": "W"
+    },
+    {
+      "label": "acc",
+      "code": "A"
+    },
+    {
+      "label": "unisex",
+      "code": "U"
+    }
+  ],
+  "type": [
+    {
+      "label": "top",
+      "code": "TP"
+    },
+    {
+      "label": "bottom",
+      "code": "BT"
+    },
+    {
+      "label": "pouch",
+      "code": "PC"
+    },
+    {
+      "label": "golfBag",
+      "code": "GB"
+    },
+    {
+      "label": "bag",
+      "code": "BG"
+    },
+    {
+      "label": "belt",
+      "code": "BL"
+    },
+    {
+      "label": "other",
+      "code": "OT"
+    },
+    {
+      "label": "umbrella",
+      "code": "UM"
+    },
+    {
+      "label": "gloves",
+      "code": "GG"
+    },
+    {
+      "label": "hat",
+      "code": "HT"
+    },
+    {
+      "label": "wallet",
+      "code": "WL"
+    },
+    {
+      "label": "dress",
+      "code": "DR"
+    },
+    {
+      "label": "jewel",
+      "code": "JH"
+    }
+  ],
+  "brand": [
+    {
+      "label": "Adidas",
+      "code": "AD"
+    },
+    {
+      "label": "alo",
+      "code": "AL"
+    },
+    {
+      "label": "AmazingCre",
+      "code": "AC"
+    },
+    {
+      "label": "Anew ",
+      "code": "AN"
+    },
+    {
+      "label": "Balenciaga",
+      "code": "BC"
+    },
+    {
+      "label": "Celine",
+      "code": "CL"
+    },
+    {
+      "label": "Chanel",
+      "code": "CN"
+    },
+    {
+      "label": "Dior",
+      "code": "DI"
+    },
+    {
+      "label": "FootJoy",
+      "code": "FJ"
+    },
+    {
+      "label": "G/FORE",
+      "code": "GF"
+    },
+    {
+      "label": "Gucci",
+      "code": "GC"
+    },
+    {
+      "label": "Hermes",
+      "code": "HM"
+    },
+    {
+      "label": "Kiton",
+      "code": "KT"
+    },
+    {
+      "label": "LoroPiana",
+      "code": "LP"
+    },
+    {
+      "label": "LouisVuitton",
+      "code": "LV"
+    },
+    {
+      "label": "Lululemon",
+      "code": "LU"
+    },
+    {
+      "label": "Malbon",
+      "code": "MB"
+    },
+    {
+      "label": "Mark&Lona",
+      "code": "MR"
+    },
+    {
+      "label": "Miu Miu",
+      "code": "MU"
+    },
+    {
+      "label": "Moncler",
+      "code": "MC"
+    },
+    {
+      "label": "Nike",
+      "code": "NK"
+    },
+    {
+      "label": "Brand",
+      "code": "EX"
+    },
+    {
+      "label": "Prada",
+      "code": "FR"
+    },
+    {
+      "label": "pxg",
+      "code": "PX"
+    },
+    {
+      "label": "ThomBrowne",
+      "code": "TB"
+    },
+    {
+      "label": "Titleist",
+      "code": "TT"
+    },
+    {
+      "label": "YS",
+      "code": "YS"
+    },
+    {
+      "label": "zegna",
+      "code": "ZG"
+    }
+  ],
+  "color": [
+    {
+      "label": "Beige",
+      "code": "BG"
+    },
+    {
+      "label": "Black",
+      "code": "BK"
+    },
+    {
+      "label": "Brown",
+      "code": "BW"
+    },
+    {
+      "label": "DarkBrown",
+      "code": "DB"
+    },
+     {
+      "label": "Extra",
+      "code": "EX"
+    },
+    {
+      "label": "Gold",
+      "code": "GD"
+    },
+    {
+      "label": "Gray",
+      "code": "GY"
+    },
+    {
+      "label": "Green",
+      "code": "GE"
+    },
+    {
+      "label": "Ivory",
+      "code": "IB"
+    },
+    {
+      "label": "Khaki",
+      "code": "KA"
+    },
+    {
+      "label": "Mint",
+      "code": "MT"
+    },
+    {
+      "label": "Mix ",
+      "code": "MX"
+    },
+    {
+      "label": "Navy",
+      "code": "NB"
+    },
+    {
+      "label": "Oatmeal",
+      "code": "OM"
+    },
+    {
+      "label": "Pink",
+      "code": "PK"
+    },
+    {
+      "label": "Red",
+      "code": "RD"
+    },
+    {
+      "label": "Silver",
+      "code": "SV"
+    },
+    {
+      "label": "SkyBlue",
+      "code": "SB"
+    },
+    {
+      "label": "Transparent",
+      "code": "TP"
+    },
+    {
+      "label": "White",
+      "code": "WH"
+    }
+  ]
+}
