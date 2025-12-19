@@ -3,12 +3,12 @@ import { useState } from 'react';
 import DataTable from '../../../components/common/DataTable';
 import Button from '../../../components/common/Button';
 import RefundModal from '../../../components/sales/RefundModal';
-import { useSalesHistoryFiltered } from '../salesHooks';
+import { useToast } from '../../../context/ToastContext';
 
-export default function SalesTable({ fromDate, toDate, query }) {
-  const { data, isLoading, isError, error } = useSalesHistoryFiltered({ fromDate, toDate, query });
+export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const [refundOpen, setRefundOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const { showToast } = useToast();
 
   if (isLoading) {
     return <div className="p-4 text-sm text-gray-500">판매 내역을 불러오는 중…</div>;
@@ -20,13 +20,6 @@ export default function SalesTable({ fromDate, toDate, query }) {
         판매 내역을 불러오지 못했습니다: {String(error)}
       </div>
     );
-  }
-
-  const hasAnySales = data?.hasAnySales ?? false;
-  const rows = data?.rows ?? [];
-
-  if (!hasAnySales) {
-    return <div className="p-4 text-sm text-gray-500">아직 판매 기록이 없습니다.</div>;
   }
 
   if (rows.length === 0) {
@@ -68,6 +61,7 @@ export default function SalesTable({ fromDate, toDate, query }) {
           const original = Number(row.unitPricePhp || 0);
           const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
           const isDiscounted = discounted !== null && discounted !== original;
+          const priceForCopy = isDiscounted ? discounted.toLocaleString('en-US') : original.toLocaleString('en-US');
 
           return {
             id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
@@ -88,6 +82,7 @@ export default function SalesTable({ fromDate, toDate, query }) {
             ) : (
               original.toLocaleString('en-US')
             ),
+            __copyText: [dateStr, row.code, row.nameKo, row.sizeDisplay, row.qty, priceForCopy].join('\t'),
             action: (
               <Button
                 variant="outline"
@@ -104,6 +99,25 @@ export default function SalesTable({ fromDate, toDate, query }) {
           };
         })}
         emptyMessage="검색 결과 없습니다."
+        onRowClick={async (r) => {
+          const text = String(r.__copyText || '');
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          showToast('Row copied.');
+        }}
+        pagination={pagination}
       />
       {refundOpen && (
         <RefundModal

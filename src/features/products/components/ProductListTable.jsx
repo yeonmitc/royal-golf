@@ -1,9 +1,12 @@
 // src/features/products/components/ProductListTable.jsx
+import { useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
+import Modal from '../../../components/common/Modal';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
 import { useDeleteProductMutation, useProductInventoryList } from '../productHooks';
+import { useToast } from '../../../context/ToastContext';
 
 /**
  * 전체 상품 + 재고 리스트 테이블
@@ -25,6 +28,7 @@ export default function ProductListTable({
   error,
   onClearFilter,
   isFiltered,
+  pagination,
 }) {
   // If products are provided, use them. Otherwise, we could fetch, but for now we assume they are passed if we want filtering from parent.
   // To maintain backward compatibility if needed, we could fetch if products is undefined.
@@ -35,6 +39,8 @@ export default function ProductListTable({
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteProductMutation();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
+  const { showToast } = useToast();
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-gray-500">Loading product list…</div>;
@@ -49,25 +55,29 @@ export default function ProductListTable({
   const filtered = products ?? [];
 
   if (filtered.length === 0) {
-    return (
-      <div className="p-4 text-sm text-gray-500 flex items-center gap-2">
-        <span>No products found.</span>
-        {isFiltered && onClearFilter && (
-          <Button variant="outline" size="xs" onClick={onClearFilter}>
-            Show All Products
-          </Button>
-        )}
-      </div>
-    );
+    return <div className="p-4 text-sm text-gray-500">No products found.</div>;
   }
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteProduct(deleteTarget, {
+        onSuccess: () => {
+          showToast('Product deleted.');
+        },
+        onError: (e) => {
+          showToast(`Deletion failed: ${e.message}`);
+        },
+      });
+      setDeleteTarget(null);
+    }
+  };
 
   const handleDelete = (code) => {
     if (!isAdmin) {
       openLoginModal();
       return;
     }
-    if (!window.confirm(`Delete product ${code}?`)) return;
-    deleteProduct(code);
+    setDeleteTarget(code);
   };
 
   return (
@@ -151,7 +161,25 @@ export default function ProductListTable({
           if (onSelect && selected) onSelect(selected);
         }}
         emptyMessage="No products found."
+        pagination={pagination}
       />
+      <Modal
+        open={!!deleteTarget}
+        title="Confirm Deletion"
+        onClose={() => setDeleteTarget(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        }
+      >
+        <p>Are you sure you want to delete product <strong>{deleteTarget}</strong>?</p>
+      </Modal>
     </div>
   );
 }

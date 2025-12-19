@@ -62,9 +62,7 @@ export default function AnalyzePage() {
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           <label>To</label>
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-          <Button variant="outline" size="sm" className="icon" title="오늘" onClick={setToday}>
-            ☀️
-          </Button>
+          <Button variant="outline" size="sm" className="icon" title="오늘" onClick={setToday} icon="today" />
           <Button variant="outline" size="sm" onClick={setWeek}>
             7D
           </Button>
@@ -137,6 +135,7 @@ export default function AnalyzePage() {
             ? [
                 <ExportActions
                   key="best"
+                  label="Best"
                   columns={[
                     { key: 'code', header: 'Code' },
                     { key: 'qty', header: 'Qty' },
@@ -149,9 +148,12 @@ export default function AnalyzePage() {
                   }))}
                   filename="best-products.csv"
                   gdriveName="best-products.csv"
+                  csvLabel="Best CSV"
+                  driveLabel="Best Drive"
                 />,
                 <ExportActions
                   key="worst"
+                  label="Worst"
                   columns={[
                     { key: 'code', header: 'Code' },
                     { key: 'qty', header: 'Qty' },
@@ -164,6 +166,8 @@ export default function AnalyzePage() {
                   }))}
                   filename="worst-products.csv"
                   gdriveName="worst-products.csv"
+                  csvLabel="Worst CSV"
+                  driveLabel="Worst Drive"
                 />,
               ]
             : null
@@ -214,6 +218,7 @@ export default function AnalyzePage() {
             ? [
                 <ExportActions
                   key="sku"
+                  label="SKU"
                   columns={[
                     { key: 'code', header: 'Code' },
                     { key: 'qty', header: 'Qty' },
@@ -226,6 +231,8 @@ export default function AnalyzePage() {
                   }))}
                   filename="sku-sales.csv"
                   gdriveName="sku-sales.csv"
+                  csvLabel="SKU CSV"
+                  driveLabel="SKU Drive"
                 />,
               ]
             : null
@@ -256,6 +263,7 @@ export default function AnalyzePage() {
             ? [
                 <ExportActions
                   key="by-category"
+                  label="Category"
                   columns={[
                     { key: 'key', header: 'Category' },
                     { key: 'qty', header: 'Qty' },
@@ -268,6 +276,8 @@ export default function AnalyzePage() {
                   }))}
                   filename="sales-by-category.csv"
                   gdriveName="sales-by-category.csv"
+                  csvLabel="Category CSV"
+                  driveLabel="Category Drive"
                 />,
                 <ExportActions
                   key="by-brand"
@@ -283,9 +293,12 @@ export default function AnalyzePage() {
                   }))}
                   filename="sales-by-brand.csv"
                   gdriveName="sales-by-brand.csv"
+                  csvLabel="Brand CSV"
+                  driveLabel="Brand Drive"
                 />,
                 <ExportActions
                   key="by-gender"
+                  label="Gender"
                   columns={[
                     { key: 'key', header: 'Gender' },
                     { key: 'qty', header: 'Qty' },
@@ -298,9 +311,12 @@ export default function AnalyzePage() {
                   }))}
                   filename="sales-by-gender.csv"
                   gdriveName="sales-by-gender.csv"
+                  csvLabel="Gender CSV"
+                  driveLabel="Gender Drive"
                 />,
                 <ExportActions
                   key="by-size"
+                  label="Size"
                   columns={[
                     { key: 'key', header: 'Size' },
                     { key: 'qty', header: 'Qty' },
@@ -313,9 +329,12 @@ export default function AnalyzePage() {
                   }))}
                   filename="sales-by-size.csv"
                   gdriveName="sales-by-size.csv"
+                  csvLabel="Size CSV"
+                  driveLabel="Size Drive"
                 />,
                 <ExportActions
                   key="by-color"
+                  label="Color"
                   columns={[
                     { key: 'key', header: 'Color' },
                     { key: 'qty', header: 'Qty' },
@@ -328,6 +347,8 @@ export default function AnalyzePage() {
                   }))}
                   filename="sales-by-color.csv"
                   gdriveName="sales-by-color.csv"
+                  csvLabel="Color CSV"
+                  driveLabel="Color Drive"
                 />,
               ]
             : null
@@ -426,24 +447,11 @@ export default function AnalyzePage() {
         )}
       </Card>
 
-      <Card title="할인/환불 리포트">
+      <Card title="환불 리포트">
         {!data ? (
           <div className="text-sm text-[var(--text-muted)]">Analyze를 먼저 실행하세요.</div>
         ) : (
           <div style={{ display: 'flex', gap: 12 }}>
-            <div className="page-card" style={{ flex: 1 }}>
-              <div>할인금액 합계</div>
-              <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.discountAmount).toLocaleString('en-PH')} PHP
-              </div>
-              <div className="muted">할인 거래 비중</div>
-              <div style={{ fontWeight: 700 }}>
-                {data.discountShare.totalTransactions
-                  ? ((data.discountShare.discountedTransactions / data.discountShare.totalTransactions) * 100).toFixed(1)
-                  : '0.0'}
-                %
-              </div>
-            </div>
             <div className="page-card" style={{ flex: 1 }}>
               <div>환불건수</div>
               <div style={{ fontWeight: 700 }}>{data.summary.refundCount}</div>

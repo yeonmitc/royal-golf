@@ -73,7 +73,6 @@ export const useCartStore = create((set, get) => ({
           size,
           sizeDisplay,
           nameKo,
-          originalUnitPricePhp: Number(unitPricePhp) || 0,
           unitPricePhp: Number(unitPricePhp) || 0,
           qty: qty > 0 ? qty : 1,
         },
@@ -119,14 +118,47 @@ export const useCartStore = create((set, get) => ({
     set({ items: filtered, totalQty, totalPrice });
   },
 
-  setUnitPrice: (code, size, newUnitPrice) => {
+  /**
+   * 프로모션 적용/해제 (가격 0원 토글)
+   */
+  togglePromo: (code, size) => {
     const id = makeCartItemId(code, size);
-    const updated = get().items.map((i) =>
-      i.id === id ? { ...i, unitPricePhp: Number(newUnitPrice) || 0 } : i
-    );
-    const totalQty = updated.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = updated.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
-    set({ items: updated, totalQty, totalPrice });
+    const currentItems = get().items;
+    const target = currentItems.find((i) => i.id === id);
+    
+    if (!target) return;
+
+    const isFree = target.unitPricePhp === 0;
+    let updatedItems;
+
+    if (isFree) {
+      // Restore original price
+      // If originalUnitPricePhp is missing, we can't restore (shouldn't happen if flow is correct)
+      // We will fallback to keeping it 0 if no original price found, or maybe user has to re-add.
+      // But assuming we set it when making it free.
+      if (target.originalUnitPricePhp != null) {
+        updatedItems = currentItems.map((i) =>
+          i.id === id ? { ...i, unitPricePhp: i.originalUnitPricePhp } : i
+        );
+      } else {
+        return; // Cannot restore
+      }
+    } else {
+      // Make it free
+      updatedItems = currentItems.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              originalUnitPricePhp: i.unitPricePhp, // Save current price
+              unitPricePhp: 0,
+            }
+          : i
+      );
+    }
+
+    const totalQty = updatedItems.reduce((sum, i) => sum + i.qty, 0);
+    const totalPrice = updatedItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    set({ items: updatedItems, totalQty, totalPrice });
   },
 
   /**

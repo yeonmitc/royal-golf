@@ -453,13 +453,6 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const transactionCount = saleIds.length;
   const aov = transactionCount ? totalRevenue / transactionCount : 0;
 
-  const discountAmount = rows.reduce((sum, r) => {
-    const orig = Number(r.unitPricePhp || 0) || 0;
-    const charged = Number((r.discountUnitPricePhp ?? r.unitPricePhp) || 0) || orig;
-    const diff = orig - charged;
-    return sum + (diff > 0 ? diff * (r.qty || 0) : 0);
-  }, 0);
-  const discountRate = totalRevenue > 0 ? discountAmount / (totalRevenue + discountAmount) : 0;
   const refundAmount = refunds.reduce((sum, r) => sum + (Number(r.amountPhp || 0) || 0), 0);
   const refundCount = refunds.length;
 
@@ -468,8 +461,6 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     netAmount: totalRevenue - refundAmount,
     transactionCount,
     aov,
-    discountAmount,
-    discountRate,
     refundCount,
     refundAmount,
   };
@@ -516,8 +507,6 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     (k) => findLabel('gender', k)
   );
 
-  const discountShare = { discountedTransactions: 0, totalTransactions: transactionCount };
-
   function makeWeekKey(dt) {
     const d = new Date(dt);
     const yyyy = d.getFullYear();
@@ -558,7 +547,6 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     byGender,
     bySize,
     byColor,
-    discountShare,
     weeklyRevenue,
     monthlyRevenue,
   };

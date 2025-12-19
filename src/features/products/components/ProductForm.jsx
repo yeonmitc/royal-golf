@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Input from '../../../components/common/Input';
 import { useProductCodeExists, useUpsertProductMutation } from '../productHooks';
+import { useToast } from '../../../context/ToastContext';
 
 /**
  * 상품 등록/수정 폼
@@ -25,23 +26,24 @@ export default function ProductForm({ initialProduct, onSaved, onCancel }) {
 
   const { data: codeExists } = useProductCodeExists(code);
   const { mutateAsync: saveProduct, isPending, error: saveError } = useUpsertProductMutation();
+  const { showToast } = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!code.trim()) {
-      alert('Product code is required.');
+      showToast('Product code is required.');
       return;
     }
 
     if (!nameKo.trim()) {
-      alert('Please enter product name.');
+      showToast('Please enter product name.');
       return;
     }
 
     // 신규 등록일 때만 중복 체크
     if (!isEdit && codeExists) {
-      alert('Product code already exists.');
+      showToast('Product code already exists.');
       return;
     }
 

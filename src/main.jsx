@@ -5,6 +5,7 @@ import App from './App';
 import { seedIfEmpty } from './db/seedLoader';
 import './index.css';
 import QueryProvider from './providers/QueryProvider';
+import { ToastProvider } from './context/ToastContext';
 
 // Restore original deep link if GH Pages served 404.html and redirected
 try {
@@ -28,7 +29,9 @@ const basename = import.meta.env.BASE_URL || '/';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter basename={basename}>
     <QueryProvider>
-      <App />
+      <ToastProvider>
+        <App />
+      </ToastProvider>
     </QueryProvider>
   </BrowserRouter>
 );

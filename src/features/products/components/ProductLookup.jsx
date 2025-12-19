@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import BarcodeListener from '../../../components/common/BarcodeListener';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
-import { useProductWithInventory, useUpdateInventoryMutation } from '../productHooks';
+import { useProductWithInventory, useUpdateInventoryMutation, useUpsertProductMutation } from '../productHooks';
 
 export default function ProductLookup({
   code,
@@ -17,8 +17,27 @@ export default function ProductLookup({
   const { data: prod, refetch } = useProductWithInventory(code);
   const [editLocal, setEditLocal] = useState(Boolean(autoEdit));
   const edit = editMode !== undefined ? Boolean(editMode) : editLocal;
+  
+  // Local state for product details
+  const [localName, setLocalName] = useState('');
+  const [localPrice, setLocalPrice] = useState('');
+
   const [sizeChanges, setSizeChanges] = useState({});
-  const { mutateAsync: updateInv, isPending } = useUpdateInventoryMutation();
+  
+  const { mutateAsync: updateInv, isPending: isInvPending } = useUpdateInventoryMutation();
+  const { mutateAsync: upsertProd, isPending: isProdPending } = useUpsertProductMutation();
+  
+  const isPending = isInvPending || isProdPending;
+
+  useEffect(() => {
+    if (prod) {
+      setLocalName(prod.nameKo || '');
+      setLocalPrice(prod.salePricePhp ?? 0);
+    } else {
+      setLocalName('');
+      setLocalPrice('');
+    }
+  }, [prod]);
 
   const sizes = useMemo(() => {
     const standard = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
@@ -37,7 +56,29 @@ export default function ProductLookup({
 
   async function saveChanges() {
     if (!code) return;
-    await updateInv({ code, changes: sizeChanges });
+
+    // 1. Update Inventory
+    if (Object.keys(sizeChanges).length > 0) {
+      await updateInv({ code, changes: sizeChanges });
+    }
+
+    // 2. Update Product Details
+    if (prod) {
+      const currentName = prod.nameKo || '';
+      const currentPrice = prod.salePricePhp ?? 0;
+      
+      const newName = localName.trim();
+      const newPrice = Number(localPrice) || 0;
+
+      if (newName !== currentName || newPrice !== currentPrice) {
+        await upsertProd({
+          code,
+          nameKo: newName,
+          salePricePhp: newPrice,
+        });
+      }
+    }
+
     setEditLocal(false);
     setSizeChanges({});
     onSaved?.(code);
@@ -173,10 +214,17 @@ export default function ProductLookup({
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 10 }}>
                 <Input
+                  label="Product Name"
+                  value={localName}
+                  onChange={(e) => setLocalName(e.target.value)}
+                  readOnly={!edit}
+                />
+                <Input
                   label="Sale Price (PHP)"
                   type="number"
-                  value={prod.salePricePhp ?? 0}
-                  readOnly
+                  value={localPrice}
+                  onChange={(e) => setLocalPrice(e.target.value)}
+                  readOnly={!edit}
                 />
               </div>
 

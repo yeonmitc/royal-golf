@@ -4,12 +4,14 @@ import Input from '../common/Input';
 import Button from '../common/Button';
 import { useProcessRefundMutation } from '../../features/sales/salesHooks';
 import { useAdminStore } from '../../store/adminStore';
+import { useToast } from '../../context/ToastContext';
 
 export default function RefundModal({ open, onClose, saleItem }) {
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const [reason, setReason] = useState('');
   const [err, setErr] = useState('');
+  const { showToast } = useToast();
   
   const { mutateAsync: processRefund, isPending } = useProcessRefundMutation();
 
@@ -45,7 +47,7 @@ export default function RefundModal({ open, onClose, saleItem }) {
         reason: v,
       });
       onClose?.();
-      alert('Refund processed.');
+      showToast('Refund processed.');
     } catch (e) {
       console.error('Refund failed:', e);
       setErr('환불 처리 실패: ' + (e.message || 'Unknown error'));

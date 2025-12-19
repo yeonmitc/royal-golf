@@ -1,5 +1,6 @@
 import Button from './Button';
 import { exportToCsv } from '../../utils/csvExport';
+import { useToast } from '../../context/ToastContext';
 
 async function ensureGapiLoaded() {
   if (window.gapi && window.gapi.load) return true;
@@ -50,9 +51,27 @@ export default function ExportActions({
   filename = 'data.csv',
   gdriveName,
   showDrive = true,
+  csvLabel = null,
+  driveLabel = null,
+  label = null,
 }) {
   const hasRows = Array.isArray(rows) && rows.length > 0;
   const canDrive = !!(import.meta.env.VITE_GOOGLE_API_KEY && import.meta.env.VITE_GOOGLE_CLIENT_ID);
+  const { showToast } = useToast();
+
+  const btnCsvStyle = {
+    background: '#10B981', // Green
+    color: '#fff',
+    border: 'none',
+    boxShadow: '0 3px 0 #047857',
+  };
+
+  const btnDriveStyle = {
+    background: '#3B82F6', // Blue
+    color: '#fff',
+    border: 'none',
+    boxShadow: '0 3px 0 #1D4ED8',
+  };
 
   async function handleCsv() {
     if (!hasRows) return;
@@ -94,29 +113,36 @@ export default function ExportActions({
         headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
         body: multipartRequestBody,
       });
-      alert('Uploaded to Google Drive.');
+      showToast('Uploaded to Google Drive.');
     } catch {
-      alert('Google Drive upload unavailable.');
+      showToast('Google Drive upload unavailable.');
     }
   }
 
   return (
-    <>
-      <Button variant="outline" size="sm" onClick={handleCsv} aria-label="Download CSV" title="Download CSV" disabled={!hasRows}>
-        ⤓
-      </Button>
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <Button
+        variant="custom"
+        size="sm"
+        onClick={handleCsv}
+        aria-label={label || csvLabel || 'Download CSV'}
+        title={label || csvLabel || 'Download CSV'}
+        disabled={!hasRows}
+        icon="download"
+        style={btnCsvStyle}
+      />
       {showDrive && (
         <Button
-          variant="outline"
+          variant="custom"
           size="sm"
           onClick={handleDriveUpload}
-          aria-label="Upload to Google Drive"
-          title="Upload to Google Drive"
+          aria-label={label || driveLabel || 'Upload to Google Drive'}
+          title={label || driveLabel || 'Upload to Google Drive'}
           disabled={!hasRows || !canDrive}
-        >
-          ⛅
-        </Button>
+          icon="cloud"
+          style={btnDriveStyle}
+        />
       )}
-    </>
+    </div>
   );
 }

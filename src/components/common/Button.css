@@ -3,6 +3,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 
   border-radius: 999px; /* pill */
   font-weight: 600;
@@ -67,21 +68,48 @@
 .btn.sm {
   padding: 8px 14px;
   font-size: 13px;
+  height: 32px;
 }
 
 .btn.md {
   padding: 10px 18px;
   font-size: 14px;
+  height: 38px;
 }
 
 .btn.lg {
   padding: 12px 22px;
   font-size: 15px;
+  height: 44px;
 }
 
 .btn.xl {
   padding: 14px 24px;
   font-size: 16px;
+  height: 50px;
+}
+
+/* --- Icon Only --- */
+.btn.icon-only {
+  padding: 0;
+  width: var(--btn-height); /* Fallback or variable usage if needed, but we can just use explicit sizes below */
+  border-radius: 50%;
+}
+
+.btn.sm.icon-only {
+  width: 32px;
+}
+
+.btn.md.icon-only {
+  width: 38px;
+}
+
+.btn.lg.icon-only {
+  width: 44px;
+}
+
+.btn.xl.icon-only {
+  width: 50px;
 }
 
 /* 접근성: 포커스 링 */
@@ -96,11 +124,4 @@
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
-}
-
-.page-card .btn {
-  margin-top: 5px;
-}
-.btn:hover {
-  transform: scale(1.1);
 }

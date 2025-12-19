@@ -12,9 +12,11 @@ import {
   useUpsertProductMutation,
 } from '../features/products/productHooks';
 import { generateProductCode } from '../utils/codeGenerator';
+import { useToast } from '../context/ToastContext';
 
 export default function AddProductPage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [category, setCategory] = useState('');
   const [gender, setGender] = useState('');
@@ -115,15 +117,15 @@ export default function AddProductPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!codePreview) {
-      alert('Code not generated. Please select all options.');
+      showToast('Code not generated. Please select all options.');
       return;
     }
     if (duplicate) {
-      alert('Code already exists. Please change options.');
+      showToast('Code already exists. Please change options.');
       return;
     }
     if (!nameKo.trim()) {
-      alert('Please enter product name.');
+      showToast('Please enter product name.');
       return;
     }
 
@@ -140,7 +142,7 @@ export default function AddProductPage() {
       Object.entries(sizeInputs).map(([k, v]) => [k, Number(v || 0) || 0])
     );
     await updateInv({ code: savedCode, changes });
-    alert(`Product added: ${savedCode}`);
+    showToast(`Product added: ${savedCode}`);
     navigate('/inventory');
   }
 

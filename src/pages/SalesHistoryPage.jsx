@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import SalesTable from '../features/sales/components/SalesTable';
 import Card from '../components/common/Card';
+import Button from '../components/common/Button';
 import ExportActions from '../components/common/ExportActions';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
@@ -27,12 +28,22 @@ export default function SalesHistoryPage() {
     query: '',
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+
   const applySearch = () => {
     setFilters({
       fromDate: fromInput || '',
       toDate: toInput || '',
       query: qInput.trim(),
     });
+    setCurrentPage(1);
+  };
+
+  const resetSearch = () => {
+    setQInput('');
+    setTodayRange();
+    setCurrentPage(1);
   };
 
   const setTodayRange = () => {
@@ -47,6 +58,13 @@ export default function SalesHistoryPage() {
     toDate: filters.toDate,
     query: filters.query,
   });
+
+  const allRows = salesData?.rows || [];
+  const totalPages = Math.ceil(allRows.length / itemsPerPage);
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return allRows.slice(start, start + itemsPerPage);
+  }, [allRows, currentPage]);
 
   const exportActions = useMemo(() => {
     const rows = salesData?.rows || [];
@@ -108,9 +126,7 @@ export default function SalesHistoryPage() {
           <input type="date" value={toInput} onChange={(e) => setToInput(e.target.value)} />
         </div>
 
-        <button type="button" onClick={setTodayRange}>
-          Today
-        </button>
+        <Button type="button" onClick={setTodayRange} size="sm" variant="outline" title="Today" icon="today" />
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1, minWidth: 240 }}>
           <input
@@ -123,9 +139,8 @@ export default function SalesHistoryPage() {
             }}
             style={{ flex: 1 }}
           />
-          <button type="button" onClick={applySearch}>
-            Search
-          </button>
+          <Button type="button" onClick={applySearch} size="sm" variant="primary" title="Search" icon="search" />
+          <Button type="button" onClick={resetSearch} size="sm" variant="outline" title="Reset" icon="reset" />
         </div>
       </div>
 
@@ -137,6 +152,12 @@ export default function SalesHistoryPage() {
           fromDate={filters.fromDate}
           toDate={filters.toDate}
           query={filters.query}
+          rows={paginatedRows}
+          pagination={{
+            current: currentPage,
+            totalPages,
+            onPageChange: setCurrentPage,
+          }}
         />
       </Card>
     </div>

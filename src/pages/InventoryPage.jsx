@@ -1,5 +1,5 @@
 // src/pages/InventoryPage.jsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import Modal from '../components/common/Modal';
@@ -9,6 +9,7 @@ import Input from '../components/common/Input';
 import ExportActions from '../components/common/ExportActions';
 import { useProductInventoryList } from '../features/products/productHooks';
 import { useAdminStore } from '../store/adminStore';
+import { useToast } from '../context/ToastContext';
 
 export default function InventoryPage() {
   const [gender, setGender] = useState(''); // '', 'M', 'W', 'A'
@@ -17,15 +18,23 @@ export default function InventoryPage() {
   const [editMode, setEditMode] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
   const { data: allProducts = [], isLoading, isError, error } = useProductInventoryList();
 
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
+  const { showToast } = useToast();
 
   const applySearch = () => {
     setSearchApplied(searchQ.trim());
-    setSearchQ('');
   };
+
+  useEffect(() => {
+    if (searchApplied) {
+      setSearchQ('');
+    }
+  }, [searchApplied]);
 
   const clearSearch = () => {
     setSearchApplied('');
@@ -57,6 +66,16 @@ export default function InventoryPage() {
     }
     return filtered;
   }, [allProducts, gender, searchApplied]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [gender, searchApplied]);
+
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredProducts.slice(start, start + itemsPerPage);
+  }, [filteredProducts, currentPage]);
 
   return (
     <div className="page-root">
@@ -100,7 +119,7 @@ export default function InventoryPage() {
       <Card
         title="Product List"
         actions={
-          Array.isArray(filteredProducts) && filteredProducts.length > 0
+          Array.isArray(paginatedProducts) && paginatedProducts.length > 0
             ? [
                 <ExportActions
                   key="products"
@@ -110,14 +129,14 @@ export default function InventoryPage() {
                     { key: 'totalStock', header: 'Total Stock' },
                     { key: 'salePrice', header: 'Sale Price (PHP)' },
                   ]}
-                  rows={filteredProducts.map((p) => ({
+                  rows={paginatedProducts.map((p) => ({
                     code: p.code,
                     name: p.nameKo || '',
                     totalStock: p.totalStock ?? 0,
                     salePrice: (p.salePricePhp || 0).toLocaleString('en-PH'),
                   }))}
-                  filename="product-list.csv"
-                  gdriveName="product-list.csv"
+                  filename="product-list-page.csv"
+                  gdriveName="product-list-page.csv"
                   showDrive={false}
                 />,
               ]
@@ -126,30 +145,26 @@ export default function InventoryPage() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
           <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: '40%', minWidth: 240 }}>
-              <Input
-                placeholder="검색 (#로 시작하면 코드 부분검색)"
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') applySearch();
-                }}
-              />
-            </div>
-            {searchApplied && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: '14px', color: '#555', fontWeight: 500 }}>
-                  필터 적용됨: "{searchApplied}"
-                </span>
-                <Button variant="outline" size="xs" onClick={clearSearch}>
-                  ✕ 필터 해제
-                </Button>
+            <div style={{ width: '40%', minWidth: 240, display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <Input
+                  placeholder="검색 (#로 시작하면 코드 부분검색)"
+                  value={searchQ}
+                  onChange={(e) => setSearchQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applySearch();
+                    if (e.key === 'Backspace' && searchQ === '') {
+                      setSearchApplied('');
+                    }
+                  }}
+                />
               </div>
-            )}
+              <Button variant="outline" size="sm" onClick={clearSearch} title="Reset" icon="refresh" />
+            </div>
           </div>
         </div>
         <ProductListTable
-          products={filteredProducts}
+          products={paginatedProducts}
           isLoading={isLoading}
           isError={isError}
           error={error}
@@ -157,8 +172,11 @@ export default function InventoryPage() {
             setModalCode(p.code);
             setModalOpen(true);
           }}
-          onClearFilter={clearSearch}
-          isFiltered={!!searchApplied}
+          pagination={{
+            current: currentPage,
+            totalPages,
+            onPageChange: setCurrentPage,
+          }}
         />
       </Card>
 
@@ -199,7 +217,7 @@ export default function InventoryPage() {
           editMode={editMode}
           codeInputReadOnly={true}
           onSaved={() => {
-            alert('Product updated.');
+            showToast('Product updated.');
             setModalOpen(false);
           }}
         />

@@ -1,7 +1,7 @@
 name: deploy
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
 permissions:
   contents: read
   pages: write
@@ -31,6 +31,9 @@ jobs:
         run: |
           echo "VITE_ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}" >> "$GITHUB_ENV"
           echo "VITE_ADMIN_SESSION_TTL_MINUTES=${ADMIN_SESSION_TTL_MINUTES:-720}" >> "$GITHUB_ENV"
+          # Automatically determine base path from repository name
+          REPO_NAME=${GITHUB_REPOSITORY#*/}
+          echo "VITE_BASE_PATH=/$REPO_NAME/" >> "$GITHUB_ENV"
         env:
           ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
           ADMIN_SESSION_TTL_MINUTES: ${{ vars.ADMIN_SESSION_TTL_MINUTES }}
