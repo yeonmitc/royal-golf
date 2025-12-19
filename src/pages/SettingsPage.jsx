@@ -48,10 +48,10 @@ export default function SettingsPage() {
     products.sort((a, b) => a.code.localeCompare(b.code));
     
     const productsJson = products.map((p, idx) => ({
-      "번호": idx + 1,
-      "제품코드": p.code,
-      "재고": p.totalStock,
-      "판매가": p.salePricePhp
+      "No": idx + 1,
+      "Code": p.code,
+      "Stock": p.totalStock,
+      "Price": p.salePricePhp
     }));
 
     // 2. Prepare seed-products-expanded.json

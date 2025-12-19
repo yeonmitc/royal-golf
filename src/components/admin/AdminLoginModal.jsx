@@ -31,7 +31,7 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
   async function handleLogin() {
     setErr('');
     if (!pw) {
-      setErr('비밀번호를 입력하세요.');
+      setErr('Please enter password.');
       return;
     }
 
@@ -39,7 +39,7 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
     try {
       const inputHash = (await sha256Hex(pw)).toLowerCase();
       if (inputHash !== expectedHash) {
-        setErr('비밀번호가 일치하지 않습니다.');
+        setErr('Incorrect password.');
         return;
       }
 
@@ -56,7 +56,7 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="관리자 인증"
+      title="Admin Authentication"
       size="content"
       containerStyle={{ width: '30vw', maxWidth: '30vw' }}
       align="top"
@@ -84,11 +84,11 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
     >
       <div style={{ display: 'grid', gap: 12 }}>
         <div className="text-sm text-[var(--text-muted)]">
-          재고 수정/삭제/상품 추가/설정은 관리자 인증이 필요합니다.
+          Admin authentication is required for inventory modification/deletion/product addition/settings.
         </div>
 
         <Input
-          label="관리자 비밀번호"
+          label="Admin Password"
           type="password"
           autoFocus
           value={pw}

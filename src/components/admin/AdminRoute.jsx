@@ -20,7 +20,7 @@ export default function AdminRoute({ children }) {
     <div className="page-root">
       <div className="page-card">
         <div className="page-title">Admin Only</div>
-        <div className="page-subtitle">관리자 인증이 필요합니다.</div>
+        <div className="page-subtitle">Admin authentication is required.</div>
       </div>
     </div>
   );

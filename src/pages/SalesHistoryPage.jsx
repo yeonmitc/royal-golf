@@ -113,7 +113,7 @@ export default function SalesHistoryPage() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2 style={{ marginBottom: 12 }}>판매 기록</h2>
+      <h2 style={{ marginBottom: 12 }}>Sales History</h2>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -131,7 +131,7 @@ export default function SalesHistoryPage() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1, minWidth: 240 }}>
           <input
             type="text"
-            placeholder="제품코드/제품명/사이즈 검색 (부분검색)"
+            placeholder="Search by product code/name/size (partial)"
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
             onKeyDown={(e) => {
@@ -145,7 +145,7 @@ export default function SalesHistoryPage() {
       </div>
 
       <Card
-        title="판매 내역"
+        title="Sales Records"
         actions={exportActions}
       >
         <SalesTable

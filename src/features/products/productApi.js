@@ -107,7 +107,7 @@ export async function searchProducts(keyword) {
 export async function upsertProduct(payload) {
   requireAdminOrThrow();
   const code = String(payload.code || '').trim();
-  if (!code) throw new Error('제품코드는 필수입니다.');
+  if (!code) throw new Error('Product code is required.');
 
   return db.transaction('rw', db.products, db.logs, async () => {
     const existing = await db.products.get(code);
@@ -194,7 +194,7 @@ export async function isProductCodeExists(code) {
 
 export async function updateInventoryQuantities(code, sizeQtyMap) {
   requireAdminOrThrow();
-  if (!code) throw new Error('코드가 필요합니다');
+  if (!code) throw new Error('Code is required.');
   const entries = Object.entries(sizeQtyMap || {});
   return db.transaction('rw', db.products, db.inventory, db.logs, async () => {
     for (const [size, qty] of entries) {

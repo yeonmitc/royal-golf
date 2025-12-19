@@ -7,7 +7,7 @@ export default function LogsPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Logs</div>
-          <div className="page-subtitle">판매/상품/재고 변경 내역을 조회합니다.</div>
+          <div className="page-subtitle">View sales/product/inventory change logs.</div>
         </div>
       </div>
 

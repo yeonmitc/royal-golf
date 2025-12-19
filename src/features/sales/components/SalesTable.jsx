@@ -11,19 +11,19 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   const { showToast } = useToast();
 
   if (isLoading) {
-    return <div className="p-4 text-sm text-gray-500">판매 내역을 불러오는 중…</div>;
+    return <div className="p-4 text-sm text-gray-500">Loading sales history…</div>;
   }
 
   if (isError) {
     return (
       <div className="p-4 text-sm text-red-600">
-        판매 내역을 불러오지 못했습니다: {String(error)}
+        Failed to load sales history: {String(error)}
       </div>
     );
   }
 
   if (rows.length === 0) {
-    return <div className="p-4 text-sm text-gray-500">검색 결과 없습니다.</div>;
+    return <div className="p-4 text-sm text-gray-500">No results found.</div>;
   }
 
   return (
@@ -98,7 +98,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
             ),
           };
         })}
-        emptyMessage="검색 결과 없습니다."
+        emptyMessage="No results found."
         onRowClick={async (r) => {
           const text = String(r.__copyText || '');
           if (!text) return;

@@ -30,11 +30,11 @@ export default function RefundModal({ open, onClose, saleItem }) {
     }
     const v = String(reason || '').trim();
     if (!v) {
-      setErr('사유를 입력하세요.');
+      setErr('Please enter a reason.');
       return;
     }
     if (v.length > 50) {
-      setErr('사유는 50자 이하여야 합니다.');
+      setErr('Reason must be 50 characters or less.');
       return;
     }
     
@@ -50,7 +50,7 @@ export default function RefundModal({ open, onClose, saleItem }) {
       showToast('Refund processed.');
     } catch (e) {
       console.error('Refund failed:', e);
-      setErr('환불 처리 실패: ' + (e.message || 'Unknown error'));
+      setErr('Refund failed: ' + (e.message || 'Unknown error'));
     }
   }
 
@@ -58,7 +58,7 @@ export default function RefundModal({ open, onClose, saleItem }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="환불 처리"
+      title="Process Refund"
       size="content"
       footer={
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
@@ -73,16 +73,16 @@ export default function RefundModal({ open, onClose, saleItem }) {
     >
       <div style={{ display: 'grid', gap: 12 }}>
         <div style={{ fontSize: 13 }}>
-          코드 {saleItem.code} · 사이즈 {saleItem.sizeDisplay} · 수량 {qty} · 금액{' '}
+          Code {saleItem.code} · Size {saleItem.sizeDisplay} · Qty {qty} · Amount{' '}
           <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>
             {amount.toLocaleString('en-PH')} PHP
           </span>
         </div>
         <Input
-          label="환불 사유"
+          label="Refund Reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="최대 50자"
+          placeholder="Max 50 chars"
           error={err || undefined}
         />
       </div>

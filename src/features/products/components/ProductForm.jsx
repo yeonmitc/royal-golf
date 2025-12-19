@@ -74,7 +74,7 @@ export default function ProductForm({ initialProduct, onSaved, onCancel }) {
 
       <div>
         <Input
-          label="Product Name (KO)"
+          label="Product Name"
           type="text"
           value={nameKo}
           onChange={(e) => setNameKo(e.target.value)}

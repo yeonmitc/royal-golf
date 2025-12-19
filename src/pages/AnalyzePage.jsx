@@ -55,14 +55,14 @@ export default function AnalyzePage() {
       <div className="page-header">
         <div>
           <div className="page-title">Analyze</div>
-          <div className="page-subtitle">매출 요약 및 카테고리/브랜드/사이즈/색상 분석</div>
+          <div className="page-subtitle">Sales summary and analysis by category/brand/size/color</div>
         </div>
         <div className="page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <label>From</label>
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           <label>To</label>
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-          <Button variant="outline" size="sm" className="icon" title="오늘" onClick={setToday} icon="today" />
+          <Button variant="outline" size="sm" className="icon" title="Today" onClick={setToday} icon="today" />
           <Button variant="outline" size="sm" onClick={setWeek}>
             7D
           </Button>
@@ -75,9 +75,9 @@ export default function AnalyzePage() {
         </div>
       </div>
 
-      <Card title="매출 요약">
+      <Card title="Sales Summary">
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">기간을 선택하고 Analyze를 눌러주세요.</div>
+          <div className="text-sm text-[var(--text-muted)]">Please select a period and click Analyze.</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             <div className="page-card">
@@ -129,7 +129,7 @@ export default function AnalyzePage() {
       </Card>
 
       <Card
-        title="상품별 매출 (베스트/워스트)"
+        title="Sales by Product (Best/Worst)"
         actions={
           data
             ? [
@@ -174,7 +174,7 @@ export default function AnalyzePage() {
         }
       >
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Analyze를 먼저 실행하세요.</div>
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
           <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -212,7 +212,7 @@ export default function AnalyzePage() {
       </Card>
 
       <Card
-        title="SKU별 판매수량/매출"
+        title="Sales Quantity/Revenue by SKU"
         actions={
           data
             ? [
@@ -239,7 +239,7 @@ export default function AnalyzePage() {
         }
       >
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Analyze를 먼저 실행하세요.</div>
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
           <DataTable
             columns={[
@@ -257,7 +257,7 @@ export default function AnalyzePage() {
       </Card>
 
       <Card
-        title="카테고리/브랜드/성별/사이즈/색상별 매출"
+        title="Revenue by Category/Brand/Gender/Size/Color"
         actions={
           data
             ? [
@@ -355,7 +355,7 @@ export default function AnalyzePage() {
         }
       >
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Analyze를 먼저 실행하세요.</div>
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
           <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
             <DataTable
@@ -422,9 +422,9 @@ export default function AnalyzePage() {
         )}
       </Card>
 
-      <Card title="주간/월간 매출">
+      <Card title="Weekly/Monthly Revenue">
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Analyze를 먼저 실행하세요.</div>
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
           <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -447,15 +447,15 @@ export default function AnalyzePage() {
         )}
       </Card>
 
-      <Card title="환불 리포트">
+      <Card title="Refund Report">
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Analyze를 먼저 실행하세요.</div>
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
           <div style={{ display: 'flex', gap: 12 }}>
             <div className="page-card" style={{ flex: 1 }}>
-              <div>환불건수</div>
+              <div>Refund Count</div>
               <div style={{ fontWeight: 700 }}>{data.summary.refundCount}</div>
-              <div className="muted">환불액</div>
+              <div className="muted">Refund Amount</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.refundAmount).toLocaleString('en-PH')} PHP
               </div>

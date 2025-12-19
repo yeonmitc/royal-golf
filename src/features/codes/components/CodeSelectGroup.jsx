@@ -23,7 +23,7 @@ export default function CodeSelectGroup({ label, type, value, onChange }) {
         onChange={(e) => onChange(e.target.value)}
         disabled={isLoading}
       >
-        <option value="">선택하세요</option>
+        <option value="">Select</option>
 
         {items?.map((part) => (
           <option key={part.id} value={part.code}>
@@ -32,7 +32,7 @@ export default function CodeSelectGroup({ label, type, value, onChange }) {
         ))}
       </select>
 
-      {error && <p className="text-red-500 text-xs">코드 정보를 불러오지 못했습니다.</p>}
+      {error && <p className="text-red-500 text-xs">Failed to load code info.</p>}
     </div>
   );
 }

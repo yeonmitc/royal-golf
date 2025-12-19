@@ -148,7 +148,7 @@ export default function InventoryPage() {
             <div style={{ width: '40%', minWidth: 240, display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
                 <Input
-                  placeholder="검색 (#로 시작하면 코드 부분검색)"
+                  placeholder="Search (Start with # for partial code search)"
                   value={searchQ}
                   onChange={(e) => setSearchQ(e.target.value)}
                   onKeyDown={(e) => {

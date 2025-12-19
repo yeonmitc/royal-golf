@@ -78,20 +78,20 @@ export async function checkoutCart(cartItems) {
     let totalAmount = 0;
     let totalQty = 0;
 
-    // 재고 체크
+    // Inventory check
     for (const item of items) {
       const { code, size, qty } = item;
-      if (!code) throw new Error('상품 코드가 없습니다.');
+      if (!code) throw new Error('Missing product code.');
 
       const invRow = await db.inventory
         .where('[code+size]')
         .equals([code, size ?? ''])
         .first();
-      if (!invRow) throw new Error(`재고 정보 없음: ${code} / ${size || 'Free'}`);
+      if (!invRow) throw new Error(`No inventory info: ${code} / ${size || 'Free'}`);
 
       if ((invRow.stockQty ?? 0) < qty) {
         throw new Error(
-          `재고 부족: ${code} / ${size || 'Free'} (요청 ${qty}개, 재고 ${invRow.stockQty ?? 0}개)`
+          `Insufficient stock: ${code} / ${size || 'Free'} (Req ${qty}, Stock ${invRow.stockQty ?? 0})`
         );
       }
     }

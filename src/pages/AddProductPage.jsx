@@ -329,7 +329,7 @@ export default function AddProductPage() {
               <FormSection columns={2}>
                 <div style={{ flex: 1 }}>
                   <Input
-                    label="Product Name (KO)"
+                    label="Product Name"
                     value={nameKo}
                     onChange={(e) => setNameKo(e.target.value)}
                   />

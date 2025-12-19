@@ -135,7 +135,7 @@ export default function ProductLookup({
                 className="text-[11px]"
                 style={{ textAlign: 'center', color: 'var(--text-muted)', marginBottom: 8 }}
               >
-                최근 수정:{' '}
+                Last updated:{' '}
                 <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{last}</span>
               </div>
             );
