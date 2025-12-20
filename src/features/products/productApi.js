@@ -77,6 +77,7 @@ function normalizeProductRow(r) {
     basePricePhp: Number(r.basePricePhp ?? r.base_price_php ?? 0) || 0,
     salePricePhp: Number(r.salePricePhp ?? r.sale_price_php ?? r.sale_price ?? 0) || 0,
     totalStock: Number(r.totalStock ?? r.total_stock ?? 0) || 0,
+    freeGift: Boolean(r.freeGift ?? r.free_gift ?? false),
   };
 }
 

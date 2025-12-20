@@ -71,3 +71,10 @@ export function getAnalytics(args) {
     () => local.getAnalytics(args)
   );
 }
+
+export function setSaleFreeGift(payload) {
+  return withOfflineFallback(
+    () => supabase.setSaleFreeGift(payload),
+    () => local.setSaleFreeGift(payload)
+  );
+}

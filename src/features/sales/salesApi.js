@@ -107,6 +107,7 @@ export async function checkoutCart(cartItems) {
       const unitPriceOriginal = Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePricePhp ?? 0) || 0;
       const unitPriceCharged = Number(item.unitPricePhp ?? unitPriceOriginal) || unitPriceOriginal;
       const lineTotal = unitPriceCharged * qty;
+      const freeGift = unitPriceCharged === 0;
 
       const invRow = await db.inventory
         .where('[code+size]')
@@ -134,6 +135,7 @@ export async function checkoutCart(cartItems) {
         qty,
         unitPricePhp: unitPriceOriginal,
         discountUnitPricePhp: unitPriceCharged !== unitPriceOriginal ? unitPriceCharged : undefined,
+        freeGift,
       });
     }
 
@@ -246,6 +248,17 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
       })
       .catch(() => null);
   });
+}
+
+export async function setSaleFreeGift({ saleId, code, size, freeGift } = {}) {
+  requireAdminOrThrow();
+  const sid = Number(saleId);
+  if (!sid || !code) throw new Error('INVALID_SALE_ITEM_KEY');
+  const sizeKey = String(size ?? '').trim();
+  const item = await db.saleItems.where({ saleId: sid, code, size: sizeKey }).first();
+  if (!item) throw new Error('SALE_ITEM_NOT_FOUND');
+  await db.saleItems.update(item.id, { freeGift: Boolean(freeGift) });
+  return { ok: true, saleId: sid, code, size: sizeKey, freeGift: Boolean(freeGift) };
 }
 
 export async function getSaleItemsBySaleId(saleId) {
@@ -365,11 +378,13 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
     const remainingQty = Math.max(0, i.qty - refundedQty);
 
     const finalUnit = i.discountUnitPricePhp ?? i.unitPricePhp;
+    const freeGift = Boolean(i.freeGift ?? false) || finalUnit === 0;
 
     return {
       saleId: i.saleId,
       soldAt: sale?.soldAt,
       code: i.code,
+      size: i.size ?? '',
       nameKo,
       sizeDisplay,
       qty: remainingQty, // Show only remaining quantity
@@ -378,6 +393,7 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
       unitPricePhp: i.unitPricePhp,
       discountUnitPricePhp: i.discountUnitPricePhp,
       lineTotalPhp: finalUnit * remainingQty,
+      freeGift,
     };
   }).filter(r => r.qty > 0); // Filter out fully refunded items
 

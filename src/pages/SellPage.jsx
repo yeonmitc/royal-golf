@@ -11,8 +11,6 @@ import { useCheckoutCartMutation } from '../features/sales/salesHooks';
 import { useCartStore } from '../store/cartStore';
 import { useToast } from '../context/ToastContext';
 
-const PROMO_CODES = ['GA-OT-EX-MX-01', 'GA-JH-AC-WH-01', 'GA-JH-AC-BK-02'];
-
 function HeartFilled() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-red-500">
@@ -109,25 +107,22 @@ export default function SellPage() {
                     },
                   ]}
                   rows={cartItems.map((item, idx) => {
-                    const isPromoItem = PROMO_CODES.includes(item.code);
                     const isFree = item.unitPricePhp === 0;
                     return {
                       id: `${item.code}-${item.size}-${idx}`,
                       name: (
                         <div className="flex items-center gap-2">
                           <span>{item.nameKo || item.code}</span>
-                          {isPromoItem && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                togglePromo(item.code, item.size);
-                              }}
-                              className="transition-transform active:scale-95"
-                              title="Toggle Promo (Free)"
-                            >
-                              {isFree ? <HeartFilled /> : <HeartOutline />}
-                            </button>
-                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePromo(item.code, item.size);
+                            }}
+                            className="transition-transform active:scale-95"
+                            title="Toggle Free Gift"
+                          >
+                            {isFree ? <HeartFilled /> : <HeartOutline />}
+                          </button>
                         </div>
                       ),
                       size: item.sizeDisplay || item.size,

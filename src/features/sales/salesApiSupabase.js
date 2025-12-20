@@ -73,7 +73,7 @@ async function attachLocalProductMeta(items) {
 
   const inList = buildInList(productCodes);
   const products = await sbSelect('products', {
-    select: 'code,name,sale_price',
+    select: 'code,name,sale_price,free_gift',
     filters: [{ column: 'code', op: 'in', value: inList }],
   });
 
@@ -84,6 +84,7 @@ async function attachLocalProductMeta(items) {
         code: p.code,
         nameKo: String(p.name || '').trim(),
         salePricePhp: Number(p.sale_price ?? 0) || 0,
+        freeGift: Boolean(p.free_gift ?? false),
       },
     ])
   );
@@ -114,7 +115,7 @@ export async function checkoutCart(cartItems) {
   const [products, inventories] = await Promise.all([
     productCodes.length
       ? sbSelect('products', {
-          select: 'code,name,sale_price',
+          select: 'code,name,sale_price,free_gift',
           filters: [{ column: 'code', op: 'in', value: inList }],
         })
       : [],
@@ -129,7 +130,12 @@ export async function checkoutCart(cartItems) {
   const productMap = new Map(
     (products || []).map((p) => [
       p.code,
-      { code: p.code, name: String(p.name || '').trim(), salePrice: Number(p.sale_price ?? 0) || 0 },
+      {
+        code: p.code,
+        name: String(p.name || '').trim(),
+        salePrice: Number(p.sale_price ?? 0) || 0,
+        freeGift: Boolean(p.free_gift ?? false),
+      },
     ])
   );
   const invByCode = new Map((inventories || []).map((r) => [String(r?.code || '').trim(), r]));
@@ -165,6 +171,7 @@ export async function checkoutCart(cartItems) {
       Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
     const unitPriceCharged = Number(item.unitPricePhp ?? unitPriceOriginal) || unitPriceOriginal;
     const lineTotal = unitPriceCharged * qty;
+    const isFreeGift = unitPriceCharged === 0 || Boolean(product.freeGift);
 
     totalAmount += lineTotal;
     totalQty += qty;
@@ -185,6 +192,7 @@ export async function checkoutCart(cartItems) {
       size_std: sizeKey,
       qty: Number(qty || 0) || 0,
       price: unitPriceCharged,
+      free_gift: isFreeGift,
     });
   }
 
@@ -198,7 +206,18 @@ export async function checkoutCart(cartItems) {
       }
     );
   }
-  const inserted = await sbInsert('sales', salesToInsert, { returning: 'representation' });
+  let inserted;
+  try {
+    inserted = await sbInsert('sales', salesToInsert, { returning: 'representation' });
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (msg.toLowerCase().includes('free_gift')) {
+      const fallbackRows = salesToInsert.map(({ free_gift: _FREE_GIFT, ...rest }) => rest);
+      inserted = await sbInsert('sales', fallbackRows, { returning: 'representation' });
+    } else {
+      throw e;
+    }
+  }
   const saleId = inserted?.[0]?.id ?? 0;
   return { saleId, soldAt, totalAmount, itemCount: totalQty };
 }
@@ -229,11 +248,25 @@ export async function getSalesList() {
 export async function getSaleItemsBySaleId(saleId) {
   const sid = Number(saleId);
   if (!sid) return [];
-  const rows = await sbSelect('sales', {
-    select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
-    filters: [{ column: 'id', op: 'eq', value: sid }],
-    limit: 1,
-  });
+  let rows;
+  try {
+    rows = await sbSelect('sales', {
+      select: 'id,sold_at,code,size_std,qty,price,free_gift,refunded_at,refund_reason',
+      filters: [{ column: 'id', op: 'eq', value: sid }],
+      limit: 1,
+    });
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (msg.toLowerCase().includes('free_gift')) {
+      rows = await sbSelect('sales', {
+        select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
+        filters: [{ column: 'id', op: 'eq', value: sid }],
+        limit: 1,
+      });
+    } else {
+      throw e;
+    }
+  }
   const r = rows?.[0];
   if (!r) return [];
   const item = {
@@ -247,6 +280,7 @@ export async function getSaleItemsBySaleId(saleId) {
     unitPricePhp: Number(r.price ?? 0) || 0,
     discountUnitPricePhp: undefined,
     lineTotalPhp: (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
+    freeGift: Boolean(r.free_gift ?? false) || Number(r.price ?? 0) === 0,
   };
   const withMeta = await attachLocalProductMeta([item]);
   return withMeta;
@@ -262,7 +296,7 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
   if (!reasonStr || reasonStr.length > 50) throw new Error('INVALID_REFUND_REASON');
 
   const rows = await sbSelect('sales', {
-    select: 'id,code,size_std,qty,refunded_at',
+    select: 'id,code,size_std,qty,price,refunded_at',
     filters: [{ column: 'id', op: 'eq', value: sid }],
     limit: 1,
   });
@@ -284,9 +318,10 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
   const invRow = invRows?.[0];
   const currentQty = Number(invRow?.[col] ?? 0) || 0;
 
+  const refundedAt = new Date().toISOString();
   await sbUpdate(
     'sales',
-    { refunded_at: new Date().toISOString(), refund_reason: reasonStr },
+    { refunded_at: refundedAt, refund_reason: reasonStr },
     { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
   );
   await sbUpdate(
@@ -295,7 +330,59 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
     { filters: [{ column: 'code', op: 'eq', value: String(code).trim() }], returning: 'minimal' }
   );
 
+  const amountPhp = (Number(row.price ?? 0) || 0) * q;
+  try {
+    await sbInsert(
+      'refunds',
+      [
+        {
+          sale_id: sid,
+          code: String(code).trim(),
+          size: sizeKey,
+          qty: q,
+          amount_php: amountPhp,
+          reason: reasonStr,
+          time: refundedAt,
+        },
+      ],
+      { returning: 'minimal' }
+    );
+  } catch (_err) {
+    void _err;
+    try {
+      await sbInsert(
+        'refunds',
+        [
+          {
+            saleId: sid,
+            code: String(code).trim(),
+            size: sizeKey,
+            qty: q,
+            amountPhp,
+            reason: reasonStr,
+            time: refundedAt,
+          },
+        ],
+        { returning: 'minimal' }
+      );
+    } catch (_err2) {
+      void _err2;
+    }
+  }
+
   return { ok: true };
+}
+
+export async function setSaleFreeGift({ saleId, freeGift, code, size } = {}) {
+  requireAdminOrThrow();
+  const sid = Number(saleId);
+  if (!sid) throw new Error('INVALID_SALE_ID');
+  await sbUpdate(
+    'sales',
+    { free_gift: Boolean(freeGift) },
+    { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
+  );
+  return { ok: true, saleId: sid, freeGift: Boolean(freeGift), code, size };
 }
 
 async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query = '' } = {}) {
@@ -304,10 +391,23 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const fromMs = hasFrom ? startOfDayMs(fromDate) : -Infinity;
   const toMs = hasTo ? endOfDayMs(toDate) : Infinity;
 
-  const sales = await sbSelect('sales', {
-    select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
-    order: { column: 'sold_at', ascending: false },
-  });
+  let sales;
+  try {
+    sales = await sbSelect('sales', {
+      select: 'id,sold_at,code,size_std,qty,price,free_gift,refunded_at,refund_reason',
+      order: { column: 'sold_at', ascending: false },
+    });
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (msg.toLowerCase().includes('free_gift')) {
+      sales = await sbSelect('sales', {
+        select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
+        order: { column: 'sold_at', ascending: false },
+      });
+    } else {
+      throw e;
+    }
+  }
 
   const filtered =
     hasFrom || hasTo
@@ -333,6 +433,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         unitPricePhp: unit,
         discountUnitPricePhp: undefined,
         lineTotalPhp: unit * qtyN,
+        freeGift: Boolean(r.free_gift ?? false) || unit === 0,
         nameKo: '',
       };
     })

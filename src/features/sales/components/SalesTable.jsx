@@ -4,11 +4,17 @@ import DataTable from '../../../components/common/DataTable';
 import Button from '../../../components/common/Button';
 import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
+import { useSetSaleFreeGiftMutation } from '../salesHooks';
+import { useAdminStore } from '../../../store/adminStore';
 
 export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const [refundOpen, setRefundOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [giftSavingId, setGiftSavingId] = useState(null);
   const { showToast } = useToast();
+  const isAdmin = useAdminStore((s) => s.isAuthorized());
+  const openLoginModal = useAdminStore((s) => s.openLoginModal);
+  const { mutateAsync: setSaleFreeGift } = useSetSaleFreeGiftMutation();
 
   if (isLoading) {
     return <div className="p-4 text-sm text-gray-500">Loading sales history…</div>;
@@ -33,6 +39,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           { key: 'soldAt', header: 'Date / Time' },
           { key: 'code', header: 'Code' },
           { key: 'nameKo', header: 'Name' },
+          { key: 'freeGift', header: 'Gift', className: 'text-center', tdClassName: 'text-center' },
           {
             key: 'sizeDisplay',
             header: 'Size',
@@ -61,6 +68,10 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           const original = Number(row.unitPricePhp || 0);
           const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
           const isDiscounted = discounted !== null && discounted !== original;
+          const finalUnit = isDiscounted ? discounted : original;
+          const giftForced = finalUnit === 0;
+          const giftChecked = Boolean(row.freeGift) || giftForced;
+          const giftDisabled = giftForced || giftSavingId === row.saleId;
           const priceForCopy = isDiscounted ? discounted.toLocaleString('en-US') : original.toLocaleString('en-US');
 
           return {
@@ -68,6 +79,36 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
             soldAt: dateStr,
             code: row.code,
             nameKo: row.nameKo,
+            freeGift: (
+              <input
+                type="checkbox"
+                checked={giftChecked}
+                disabled={giftDisabled}
+                onClick={(e) => e.stopPropagation()}
+                onChange={async (e) => {
+                  e.stopPropagation();
+                  if (!isAdmin) {
+                    openLoginModal();
+                    return;
+                  }
+                  const next = Boolean(e.target.checked);
+                  setGiftSavingId(row.saleId);
+                  try {
+                    await setSaleFreeGift({
+                      saleId: row.saleId,
+                      code: row.code,
+                      size: row.size ?? row.sizeDisplay ?? '',
+                      freeGift: next,
+                    });
+                    showToast('Saved.');
+                  } catch (err) {
+                    showToast(String(err?.message || err || 'Failed to save.'));
+                  } finally {
+                    setGiftSavingId(null);
+                  }
+                }}
+              />
+            ),
             sizeDisplay: row.sizeDisplay,
             qty: row.qty,
             unitPricePhp: isDiscounted ? (

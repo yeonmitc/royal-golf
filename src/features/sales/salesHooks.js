@@ -7,6 +7,7 @@ import {
   getSalesList,
   instantSale,
   processRefund,
+  setSaleFreeGift,
 } from './salesApiClient';
 
 /**
@@ -95,6 +96,18 @@ export function useInstantSaleMutation() {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+}
+
+export function useSetSaleFreeGiftMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: ['sales', 'setSaleFreeGift'],
+    mutationFn: setSaleFreeGift,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
     },
   });
 }

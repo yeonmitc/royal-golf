@@ -42,7 +42,7 @@ export default function RefundModal({ open, onClose, saleItem }) {
       await processRefund({
         saleId: saleItem.saleId,
         code: saleItem.code,
-        size: saleItem.sizeDisplay,
+        size: saleItem.size ?? saleItem.sizeDisplay,
         qty,
         reason: v,
       });
