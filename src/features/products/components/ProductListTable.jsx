@@ -5,7 +5,7 @@ import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
-import { useDeleteProductMutation, useProductInventoryList } from '../productHooks';
+import { useDeleteProductMutation } from '../productHooks';
 import { useToast } from '../../../context/ToastContext';
 
 /**
@@ -26,8 +26,8 @@ export default function ProductListTable({
   isLoading,
   isError,
   error,
-  onClearFilter,
-  isFiltered,
+  onClearFilter: _onClearFilter,
+  isFiltered: _isFiltered,
   pagination,
 }) {
   // If products are provided, use them. Otherwise, we could fetch, but for now we assume they are passed if we want filtering from parent.

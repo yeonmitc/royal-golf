@@ -2,7 +2,6 @@
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
-import { seedIfEmpty } from './db/seedLoader';
 import './index.css';
 import QueryProvider from './providers/QueryProvider';
 import { ToastProvider } from './context/ToastContext';
@@ -22,8 +21,6 @@ try {
 } catch {
   // ignore
 }
-
-await seedIfEmpty();
 
 const basename = import.meta.env.BASE_URL || '/';
 ReactDOM.createRoot(document.getElementById('root')).render(

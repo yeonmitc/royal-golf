@@ -7,7 +7,7 @@ import {
   getSalesList,
   instantSale,
   processRefund,
-} from './salesApi';
+} from './salesApiClient';
 
 /**
  * 판매 헤더 리스트

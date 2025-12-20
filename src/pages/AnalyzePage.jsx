@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import DataTable from '../components/common/DataTable';
-import { getAnalytics } from '../features/sales/salesApi';
+import { getAnalytics } from '../features/sales/salesApiClient';
 import ExportActions from '../components/common/ExportActions';
 import BarChart from '../components/common/BarChart';
 

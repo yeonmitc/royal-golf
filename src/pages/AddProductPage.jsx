@@ -5,12 +5,12 @@ import Card from '../components/common/Card';
 import FormSection from '../components/common/FormSection';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
-import db from '../db/dexieClient';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import {
   useUpdateInventoryMutation,
   useUpsertProductMutation,
 } from '../features/products/productHooks';
+import { getNextSerialForPrefix, isProductCodeExists } from '../features/products/productApi';
 import { generateProductCode } from '../utils/codeGenerator';
 import { useToast } from '../context/ToastContext';
 
@@ -77,18 +77,7 @@ export default function AddProductPage() {
     let nextSerial = serial;
     try {
       setChecking(true);
-      const rows = await db.products
-        .where('code')
-        .startsWith(prefix + '-')
-        .toArray();
-      let maxN = 0;
-      for (const r of rows) {
-        const parts = String(r.code || '').split('-');
-        const s = parts[parts.length - 1];
-        const n = parseInt(s, 10);
-        if (!Number.isNaN(n)) maxN = Math.max(maxN, n);
-      }
-      nextSerial = String(maxN + 1).padStart(2, '0');
+      nextSerial = await getNextSerialForPrefix(prefix);
       setSerial(nextSerial);
     } finally {
       setChecking(false);
@@ -104,8 +93,8 @@ export default function AddProductPage() {
     });
     setCodePreview(preview);
 
-    const exists = preview ? await db.products.where('code').equals(preview).first() : null;
-    setDuplicate(!!exists);
+    const exists = preview ? await isProductCodeExists(preview) : false;
+    setDuplicate(exists);
 
     const name = `${getLabel('category', c)}-${getLabel('gender', g)}-${getLabel(
       'brand',

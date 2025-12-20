@@ -3,9 +3,19 @@ import db from './dexieClient';
 import { requireAdminOrThrow } from '../utils/admin';
 
 // 네가 실제로 사용하는 seed 파일
-import productPriceList from './products.json';
 import seedCodeParts from './seed/seed-code-parts.json';
-import seedExpanded from './seed/seed-products-expanded.json';
+
+async function tryFetchJson(relativePath) {
+  const base = String(import.meta.env.BASE_URL || '/');
+  const url = base.endsWith('/') ? `${base}${relativePath}` : `${base}/${relativePath}`;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 코드 파싱
@@ -51,18 +61,19 @@ function buildCodePartRows() {
  * - 총 재고 stockQty 합산
  * - pricePhp는 seed에서 제공된 값(pricePhp)
  */
-function buildProductRows() {
+function buildProductRows({ productPriceList, seedExpanded }) {
   const map = {};
 
   const priceMap = new Map(
     (Array.isArray(productPriceList) ? productPriceList : []).map((p) => [
-      String(p['제품코드'] || '').trim(),
-      Number(p['판매가'] || 0) || 0,
+      String(p['제품코드'] || p.Code || p.code || '').trim(),
+      Number(p['판매가'] || p.Price || p.price || 0) || 0,
     ])
   );
 
-  seedExpanded.forEach((item) => {
-    const code = item.code;
+  (Array.isArray(seedExpanded) ? seedExpanded : []).forEach((item) => {
+    const code = String(item?.code || '').trim();
+    if (!code) return;
     if (!map[code]) {
       map[code] = {
         code,
@@ -81,13 +92,20 @@ function buildProductRows() {
  * inventory 테이블용 데이터 생성
  * code + size + stockQty
  */
-function buildInventoryRows() {
-  return seedExpanded.map((item) => ({
-    code: item.code,
-    size: item.size,
-    stockQty: item.stockQty,
-    sizeDisplay: item.size ?? 'Free',
-  }));
+function buildInventoryRows(seedExpanded) {
+  return (Array.isArray(seedExpanded) ? seedExpanded : [])
+    .map((item) => {
+      const code = String(item?.code || '').trim();
+      if (!code) return null;
+      const size = item?.size ?? '';
+      return {
+        code,
+        size,
+        stockQty: item?.stockQty,
+        sizeDisplay: size || 'Free',
+      };
+    })
+    .filter(Boolean);
 }
 
 /**
@@ -100,16 +118,21 @@ export async function loadSeedData() {
     db.codeParts.count(),
   ]);
 
-  if (pCount > 0 || iCount > 0 || cCount > 0) {
-    return; // 이미 데이터 있음
+  if (pCount > 0 && iCount > 0 && cCount > 0) {
+    return;
   }
 
-  const productRows = buildProductRows();
-  const inventoryRows = buildInventoryRows();
   const codePartRows = buildCodePartRows();
+  const [productPriceList, seedExpanded] = await Promise.all([
+    tryFetchJson('products.json'),
+    tryFetchJson('seed-products-expanded.json'),
+  ]);
+
+  const productRows = pCount > 0 ? [] : buildProductRows({ productPriceList, seedExpanded });
+  const inventoryRows = iCount > 0 ? [] : buildInventoryRows(seedExpanded);
 
   await db.transaction('rw', db.products, db.inventory, db.codeParts, async () => {
-    if (codePartRows.length) await db.codeParts.bulkAdd(codePartRows);
+    if (cCount <= 0 && codePartRows.length) await db.codeParts.bulkAdd(codePartRows);
     if (productRows.length) await db.products.bulkAdd(productRows);
     if (inventoryRows.length) await db.inventory.bulkAdd(inventoryRows);
   });

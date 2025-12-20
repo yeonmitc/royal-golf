@@ -31,7 +31,6 @@ function HeartOutline() {
 
 export default function SellPage() {
   const [code, setCode] = useState('');
-  const items = useCartStore((s) => s.items);
   const navigate = useNavigate();
   const { showToast } = useToast();
 

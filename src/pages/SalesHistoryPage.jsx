@@ -6,6 +6,8 @@ import Button from '../components/common/Button';
 import ExportActions from '../components/common/ExportActions';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
+const EMPTY_ROWS = [];
+
 function toInputDate(d) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -59,7 +61,7 @@ export default function SalesHistoryPage() {
     query: filters.query,
   });
 
-  const allRows = salesData?.rows || [];
+  const allRows = salesData?.rows ?? EMPTY_ROWS;
   const totalPages = Math.ceil(allRows.length / itemsPerPage);
   const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
