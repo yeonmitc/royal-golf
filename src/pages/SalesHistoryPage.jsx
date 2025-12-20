@@ -17,15 +17,20 @@ function toInputDate(d) {
 
 export default function SalesHistoryPage() {
   const today = useMemo(() => new Date(), []);
+  const defaultFrom = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d;
+  }, []);
 
   // UI 입력값
-  const [fromInput, setFromInput] = useState(toInputDate(today));
+  const [fromInput, setFromInput] = useState(toInputDate(defaultFrom));
   const [toInput, setToInput] = useState(toInputDate(today));
   const [qInput, setQInput] = useState('');
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
   const [filters, setFilters] = useState({
-    fromDate: toInputDate(today),
+    fromDate: toInputDate(defaultFrom),
     toDate: toInputDate(today),
     query: '',
   });
@@ -55,7 +60,12 @@ export default function SalesHistoryPage() {
     setFilters((prev) => ({ ...prev, fromDate: t, toDate: t }));
   };
 
-  const { data: salesData } = useSalesHistoryFiltered({
+  const {
+    data: salesData,
+    isLoading,
+    isError,
+    error,
+  } = useSalesHistoryFiltered({
     fromDate: filters.fromDate,
     toDate: filters.toDate,
     query: filters.query,
@@ -120,12 +130,30 @@ export default function SalesHistoryPage() {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <label>From</label>
-          <input type="date" value={fromInput} onChange={(e) => setFromInput(e.target.value)} />
+          <input
+            type="date"
+            value={fromInput}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFromInput(v);
+              setFilters((prev) => ({ ...prev, fromDate: v || '' }));
+              setCurrentPage(1);
+            }}
+          />
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <label>To</label>
-          <input type="date" value={toInput} onChange={(e) => setToInput(e.target.value)} />
+          <input
+            type="date"
+            value={toInput}
+            onChange={(e) => {
+              const v = e.target.value;
+              setToInput(v);
+              setFilters((prev) => ({ ...prev, toDate: v || '' }));
+              setCurrentPage(1);
+            }}
+          />
         </div>
 
         <Button type="button" onClick={setTodayRange} size="sm" variant="outline" title="Today" icon="today" />
@@ -151,10 +179,10 @@ export default function SalesHistoryPage() {
         actions={exportActions}
       >
         <SalesTable
-          fromDate={filters.fromDate}
-          toDate={filters.toDate}
-          query={filters.query}
           rows={paginatedRows}
+          isLoading={isLoading}
+          isError={isError}
+          error={error}
           pagination={{
             current: currentPage,
             totalPages,
