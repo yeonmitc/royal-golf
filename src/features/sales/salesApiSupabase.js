@@ -14,20 +14,45 @@ const SIZE_TO_COLUMN = {
 };
 
 function toMsFromIso(iso) {
-  const t = Date.parse(String(iso || ''));
+  const s = String(iso || '').trim();
+  if (!s) return 0;
+
+  let t = Date.parse(s);
+  if (Number.isFinite(t)) return t;
+
+  const dateHit = s.match(/(\d{4}-\d{2}-\d{2})/);
+  if (dateHit) {
+    const date = dateHit[1];
+    const timeHit = s.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (timeHit) {
+      const hh = timeHit[1];
+      const mm = timeHit[2];
+      const ss = timeHit[3] || '00';
+      t = Date.parse(`${date}T${hh}:${mm}:${ss}Z`);
+      if (Number.isFinite(t)) return t;
+      t = new Date(`${date}T${hh}:${mm}:${ss}`).getTime();
+      if (Number.isFinite(t)) return t;
+    }
+    t = Date.parse(`${date}T00:00:00Z`);
+    if (Number.isFinite(t)) return t;
+    t = new Date(`${date}T00:00:00`).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+
+  t = Date.parse(s.replace(' ', 'T'));
   return Number.isFinite(t) ? t : 0;
 }
 
-function startOfDayMs(yyyyMmDd) {
-  const s = String(yyyyMmDd || '').trim();
-  if (!s) return -Infinity;
-  return new Date(`${s}T00:00:00.000Z`).getTime();
+function startOfDayMs(dateStr) {
+  const [y, m, d] = String(dateStr || '').split('-').map(Number);
+  if (!y || !m || !d) return -Infinity;
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
 }
 
-function endOfDayMs(yyyyMmDd) {
-  const s = String(yyyyMmDd || '').trim();
-  if (!s) return Infinity;
-  return new Date(`${s}T23:59:59.999Z`).getTime();
+function endOfDayMs(dateStr) {
+  const [y, m, d] = String(dateStr || '').split('-').map(Number);
+  if (!y || !m || !d) return Infinity;
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
 }
 
 function includesIgnoreCase(hay, needle) {
@@ -233,7 +258,7 @@ export async function getSalesList() {
   });
   const map = new Map();
   for (const r of rows || []) {
-    if (r?.refunded_at) continue;
+    if (toMsFromIso(r?.refunded_at)) continue;
     const key = String(r.sold_at || '');
     if (!key) continue;
     if (!map.has(key)) map.set(key, { id: r.id, soldAt: r.sold_at, totalAmount: 0, itemCount: 0 });
@@ -302,7 +327,7 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
   });
   const row = rows?.[0];
   if (!row) throw new Error('SALE_ITEM_NOT_FOUND');
-  if (row.refunded_at) throw new Error('ALREADY_REFUNDED');
+  if (toMsFromIso(row.refunded_at)) throw new Error('ALREADY_REFUNDED');
 
   const soldQty = Number(row.qty ?? 0) || 0;
   if (q !== soldQty) throw new Error('PARTIAL_REFUND_NOT_SUPPORTED');
@@ -418,7 +443,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       : sales || [];
 
   const normalized = (filtered || [])
-    .filter((r) => !r?.refunded_at)
+    .filter((r) => !toMsFromIso(r?.refunded_at))
     .map((r) => {
       const qtyN = Number(r.qty ?? 0) || 0;
       const unit = Number(r.price ?? 0) || 0;
@@ -480,8 +505,8 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
         })
       : sales || [];
 
-  const refundedRows = (inRange || []).filter((r) => r?.refunded_at);
-  const nonRefundedRows = (inRange || []).filter((r) => !r?.refunded_at);
+  const refundedRows = (inRange || []).filter((r) => toMsFromIso(r?.refunded_at));
+  const nonRefundedRows = (inRange || []).filter((r) => !toMsFromIso(r?.refunded_at));
 
   const rows = await attachLocalProductMeta(
     withNormalizedNameFallback(
