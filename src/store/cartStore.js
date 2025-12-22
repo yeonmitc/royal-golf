@@ -44,7 +44,7 @@ export const useCartStore = create((set, get) => ({
    * }
    */
   addItem: (payload) => {
-    const { code, size, sizeDisplay, nameKo, unitPricePhp, qty = 1 } = payload;
+    const { code, size, sizeDisplay, nameKo, color, unitPricePhp, qty = 1 } = payload;
 
     if (!code) return;
 
@@ -73,6 +73,7 @@ export const useCartStore = create((set, get) => ({
           size,
           sizeDisplay,
           nameKo,
+          color: String(color || '').trim(),
           unitPricePhp: Number(unitPricePhp) || 0,
           qty: qty > 0 ? qty : 1,
         },
@@ -116,6 +117,17 @@ export const useCartStore = create((set, get) => ({
     const totalQty = filtered.reduce((sum, i) => sum + i.qty, 0);
     const totalPrice = filtered.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
     set({ items: filtered, totalQty, totalPrice });
+  },
+
+  setItemColor: (code, size, color) => {
+    const id = makeCartItemId(code, size);
+    const currentItems = get().items;
+    const updatedItems = currentItems.map((i) =>
+      i.id === id ? { ...i, color: String(color || '').trim() } : i
+    );
+    const totalQty = updatedItems.reduce((sum, i) => sum + i.qty, 0);
+    const totalPrice = updatedItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    set({ items: updatedItems, totalQty, totalPrice });
   },
 
   /**

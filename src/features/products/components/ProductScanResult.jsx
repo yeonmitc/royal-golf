@@ -52,12 +52,15 @@ export default function ProductScanResult({ code }) {
     .filter(Boolean)
     .join(' - ');
 
+  const defaultColor = findLabel('color', data.colorCode);
+
   const handleAddToCart = (sizeRow) => {
     addItem({
       code: data.code,
       size: sizeRow.size,
       sizeDisplay: sizeRow.sizeDisplay,
       nameKo: data.nameKo || derivedName,
+      color: defaultColor,
       unitPricePhp: data.salePricePhp,
       qty: 1,
     });

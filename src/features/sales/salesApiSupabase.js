@@ -231,12 +231,15 @@ export async function checkoutCart(cartItems) {
     if (!invUpdatesByCode.has(code)) invUpdatesByCode.set(code, {});
     invUpdatesByCode.get(code)[col] = nextQty;
 
+    const colorFromItem = String(item.color || '').trim();
+    const colorFromCode = findLabel('color', String(code || '').split('-')[3] || '');
+    const colorLabel = colorFromItem || colorFromCode;
+
     salesToInsert.push({
       sold_at: soldAt,
-      code_raw: String(code),
       code: String(code).trim(),
-      size_raw: sizeKey,
       size_std: sizeKey,
+      color: colorLabel,
       qty: Number(qty || 0) || 0,
       price: unitPriceCharged,
       free_gift: isFreeGift,
@@ -254,17 +257,26 @@ export async function checkoutCart(cartItems) {
     );
   }
   let inserted;
-  try {
-    inserted = await sbInsert('sales', salesToInsert, { returning: 'representation' });
-  } catch (e) {
-    const msg = String(e?.message || '');
-    if (msg.toLowerCase().includes('free_gift')) {
-      const fallbackRows = salesToInsert.map(({ free_gift: _FREE_GIFT, ...rest }) => rest);
-      inserted = await sbInsert('sales', fallbackRows, { returning: 'representation' });
-    } else {
-      throw e;
+  const removed = new Set();
+  let rowsToInsert = salesToInsert;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      inserted = await sbInsert('sales', rowsToInsert, { returning: 'representation' });
+      break;
+    } catch (e) {
+      const msg = String(e?.message || '').toLowerCase();
+      const before = removed.size;
+      if (msg.includes('free_gift')) removed.add('free_gift');
+      if (msg.includes('color')) removed.add('color');
+      if (removed.size === before) throw e;
+      rowsToInsert = salesToInsert.map((row) => {
+        const next = { ...row };
+        for (const k of removed) delete next[k];
+        return next;
+      });
     }
   }
+  if (!inserted) throw new Error('Failed to insert sales rows.');
   const saleId = inserted?.[0]?.id ?? 0;
   return { saleId, soldAt, totalAmount, itemCount: totalQty };
 }
@@ -298,13 +310,13 @@ export async function getSaleItemsBySaleId(saleId) {
   let rows;
   try {
     rows = await sbSelect('sales', {
-      select: 'id,sold_at,code,size_std,qty,price,free_gift,refunded_at,refund_reason',
+      select: 'id,sold_at,code,color,size_std,qty,price,free_gift,refunded_at,refund_reason',
       filters: [{ column: 'id', op: 'eq', value: sid }],
       limit: 1,
     });
   } catch (e) {
-    const msg = String(e?.message || '');
-    if (msg.toLowerCase().includes('free_gift')) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('free_gift') || msg.includes('color')) {
       rows = await sbSelect('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
         filters: [{ column: 'id', op: 'eq', value: sid }],
@@ -321,6 +333,7 @@ export async function getSaleItemsBySaleId(saleId) {
     saleId: r.id,
     soldAt: r.sold_at,
     code: r.code,
+    color: String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || ''),
     size: r.size_std ?? 'Free',
     sizeDisplay: r.size_std ?? 'Free',
     qty: Number(r.qty ?? 0) || 0,
@@ -449,13 +462,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   let sales;
   try {
     sales = await sbSelectAll('sales', {
-      select: 'id,sold_at,code,size_std,qty,price,free_gift,refunded_at,refund_reason',
+      select: 'id,sold_at,code,color,size_std,qty,price,free_gift,refunded_at,refund_reason',
       filters: dateFilters,
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
-    const msg = String(e?.message || '');
-    if (msg.toLowerCase().includes('free_gift')) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('free_gift') || msg.includes('color')) {
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
         filters: dateFilters,
@@ -484,6 +497,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         saleId: r.id,
         soldAt: r.sold_at,
         code: r.code,
+        color: String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || ''),
         size: sizeKey,
         sizeDisplay: sizeKey,
         qty: qtyN,
@@ -500,7 +514,12 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const q = String(query || '').trim();
   if (!q) return withMeta;
   return withMeta.filter((r) => {
-    return includesIgnoreCase(r.code, q) || includesIgnoreCase(r.nameKo, q) || includesIgnoreCase(r.sizeDisplay, q);
+    return (
+      includesIgnoreCase(r.code, q) ||
+      includesIgnoreCase(r.nameKo, q) ||
+      includesIgnoreCase(r.sizeDisplay, q) ||
+      includesIgnoreCase(r.color, q)
+    );
   });
 }
 
@@ -524,10 +543,23 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const fromMs = hasFrom ? startOfDayMs(fromDate) : -Infinity;
   const toMs = hasTo ? endOfDayMs(toDate) : Infinity;
 
-  const sales = await sbSelect('sales', {
-    select: 'id,sold_at,code,size_std,qty,price,refunded_at',
-    order: { column: 'sold_at', ascending: false },
-  });
+  let sales;
+  try {
+    sales = await sbSelect('sales', {
+      select: 'id,sold_at,code,color,size_std,qty,price,refunded_at',
+      order: { column: 'sold_at', ascending: false },
+    });
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('color')) {
+      sales = await sbSelect('sales', {
+        select: 'id,sold_at,code,size_std,qty,price,refunded_at',
+        order: { column: 'sold_at', ascending: false },
+      });
+    } else {
+      throw e;
+    }
+  }
 
   const inRange =
     hasFrom || hasTo
@@ -625,8 +657,20 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const byBrand = accumulate(rows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
     findLabel('brand', k)
   );
-  const byColor = accumulate(rows, (r) => String(r.code || '').split('-')[3] || '', (k) =>
-    findLabel('color', k)
+  const byColor = accumulate(
+    rows,
+    (r) => {
+      const label = String(r.color || '').trim();
+      if (label) return `label:${label}`;
+      const codePart = String(r.code || '').split('-')[3] || '';
+      return `code:${codePart}`;
+    },
+    (k) => {
+      const key = String(k || '');
+      if (key.startsWith('label:')) return key.slice('label:'.length);
+      if (key.startsWith('code:')) return findLabel('color', key.slice('code:'.length));
+      return '';
+    }
   );
   const bySize = accumulate(rows, (r) => r.sizeDisplay || r.size || '', (k) => k);
   const byGender = accumulate(

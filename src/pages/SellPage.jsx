@@ -8,6 +8,7 @@ import DataTable from '../components/common/DataTable';
 import Input from '../components/common/Input';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
+import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { useCartStore } from '../store/cartStore';
 import { useToast } from '../context/ToastContext';
 
@@ -37,6 +38,7 @@ export default function SellPage() {
   const totalQty = useCartStore((s) => s.totalQty);
   const totalPrice = useCartStore((s) => s.totalPrice);
   const togglePromo = useCartStore((s) => s.togglePromo);
+  const setItemColor = useCartStore((s) => s.setItemColor);
 
   const { mutateAsync: checkoutCart, isPending: isCheckoutPending } = useCheckoutCartMutation();
 
@@ -93,6 +95,7 @@ export default function SellPage() {
                   columns={[
                     { key: 'name', header: 'Item' },
                     { key: 'size', header: 'Size' },
+                    { key: 'color', header: 'Color' },
                     {
                       key: 'qty',
                       header: 'Qty',
@@ -126,6 +129,31 @@ export default function SellPage() {
                         </div>
                       ),
                       size: item.sizeDisplay || item.size,
+                      color: (
+                        <select
+                          className="select-gold"
+                          value={item.color || ''}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setItemColor(item.code, item.size, e.target.value);
+                          }}
+                          style={{
+                            width: '100%',
+                            maxWidth: 160,
+                            padding: '6px 8px',
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                        >
+                          <option value="">Select</option>
+                          {(codePartsSeed.color || []).map((c) => (
+                            <option key={c.code} value={String(c.label || '').trim()}>
+                              {String(c.label || '').trim()}
+                            </option>
+                          ))}
+                        </select>
+                      ),
                       qty: item.qty,
                       amount: (item.qty * item.unitPricePhp).toLocaleString('en-PH'),
                     };

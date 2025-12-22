@@ -81,34 +81,26 @@ export default function SalesHistoryPage() {
     const rows = salesData?.rows || [];
     if (!rows.length) return null;
     const columns = [
-      { key: 'soldAt', header: 'Date / Time' },
-      { key: 'code', header: 'Code' },
       { key: 'nameKo', header: 'Name' },
+      { key: 'color', header: 'Color' },
       { key: 'sizeDisplay', header: 'Size' },
       { key: 'qty', header: 'Qty' },
-      { key: 'unitPricePhp', header: 'Unit (PHP)' },
-      { key: 'discountUnitPricePhp', header: 'Discount Unit' },
+      { key: 'unitPricePhp', header: 'Price (PHP)' },
+      { key: 'gift', header: 'Gift' },
     ];
     const csvRows = rows.map((row) => {
-      const dt = row.soldAt ? new Date(row.soldAt) : null;
-      const dateStr = dt
-        ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
-            dt.getDate()
-          ).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(
-            dt.getMinutes()
-          ).padStart(2, '0')}`
-        : '';
+      const original = Number(row.unitPricePhp || 0);
+      const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
+      const isDiscounted = discounted !== null && discounted !== original;
+      const finalUnit = isDiscounted ? discounted : original;
+      const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
       return {
-        soldAt: dateStr,
-        code: row.code,
         nameKo: row.nameKo,
+        color: row.color || '',
         sizeDisplay: row.sizeDisplay,
         qty: row.qty,
-        unitPricePhp: Number(row.unitPricePhp || 0).toLocaleString('en-PH'),
-        discountUnitPricePhp:
-          row.discountUnitPricePhp != null
-            ? Number(row.discountUnitPricePhp || 0).toLocaleString('en-PH')
-            : '',
+        unitPricePhp: finalUnit.toLocaleString('en-PH'),
+        gift: giftChecked ? 'gift' : '',
       };
     });
     return (

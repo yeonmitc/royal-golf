@@ -193,6 +193,23 @@ input {
   width: 100% !important;
 }
 
+.select-gold {
+  background: var(--bg-card);
+  color: var(--gold-soft);
+  border: 1px solid var(--border-soft);
+}
+
+.select-gold:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(243, 212, 122, 0.18);
+}
+
+.select-gold option {
+  background: var(--bg-main);
+  color: var(--gold-soft);
+}
+
 /* 인터랙티브 요소 커서 포인터 */
 button,
 a[href],

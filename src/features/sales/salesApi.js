@@ -132,6 +132,7 @@ export async function checkoutCart(cartItems) {
       saleItemsToInsert.push({
         code,
         size: size ?? '',
+        color: String(item.color || '').trim(),
         qty,
         unitPricePhp: unitPriceOriginal,
         discountUnitPricePhp: unitPriceCharged !== unitPriceOriginal ? unitPriceCharged : undefined,
@@ -274,12 +275,14 @@ export async function getSaleItemsBySaleId(saleId) {
   return items.map((i) => {
     const product = productMap.get(i.code);
     const inv = inventoryMap.get(`${i.code}|${i.size ?? ''}`);
+    const color = String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
 
     return {
       ...i,
       nameKo:
         (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: inv?.sizeDisplay ?? i.size,
+      color,
       lineTotalPhp: (i.discountUnitPricePhp ?? i.unitPricePhp) * i.qty,
     };
   });
@@ -305,6 +308,7 @@ export async function getSalesHistoryFlat() {
     const product = productMap.get(i.code);
     const inv = inventoryMap.get(`${i.code}|${i.size ?? ''}`);
     const sale = saleMap.get(i.saleId);
+    const color = String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
 
     return {
       saleId: i.saleId,
@@ -313,6 +317,7 @@ export async function getSalesHistoryFlat() {
       nameKo:
         (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: inv?.sizeDisplay ?? i.size,
+      color,
       qty: i.qty,
       unitPricePhp: i.unitPricePhp,
       discountUnitPricePhp: i.discountUnitPricePhp,
@@ -368,6 +373,7 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
     const product = productMap.get(i.code);
     const inv = inventoryMap.get(`${i.code}|${i.size ?? ''}`);
     const sale = saleMap.get(i.saleId);
+    const color = String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
 
     const nameKo =
       (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code;
@@ -385,6 +391,7 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
       soldAt: sale?.soldAt,
       code: i.code,
       size: i.size ?? '',
+      color,
       nameKo,
       sizeDisplay,
       qty: remainingQty, // Show only remaining quantity
@@ -404,7 +411,8 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
     return (
       includesIgnoreCase(r.code, q) ||
       includesIgnoreCase(r.nameKo, q) ||
-      includesIgnoreCase(r.sizeDisplay, q)
+      includesIgnoreCase(r.sizeDisplay, q) ||
+      includesIgnoreCase(r.color, q)
     );
   });
 }
@@ -513,8 +521,10 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const byBrand = accumulate(rows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
     findLabel('brand', k)
   );
-  const byColor = accumulate(rows, (r) => String(r.code || '').split('-')[3] || '', (k) =>
-    findLabel('color', k)
+  const byColor = accumulate(
+    rows,
+    (r) => String(r.color || '').trim() || String(r.code || '').split('-')[3] || '',
+    (k) => (String(k || '').trim().length > 2 ? k : findLabel('color', k))
   );
   const bySize = accumulate(rows, (r) => r.sizeDisplay || r.size || '', (k) => k);
   const byGender = accumulate(
