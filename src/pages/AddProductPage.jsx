@@ -77,7 +77,15 @@ export default function AddProductPage() {
     computedKrwPrice === ''
       ? ''
       : String(ceilToUnit((Number(computedKrwPrice) * 3) / 25.5, 100));
+  const computedP2PricePhp =
+    computedKrwPrice === ''
+      ? ''
+      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25.5, 100));
   const effectiveSalePricePhp = salePriceManual ? salePricePhp : computedSalePricePhp;
+  const p3PriceForDb =
+    String(effectiveSalePricePhp ?? '').trim() === ''
+      ? ''
+      : String(ceilToUnit(Number(effectiveSalePricePhp || 0), 100));
 
   async function recomputeCode(next = {}) {
     const c = next.category ?? category;
@@ -143,19 +151,26 @@ export default function AddProductPage() {
       return;
     }
 
+    const changes = Object.fromEntries(
+      Object.entries(sizeInputs).map(([k, v]) => [k, Number(v || 0) || 0])
+    );
+    const totalQty = Object.values(changes).reduce((sum, n) => sum + (Number(n) || 0), 0);
+
     const payload = {
       code: codePreview,
       nameKo: nameKo.trim(),
       priceCny: Number(priceCny || 0) || 0,
-      salePricePhp: Number(effectiveSalePricePhp || 0) || 0,
+      salePricePhp: Number(p3PriceForDb || 0) || 0,
+      qty: totalQty,
+      kprice: Number(computedKrwPrice || 0) || 0,
+      cprice: Number(priceCny || 0) || 0,
+      p2price: Number(computedP2PricePhp || 0) || 0,
+      p3price: Number(p3PriceForDb || 0) || 0,
     };
 
     try {
       const savedCode = await saveProduct(payload);
 
-      const changes = Object.fromEntries(
-        Object.entries(sizeInputs).map(([k, v]) => [k, Number(v || 0) || 0])
-      );
       await updateInv({ code: savedCode, changes });
       showToast(`Product added: ${savedCode}`);
       navigate('/inventory');

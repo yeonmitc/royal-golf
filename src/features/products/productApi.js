@@ -93,14 +93,64 @@ function parseCode(code) {
   };
 }
 
+function hasOwn(obj, key) {
+  return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 function toDbProductRow(payload) {
   const code = String(payload?.code || '').trim();
-  return {
+  const out = {
     code,
     name: String(payload?.nameKo ?? payload?.name ?? '').trim(),
-    sale_price: Number(payload?.salePricePhp ?? payload?.sale_price ?? 0) || 0,
-    free_gift: Boolean(payload?.freeGift ?? payload?.free_gift ?? false),
+    free_gift: hasOwn(payload, 'freeGift') || hasOwn(payload, 'free_gift')
+      ? Boolean(payload?.freeGift ?? payload?.free_gift)
+      : undefined,
   };
+  if (hasOwn(payload, 'salePricePhp') || hasOwn(payload, 'sale_price')) {
+    out.sale_price = Number(payload?.salePricePhp ?? payload?.sale_price ?? 0) || 0;
+  }
+  if (hasOwn(payload, 'no')) out.no = Number(payload?.no ?? 0) || 0;
+  if (hasOwn(payload, 'qty')) out.qty = Number(payload?.qty ?? 0) || 0;
+  if (hasOwn(payload, 'kprice') || hasOwn(payload, 'krwPrice')) {
+    out.kprice = Number(payload?.kprice ?? payload?.krwPrice ?? 0) || 0;
+  }
+  if (hasOwn(payload, 'cprice') || hasOwn(payload, 'priceCny')) {
+    out.cprice = Number(payload?.cprice ?? payload?.priceCny ?? 0) || 0;
+  }
+  if (hasOwn(payload, 'p2price')) out.p2price = Number(payload?.p2price ?? 0) || 0;
+  if (hasOwn(payload, 'p3price')) out.p3price = Number(payload?.p3price ?? 0) || 0;
+  return out;
+}
+
+async function getNextProductNo() {
+  const rows = await sbSelect('products', {
+    select: 'no',
+    order: { column: 'no', ascending: false },
+    limit: 1,
+  });
+  const maxNo = Number(rows?.[0]?.no ?? 0) || 0;
+  return maxNo + 1;
+}
+
+async function getNextInventoryNo() {
+  const rows = await sbSelect('inventories', {
+    select: 'no',
+    order: { column: 'no', ascending: false },
+    limit: 1,
+  });
+  const maxNo = Number(rows?.[0]?.no ?? 0) || 0;
+  return maxNo + 1;
+}
+
+async function getProductNoByCode(code) {
+  const c = String(code || '').trim();
+  if (!c) return 0;
+  const rows = await sbSelect('products', {
+    select: 'no',
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    limit: 1,
+  });
+  return Number(rows?.[0]?.no ?? 0) || 0;
 }
 
 /**
@@ -259,11 +309,16 @@ export async function upsertProduct(payload) {
   const code = String(payload.code || '').trim();
   if (!code) throw new Error('Product code is required.');
   const row = toDbProductRow(payload);
-  const values = {
-    name: row.name,
-    sale_price: row.sale_price,
-    free_gift: row.free_gift,
-  };
+  const values = {};
+  if (row.name !== undefined) values.name = row.name;
+  if (row.sale_price !== undefined) values.sale_price = row.sale_price;
+  if (row.free_gift !== undefined) values.free_gift = row.free_gift;
+  if (row.qty !== undefined) values.qty = row.qty;
+  if (row.kprice !== undefined) values.kprice = row.kprice;
+  if (row.cprice !== undefined) values.cprice = row.cprice;
+  if (row.p2price !== undefined) values.p2price = row.p2price;
+  if (row.p3price !== undefined) values.p3price = row.p3price;
+
   const existing = await sbSelect('products', {
     select: 'code',
     filters: [{ column: 'code', op: 'eq', value: code }],
@@ -276,7 +331,15 @@ export async function upsertProduct(payload) {
       { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
     );
   } else {
-    await sbInsert('products', [{ code, ...values }], { returning: 'minimal' });
+    const nextNo = row.no ? row.no : await getNextProductNo();
+    const insertValues = { ...values };
+    if (row.no !== undefined || nextNo) insertValues.no = nextNo;
+    if (insertValues.qty === undefined) insertValues.qty = 0;
+    if (insertValues.kprice === undefined) insertValues.kprice = 0;
+    if (insertValues.cprice === undefined) insertValues.cprice = 0;
+    if (insertValues.p2price === undefined) insertValues.p2price = 0;
+    if (insertValues.p3price === undefined) insertValues.p3price = 0;
+    await sbInsert('products', [{ code, ...insertValues }], { returning: 'minimal' });
   }
   return code;
 }
@@ -329,16 +392,26 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
     changes[col] = Number(qty) || 0;
   }
 
-  const existing = await sbSelect('inventories', {
-    select: 'code',
+  const existingRows = await sbSelect('inventories', {
+    select: '*',
     filters: [{ column: 'code', op: 'eq', value: c }],
     limit: 1,
   });
+  const existingRow = existingRows?.[0];
+  const hasExisting = Array.isArray(existingRows) && existingRows.length > 0;
 
-  if (Array.isArray(existing) && existing.length > 0) {
+  if (hasExisting) {
+    const merged = { ...(existingRow || {}), ...changes };
+    const totalQty = sumInventoriesRow(merged);
+    const values = { ...changes, total_qty: totalQty };
+    const existingNo = Number(existingRow?.no ?? 0) || 0;
+    if (!existingNo) {
+      const productNo = await getProductNoByCode(c);
+      values.no = productNo || (await getNextInventoryNo());
+    }
     await sbUpdate(
       'inventories',
-      changes,
+      values,
       { filters: [{ column: 'code', op: 'eq', value: c }], returning: 'minimal' }
     );
   } else {
@@ -348,6 +421,9 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
       insertRow[col] = 0;
     }
     Object.assign(insertRow, changes);
+    insertRow.total_qty = sumInventoriesRow(insertRow);
+    const productNo = await getProductNoByCode(c);
+    insertRow.no = productNo || (await getNextInventoryNo());
     await sbInsert('inventories', [insertRow], { returning: 'minimal' });
   }
 
