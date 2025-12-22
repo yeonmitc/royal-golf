@@ -37,6 +37,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // Offline support (after first load)
 if (import.meta.env.PROD) {
   if ('serviceWorker' in navigator) {
-    // navigator.serviceWorker.register('/sw.js');
+    try {
+      const cleanupKey = 'royal_sw_cleanup_v1';
+      if (!localStorage.getItem(cleanupKey)) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+          .catch(() => {});
+        if ('caches' in window) {
+          caches
+            .keys()
+            .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+            .catch(() => {});
+        }
+        localStorage.setItem(cleanupKey, '1');
+      }
+    } catch {
+      // ignore
+    }
   }
 }

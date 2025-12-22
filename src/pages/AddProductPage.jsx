@@ -30,6 +30,8 @@ export default function AddProductPage() {
 
   const [nameKo, setNameKo] = useState('');
   const [priceCny, setPriceCny] = useState('');
+  const [salePricePhp, setSalePricePhp] = useState('');
+  const [salePriceManual, setSalePriceManual] = useState(false);
 
   const [codePreview, setCodePreview] = useState('');
   const [duplicate, setDuplicate] = useState(false);
@@ -75,6 +77,7 @@ export default function AddProductPage() {
     computedKrwPrice === ''
       ? ''
       : String(ceilToUnit((Number(computedKrwPrice) * 3) / 25.5, 100));
+  const effectiveSalePricePhp = salePriceManual ? salePricePhp : computedSalePricePhp;
 
   async function recomputeCode(next = {}) {
     const c = next.category ?? category;
@@ -144,7 +147,7 @@ export default function AddProductPage() {
       code: codePreview,
       nameKo: nameKo.trim(),
       priceCny: Number(priceCny || 0) || 0,
-      salePricePhp: Number(computedSalePricePhp || 0) || 0,
+      salePricePhp: Number(effectiveSalePricePhp || 0) || 0,
     };
 
     try {
@@ -337,9 +340,26 @@ export default function AddProductPage() {
                   <Input
                     label="Sale Price (PHP)"
                     type="number"
-                    value={computedSalePricePhp}
-                    readOnly
+                    value={effectiveSalePricePhp}
+                    readOnly={!salePriceManual}
+                    onChange={(e) => setSalePricePhp(e.target.value)}
                   />
+                  <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      type="button"
+                      variant={salePriceManual ? 'primary' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        setSalePriceManual((v) => {
+                          const next = !v;
+                          if (next) setSalePricePhp((prev) => (String(prev ?? '').trim() ? prev : computedSalePricePhp));
+                          return next;
+                        });
+                      }}
+                    >
+                      {salePriceManual ? 'Manual' : 'Auto'}
+                    </Button>
+                  </div>
                 </div>
               </FormSection>
 
