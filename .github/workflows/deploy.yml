@@ -1,0 +1,60 @@
+name: deploy
+on:
+  push:
+    branches: [ main, master ]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Diagnose repo paths (case/exists)
+        run: |
+          set -x
+          ls -la .
+          ls -la src || true
+          ls -la src/pages || true
+          ls -la src/features || true
+          ls -la src/features/logs || true
+          ls -la src/features/logs/components || true
+      - name: Export env for Vite
+        run: |
+          echo "VITE_ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}" >> "$GITHUB_ENV"
+          echo "VITE_ADMIN_SESSION_TTL_MINUTES=${ADMIN_SESSION_TTL_MINUTES:-720}" >> "$GITHUB_ENV"
+          echo "VITE_SALES_BACKEND=${SALES_BACKEND:-supabase}" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_URL=${SUPABASE_URL}" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> "$GITHUB_ENV"
+          # Automatically determine base path from repository name
+          REPO_NAME=${GITHUB_REPOSITORY#*/}
+          echo "VITE_BASE_PATH=/$REPO_NAME/" >> "$GITHUB_ENV"
+        env:
+          ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+          ADMIN_SESSION_TTL_MINUTES: ${{ vars.ADMIN_SESSION_TTL_MINUTES }}
+          SALES_BACKEND: ${{ vars.VITE_SALES_BACKEND }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL || vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/configure-pages@v4
+      - id: deployment
+        uses: actions/deploy-pages@v4

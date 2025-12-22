@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>바코드 관리</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif; margin: 0; padding: 24px; background: #f6f7fb; color: #111; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .row-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    label { font-size: 12px; color: #374151; display: block; margin-bottom: 6px; }
+    select, input[type="text"], input[type="number"], input[type="file"] { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+    .btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #111827; background: #111827; color: #fff; cursor: pointer; }
+    .btn.secondary { background: #fff; color: #111827; border: 1px solid #d1d5db; }
+    .stack { display: flex; gap: 10px; align-items: center; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 8px 10px; border-radius: 8px; background: #f3f4f6; border: 1px solid #e5e7eb; }
+    .muted { color: #6b7280; font-size: 12px; }
+    .sizes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+    .preview { display: flex; gap: 16px; align-items: flex-start; }
+    img.preview-img { max-width: 160px; max-height: 160px; border-radius: 8px; border: 1px solid #e5e7eb; object-fit: cover; }
+    .list { border-top: 1px dashed #e5e7eb; margin-top: 12px; padding-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .item { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 8px; display: flex; gap: 10px; align-items: center; }
+    .item img { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; }
+    .item .meta { font-size: 12px; color: #374151; }
+    .barcode-wrap { background: #fff; border: 1px dashed #e5e7eb; border-radius: 8px; padding: 8px; }
+    .danger { color: #b91c1c; }
+    .ok { color: #16a34a; font-weight: 600; }
+  </style>
+  </head>
+<body>
+  <h1>바코드 생성 및 조회</h1>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Codes.csv 불러오기</label>
+        <input id="bookFile" type="file" accept=".csv" />
+        <div id="bookStatus" class="muted"></div>
+      </div>
+      <div>
+        <label>Maindb.csv 불러오기</label>
+        <input id="mainFile" type="file" accept=".csv" />
+        <div id="mainStatus" class="muted"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row-3">
+      <div>
+        <label>분류</label>
+        <select id="selCategory"></select>
+      </div>
+      <div>
+        <label>성별</label>
+        <select id="selGender"></select>
+      </div>
+      <div>
+        <label>타입</label>
+        <select id="selType"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>브랜드</label>
+        <select id="selBrand"></select>
+      </div>
+      <div>
+        <label>색상</label>
+        <select id="selColor"></select>
+      </div>
+    </div>
+
+    <div class="stack" style="margin-top:12px;">
+      <div class="code" id="codeBox">코드: -</div>
+      <button class="btn secondary" id="recalcBtn">코드 재계산</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>가격 (CNY)</label>
+        <input id="priceCny" type="number" min="0" step="0.01" />
+      </div>
+      <div>
+        <label>환율 (CNY→PHP)</label>
+        <input id="rate" type="number" min="0" step="0.0001" />
+      </div>
+    </div>
+      <div class="row" style="margin-top:8px;">
+        <div>
+          <label>가격 (PHP)</label>
+          <input id="pricePhp" type="text" disabled />
+        </div>
+        <div class="sizes">
+          <div>
+            <label>S 수량</label>
+            <input id="sizeS" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label>M 수량</label>
+            <input id="sizeM" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label>L 수량</label>
+            <input id="sizeL" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label>XL 수량</label>
+            <input id="sizeXL" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label>2XL 수량</label>
+            <input id="size2XL" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label>3XL 수량</label>
+            <input id="size3XL" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label>Free 수량</label>
+            <input id="sizeF" type="number" min="0" step="1" />
+          </div>
+        </div>
+      </div>
+
+    <div class="preview" style="margin-top:12px;">
+      <div>
+        <label>사진</label>
+        <input id="photo" type="file" accept="image/*" />
+        <div class="muted">이미지 파일을 선택하세요</div>
+      </div>
+      <div>
+        <img id="photoPreview" class="preview-img" alt="preview" />
+      </div>
+      <div class="barcode-wrap">
+        <svg id="barcode"></svg>
+      </div>
+    </div>
+
+    <div class="stack" style="margin-top:12px;">
+      <button class="btn" id="saveBtn">저장</button>
+      <div id="saveStatus" class="muted"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>스캔/조회</label>
+        <input id="scanInput" type="text" placeholder="바코드 스캔 또는 코드 입력" />
+      </div>
+      <div id="lookupStatus" class="muted"></div>
+    </div>
+    <div id="lookupResult" class="preview" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="stack">
+      <div class="muted">저장된 항목</div>
+      <button class="btn secondary" id="exportBtn">CSV 내보내기</button>
+      <button class="btn secondary" id="clearBtn">모두 삭제</button>
+    </div>
+    <div id="itemsList" class="list"></div>
+  </div>
+
+  <script>
+    const els = {
+      bookFile: document.getElementById('bookFile'),
+      mainFile: document.getElementById('mainFile'),
+      bookStatus: document.getElementById('bookStatus'),
+      mainStatus: document.getElementById('mainStatus'),
+      selCategory: document.getElementById('selCategory'),
+      selGender: document.getElementById('selGender'),
+      selType: document.getElementById('selType'),
+      selBrand: document.getElementById('selBrand'),
+      selColor: document.getElementById('selColor'),
+      codeBox: document.getElementById('codeBox'),
+      recalcBtn: document.getElementById('recalcBtn'),
+      priceCny: document.getElementById('priceCny'),
+      rate: document.getElementById('rate'),
+      pricePhp: document.getElementById('pricePhp'),
+      sizeS: document.getElementById('sizeS'),
+      sizeM: document.getElementById('sizeM'),
+      sizeL: document.getElementById('sizeL'),
+      sizeXL: document.getElementById('sizeXL'),
+      size2XL: document.getElementById('size2XL'),
+      size3XL: document.getElementById('size3XL'),
+      sizeF: document.getElementById('sizeF'),
+      photo: document.getElementById('photo'),
+      photoPreview: document.getElementById('photoPreview'),
+      barcode: document.getElementById('barcode'),
+      saveBtn: document.getElementById('saveBtn'),
+      saveStatus: document.getElementById('saveStatus'),
+      scanInput: document.getElementById('scanInput'),
+      lookupStatus: document.getElementById('lookupStatus'),
+      lookupResult: document.getElementById('lookupResult'),
+      itemsList: document.getElementById('itemsList'),
+      exportBtn: document.getElementById('exportBtn'),
+      clearBtn: document.getElementById('clearBtn')
+    };
+
+    const state = {
+      options: { category: [], gender: [], type: [], brand: [], color: [] },
+      mainDb: [],
+      items: [],
+      imageData: null,
+      loadedBook: false,
+      loadedMain: false
+    };
+
+    function parseCSV(text) {
+      const rows = [];
+      let i = 0, cur = '', inQuotes = false, row = [];
+      while (i < text.length) {
+        const ch = text[i];
+        if (ch === '"') {
+          if (inQuotes && text[i+1] === '"') { cur += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          row.push(cur); cur = '';
+        } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+          if (cur.length > 0 || row.length) { row.push(cur); rows.push(row); row = []; cur = ''; }
+        } else {
+          cur += ch;
+        }
+        i++;
+      }
+      if (cur.length > 0 || row.length) { row.push(cur); rows.push(row); }
+      return rows.map(r => r.map(c => c.trim()));
+    }
+
+    function uniqueByCode(arr) {
+      const seen = new Set();
+      const out = [];
+      for (const x of arr) { if (!x.name || !x.code) continue; const key = x.code; if (seen.has(key)) continue; seen.add(key); out.push(x); }
+      return out.sort((a,b)=>a.name.localeCompare(b.name));
+    }
+
+    function loadOptionsFromBook(rows) {
+      const cats = [], gens = [], types = [], brands = [], colors = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const cat = { name: r[0]||'', code: r[1]||'' };
+        const gen = { name: r[2]||'', code: r[3]||'' };
+        const typ = { name: r[4]||'', code: r[5]||'' };
+        const brd = { name: r[6]||'', code: r[7]||'' };
+        const clr = { name: r[8]||'', code: r[9]||'' };
+        if (cat.name && cat.code) cats.push(cat);
+        if (gen.name && gen.code) gens.push(gen);
+        if (typ.name && typ.code) types.push(typ);
+        if (brd.name && brd.code) brands.push(brd);
+        if (clr.name && clr.code) colors.push(clr);
+      }
+      state.options.category = uniqueByCode(cats);
+      state.options.gender = uniqueByCode(gens);
+      state.options.type = uniqueByCode(types);
+      state.options.brand = uniqueByCode(brands);
+      state.options.color = uniqueByCode(colors);
+      localStorage.setItem('options_data', JSON.stringify(state.options));
+      renderOptionSelects();
+      state.loadedBook = true;
+      updateIndicators();
+    }
+
+    function renderOptionSelects() {
+      function fill(sel, arr) {
+        sel.innerHTML = '';
+        const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = '선택'; sel.appendChild(opt0);
+        for (const x of arr) { const o = document.createElement('option'); o.value = x.code; o.textContent = x.name + ' (' + x.code + ')'; sel.appendChild(o); }
+      }
+      fill(els.selCategory, state.options.category);
+      fill(els.selGender, state.options.gender);
+      fill(els.selType, state.options.type);
+      fill(els.selBrand, state.options.brand);
+      fill(els.selColor, state.options.color);
+    }
+
+    function loadMainDb(rows) {
+      const out = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const code = r[0] || '';
+        if (!code) continue;
+        const price = parseFloat(r[1] || '0');
+        const sizes = {
+          S: parseInt(r[3] || '0', 10),
+          M: parseInt(r[4] || '0', 10),
+          L: parseInt(r[5] || '0', 10),
+          XL: parseInt(r[6] || '0', 10),
+          '2XL': parseInt(r[7] || '0', 10),
+          '3XL': parseInt(r[8] || '0', 10),
+          Free: parseInt(r[9] || '0', 10)
+        };
+        out.push({ code, price, sizes });
+      }
+      state.mainDb = out;
+      localStorage.setItem('main_db', JSON.stringify(state.mainDb));
+      state.loadedMain = true;
+      els.mainStatus.textContent = '메인 DB 로드됨: 항목 ' + out.length + '개'; els.mainStatus.className = 'muted ok';
+      recalcCode();
+      updateIndicators();
+    }
+
+    function nextSuffix(prefix) {
+      let max = 0;
+      function scan(code) {
+        if (!code) return;
+        if (code.startsWith(prefix + '-')) {
+          const parts = code.split('-');
+          const nn = parts[parts.length - 1];
+          const n = parseInt(nn, 10);
+          if (!isNaN(n) && n > max) max = n;
+        }
+      }
+      for (const x of state.mainDb) scan(x.code);
+      for (const x of state.items) scan(x.code);
+      return String(max + 1).padStart(2, '0');
+    }
+
+    function recalcCode() {
+      const c = els.selCategory.value;
+      const g = els.selGender.value;
+      const t = els.selType.value;
+      const b = els.selBrand.value;
+      const k = els.selColor.value;
+      if (!(c && g && t && b && k)) { els.codeBox.textContent = '코드: -'; JsBarcode(els.barcode, '', {format:'code128'}); return; }
+      const prefix = c + g + '-' + t + '-' + b + '-' + k;
+      const nn = nextSuffix(prefix);
+      const code = prefix + '-' + nn;
+      els.codeBox.textContent = '코드: ' + code;
+      JsBarcode(els.barcode, code, { format: 'code128', displayValue: true, fontSize: 14, height: 60, margin: 4 });
+    }
+
+    function setSelectValue(sel, val) {
+      sel.value = val || '';
+    }
+
+    function parseAndSetSelectsFromCode(code) {
+      const parts = (code || '').split('-');
+      if (parts.length < 5) return false;
+      const combined = parts[0];
+      const typeCode = parts[1];
+      const brandCode = parts[2];
+      const colorCode = parts[3];
+      let catCode = '';
+      let genCode = '';
+      outer: for (const cat of state.options.category) {
+        for (const gen of state.options.gender) {
+          if ((cat.code + gen.code) === combined) { catCode = cat.code; genCode = gen.code; break outer; }
+        }
+      }
+      if (!(catCode && genCode)) return false;
+      setSelectValue(els.selCategory, catCode);
+      setSelectValue(els.selGender, genCode);
+      setSelectValue(els.selType, typeCode);
+      setSelectValue(els.selBrand, brandCode);
+      setSelectValue(els.selColor, colorCode);
+      return true;
+    }
+
+    function populateFormForCode(code) {
+      const ok = parseAndSetSelectsFromCode(code);
+      if (ok) {
+        els.codeBox.textContent = '코드: ' + code;
+        JsBarcode(els.barcode, code, { format: 'code128', displayValue: true, fontSize: 14, height: 60, margin: 4 });
+      }
+      const item = state.items.find(x => x.code === code);
+      const md = state.mainDb.find(x => x.code === code);
+      if (item) {
+        els.priceCny.value = String(item.cnyPrice || 0);
+        els.rate.value = String(item.rate || (localStorage.getItem('rate_default') || ''));
+        els.sizeS.value = String(item.sizes?.S || 0);
+        els.sizeM.value = String(item.sizes?.M || 0);
+        els.sizeL.value = String(item.sizes?.L || 0);
+        els.sizeXL.value = String(item.sizes?.XL || 0);
+        els.size2XL.value = String(item.sizes?.['2XL'] || 0);
+        els.size3XL.value = String(item.sizes?.['3XL'] || 0);
+        els.sizeF.value = String(item.sizes?.F || 0);
+        state.imageData = item.imageData || null;
+        els.photoPreview.src = state.imageData || '';
+        els.saveStatus.textContent = '편집 모드'; els.saveStatus.className = 'muted';
+      } else if (md) {
+        els.sizeS.value = String(md.sizes?.S || 0);
+        els.sizeM.value = String(md.sizes?.M || 0);
+        els.sizeL.value = String(md.sizes?.L || 0);
+        els.sizeXL.value = String(md.sizes?.XL || 0);
+        els.size2XL.value = String(md.sizes?.['2XL'] || 0);
+        els.size3XL.value = String(md.sizes?.['3XL'] || 0);
+        els.sizeF.value = String(md.sizes?.Free || 0);
+        els.photoPreview.src = ''; state.imageData = null;
+        els.saveStatus.textContent = '메인 DB 기준 편집'; els.saveStatus.className = 'muted ok';
+      }
+      updatePhp();
+    }
+
+    function updatePhp() {
+      const cny = parseFloat(els.priceCny.value || '0');
+      const rate = parseFloat(els.rate.value || '0');
+      const php = cny * rate;
+      els.pricePhp.value = php ? Math.round(php).toLocaleString('en-US') : '';
+    }
+
+    function readImage(file) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = (e) => reject(e);
+        fr.readAsDataURL(file);
+      });
+    }
+
+    function renderItems() {
+      els.itemsList.innerHTML = '';
+      for (const it of state.items) {
+        const div = document.createElement('div'); div.className = 'item';
+        const img = document.createElement('img'); img.src = it.imageData || ''; div.appendChild(img);
+        const meta = document.createElement('div'); meta.className = 'meta';
+        const php = Math.round((it.cnyPrice || 0) * (it.rate || 0));
+        meta.textContent = it.code + ' • PHP ' + (php ? php.toLocaleString('en-US') : '0');
+        div.appendChild(meta);
+        els.itemsList.appendChild(div);
+      }
+    }
+
+    function normalizeCodeInput(str) {
+      const s = (str || '').trim();
+      const first = s.split(',')[0].trim();
+      return first;
+    }
+
+    async function appendMainDbCSV(item) {
+      const header = ['코드','가격-중국','필리핀 금액','S','M','L','XL','2XL','3XL','Free'];
+      const idx = state.mainDb.findIndex(x => x.code === item.code);
+      const entry = {
+        code: item.code,
+        price: item.cnyPrice || 0,
+        sizes: {
+          S: item.sizes.S || 0,
+          M: item.sizes.M || 0,
+          L: item.sizes.L || 0,
+          XL: item.sizes.XL || 0,
+          '2XL': item.sizes['2XL'] || 0,
+          '3XL': item.sizes['3XL'] || 0,
+          Free: item.sizes.F || 0
+        }
+      };
+      if (idx >= 0) {
+        const cur = state.mainDb[idx];
+        state.mainDb[idx] = { code: cur.code, price: entry.price || cur.price || 0, sizes: entry.sizes };
+      } else {
+        state.mainDb.push(entry);
+      }
+      localStorage.setItem('main_db', JSON.stringify(state.mainDb));
+      const rateNum = parseFloat(els.rate.value || '0');
+      const lines = [header.join(',')];
+      for (const md of state.mainDb) {
+        const php = rateNum ? Math.round((md.price || 0) * rateNum) : 0;
+        const row = [
+          md.code,
+          String(md.price || 0),
+          String(php || 0),
+          String(md.sizes?.S || 0),
+          String(md.sizes?.M || 0),
+          String(md.sizes?.L || 0),
+          String(md.sizes?.XL || 0),
+          String(md.sizes?.['2XL'] || 0),
+          String(md.sizes?.['3XL'] || 0),
+          String(md.sizes?.Free || 0)
+        ];
+        lines.push(row.join(','));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'Maindb.csv'; a.click();
+      URL.revokeObjectURL(url);
+      els.saveStatus.textContent = '메인 DB 업데이트됨'; els.saveStatus.className = 'muted ok';
+    }
+
+    function saveItem() {
+      const codeText = els.codeBox.textContent || '';
+      const code = codeText.replace('코드: ', '').trim();
+      if (!code || code === '-') { els.saveStatus.textContent = '코드를 먼저 선택하세요'; els.saveStatus.className = 'muted danger'; return; }
+      const item = {
+        code,
+        cnyPrice: parseFloat(els.priceCny.value || '0'),
+        rate: parseFloat(els.rate.value || '0'),
+        sizes: {
+          S: parseInt(els.sizeS.value || '0', 10),
+          M: parseInt(els.sizeM.value || '0', 10),
+          L: parseInt(els.sizeL.value || '0', 10),
+          XL: parseInt(els.sizeXL.value || '0', 10),
+          '2XL': parseInt(els.size2XL.value || '0', 10),
+          '3XL': parseInt(els.size3XL.value || '0', 10),
+          F: parseInt(els.sizeF.value || '0', 10)
+        },
+        imageData: state.imageData
+      };
+      const idx = state.items.findIndex(x => x.code === code);
+      if (idx >= 0) state.items[idx] = item; else state.items.push(item);
+      localStorage.setItem('saved_items', JSON.stringify(state.items));
+      appendMainDbCSV(item);
+      renderItems();
+    }
+
+    function lookup(code) {
+      const q = normalizeCodeInput(code);
+      let item = state.items.find(x => x.code === q);
+      const wrap = document.createElement('div'); wrap.className = 'preview';
+      if (!item) {
+        const md = state.mainDb.find(x => x.code === q);
+        if (md) {
+          els.lookupStatus.textContent = '메인 DB에서 찾음'; els.lookupStatus.className = 'muted ok';
+          const meta = document.createElement('div');
+          const ty = (q || '').split('-')[1] || '';
+          let mapStr = '';
+          if (ty === 'TP') mapStr = 's(48) m(50) l(52) xl(54) 2xl(56) 3xl(58)';
+          else if (ty === 'BT') mapStr = 's(28) m(30) l(32) xl(34) 2xl(36) 3xl(38)';
+          const sizesText = ['S','M','L','XL','2XL','3XL','Free'].map(s => s + ': ' + (md.sizes?.[s] || 0)).join(' / ');
+          const rateNum = parseFloat(els.rate.value || '0');
+          const phpDisp = (md.price && rateNum) ? Math.round(md.price * rateNum).toLocaleString('en-US') : '';
+          const priceHtml = '<div>가격 CNY: ' + (md.price || 0) + '</div>' + (phpDisp ? '<div>가격 PHP: ' + phpDisp + '</div>' : '');
+          meta.innerHTML = '<div class="code">' + md.code + '</div>' + (mapStr ? '<div class="muted">' + mapStr + '</div>' : '') + '<div class="muted">메인 DB 항목</div>' + priceHtml + '<div>' + sizesText + '</div>';
+          const ctrl = document.createElement('div');
+          const sel = document.createElement('select'); ['S','M','L','XL','2XL','3XL','Free'].forEach(k=>{ const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); });
+          const qty = document.createElement('input'); qty.type = 'number'; qty.step = '1'; qty.value = '1';
+          const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = '수량 변경';
+          btn.addEventListener('click', () => { const sk = sel.value; const dv = parseInt(qty.value || '0', 10); if (!sk || isNaN(dv) || !dv) return; updateMainDbQuantity(q, sk, dv); });
+          ctrl.appendChild(sel); ctrl.appendChild(qty); ctrl.appendChild(btn);
+          meta.appendChild(ctrl);
+          wrap.appendChild(meta);
+        } else {
+          els.lookupStatus.textContent = '저장 항목에서 찾을 수 없음'; els.lookupStatus.className = 'muted danger';
+        }
+      } else {
+        els.lookupStatus.textContent = ''; els.lookupStatus.className = 'muted';
+        const img = document.createElement('img'); img.className = 'preview-img'; img.src = item.imageData || ''; wrap.appendChild(img);
+        const meta = document.createElement('div');
+        const php = Math.round((item.cnyPrice || 0) * (item.rate || 0));
+        const sizes = ['S','M','L','XL','2XL','3XL','F'].map(s=>s+': '+(item.sizes[s]||0)).join(' / ');
+        const ty = (q || '').split('-')[1] || '';
+        let mapStr = '';
+        if (ty === 'TP') mapStr = 's(48) m(50) l(52) xl(54) 2xl(56) 3xl(58)';
+        else if (ty === 'BT') mapStr = 's(28) m(30) l(32) xl(34) 2xl(36) 3xl(38)';
+        meta.innerHTML = '<div class="code">' + item.code + '</div>' + (mapStr ? '<div class="muted">' + mapStr + '</div>' : '') + '<div>PHP ' + (php ? php.toLocaleString('en-US') : '0') + '</div>' + '<div>' + sizes + '</div>';
+        wrap.appendChild(meta);
+      }
+      els.lookupResult.innerHTML = '';
+      els.lookupResult.appendChild(wrap);
+      populateFormForCode(q);
+    }
+
+    function updateMainDbQuantity(code, sizeKey, delta) {
+      const idx = state.mainDb.findIndex(x => x.code === code);
+      if (idx < 0) return;
+      const ent = state.mainDb[idx];
+      const sizes = Object.assign({}, ent.sizes);
+      const cur = sizes[sizeKey] || 0;
+      const next = cur + delta;
+      sizes[sizeKey] = next < 0 ? 0 : next;
+      state.mainDb[idx] = { code: ent.code, price: ent.price || 0, sizes };
+      localStorage.setItem('main_db', JSON.stringify(state.mainDb));
+      lookup(code);
+      if ((els.codeBox.textContent || '').includes(code)) populateFormForCode(code);
+    }
+
+    function exportCSV() {
+      const header = ['code','cnyPrice','rate','sizeS','sizeM','sizeL','sizeXL','sizeF','imageData'];
+      const lines = [header.join(',')];
+      for (const it of state.items) {
+        const row = [
+          it.code,
+          it.cnyPrice || 0,
+          it.rate || 0,
+          it.sizes?.S || 0,
+          it.sizes?.M || 0,
+          it.sizes?.L || 0,
+          it.sizes?.XL || 0,
+          it.sizes?.F || 0,
+          it.imageData ? 'dataurl' : ''
+        ];
+        lines.push(row.join(','));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'saved_items.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function clearAll() {
+      if (!confirm('모든 저장 항목을 삭제할까요?')) return;
+      state.items = [];
+      localStorage.removeItem('saved_items');
+      renderItems();
+    }
+
+    els.bookFile.addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const text = await file.text();
+      const rows = parseCSV(text);
+      loadOptionsFromBook(rows);
+      els.bookStatus.textContent = '옵션 로드 완료';
+    });
+
+    els.mainFile.addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const text = await file.text();
+      const rows = parseCSV(text);
+      loadMainDb(rows);
+    });
+
+    els.selCategory.addEventListener('change', recalcCode);
+    els.selGender.addEventListener('change', recalcCode);
+    els.selType.addEventListener('change', recalcCode);
+    els.selBrand.addEventListener('change', recalcCode);
+    els.selColor.addEventListener('change', recalcCode);
+    els.recalcBtn.addEventListener('click', recalcCode);
+
+    els.priceCny.addEventListener('input', updatePhp);
+    els.rate.addEventListener('input', updatePhp);
+
+    els.photo.addEventListener('change', async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const data = await readImage(file);
+      state.imageData = data;
+      els.photoPreview.src = data;
+    });
+
+    els.saveBtn.addEventListener('click', saveItem);
+
+    els.scanInput.addEventListener('input', (e) => {
+      const v = e.target.value.trim(); if (!v) return; lookup(v);
+    });
+
+    els.exportBtn.addEventListener('click', exportCSV);
+    els.clearBtn.addEventListener('click', clearAll);
+
+    function initFromStorage() {
+      try {
+        const opt = localStorage.getItem('options_data');
+        if (opt) { state.options = JSON.parse(opt); renderOptionSelects(); }
+      } catch {}
+      try {
+        const md = localStorage.getItem('main_db');
+        if (md) state.mainDb = JSON.parse(md);
+      } catch {}
+      try {
+        const si = localStorage.getItem('saved_items');
+        if (si) state.items = JSON.parse(si);
+      } catch {}
+      renderItems();
+      els.rate.value = localStorage.getItem('rate_default') || '7.7';
+      updateIndicators();
+    }
+
+    els.rate.addEventListener('change', () => { localStorage.setItem('rate_default', els.rate.value || ''); });
+
+    initFromStorage();
+
+    async function tryLoadDefaults() {
+      if (location.protocol === 'file:') {
+        if (!state.options.category.length) els.bookStatus.textContent = '자동 로드가 작동하려면 서버에서 열어주세요 (Codes.csv)';
+        if (!state.mainDb.length) els.mainStatus.textContent = '자동 로드가 작동하려면 서버에서 열어주세요 (Maindb.csv)';
+        els.scanInput.focus();
+        return;
+      }
+      try {
+        if (!state.options.category.length) {
+          const r = await fetch('./' + encodeURIComponent('Codes.csv'));
+          if (r.ok) {
+            const t = await r.text();
+            const rows = parseCSV(t);
+            loadOptionsFromBook(rows);
+            els.bookStatus.textContent = 'Codes.csv 자동 로드됨';
+          } else {
+            els.bookStatus.textContent = 'Codes.csv 없음. 파일을 선택하세요';
+          }
+        }
+      } catch { els.bookStatus.textContent = 'Codes.csv 없음. 파일을 선택하세요'; }
+
+      try {
+        if (!state.mainDb.length) {
+          const r2 = await fetch('./' + encodeURIComponent('Maindb.csv'));
+          if (r2.ok) {
+            const t2 = await r2.text();
+            const rows2 = parseCSV(t2);
+            loadMainDb(rows2);
+          } else {
+            els.mainStatus.textContent = 'Maindb.csv 없음. 파일을 선택하세요';
+          }
+        }
+      } catch { els.mainStatus.textContent = 'Maindb.csv 없음. 파일을 선택하세요'; }
+      els.scanInput.focus();
+    }
+
+    tryLoadDefaults();
+
+    function updateIndicators() {
+      const opts = state.options;
+      if (state.loadedBook && opts.category.length && opts.gender.length && opts.type.length && opts.brand.length && opts.color.length) {
+        els.bookStatus.textContent = '옵션 로드됨: 분류 ' + opts.category.length + ' • 성별 ' + opts.gender.length + ' • 타입 ' + opts.type.length + ' • 브랜드 ' + opts.brand.length + ' • 색상 ' + opts.color.length;
+        els.bookStatus.className = 'muted ok';
+      }
+      if (state.loadedMain && state.mainDb.length) {
+        els.mainStatus.textContent = '메인 DB 로드됨: 항목 ' + state.mainDb.length + '개';
+        els.mainStatus.className = 'muted ok';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+/* src/index.css */
+
+:root {
+  --bg-main: #050508;
+  --bg-card: #101018;
+  --bg-card-soft: #181824;
+  --gold: #d4af37;
+  --gold-soft: #f3d47a;
+  --text-main: #f5f5f7;
+  --text-muted: #a0a0b3;
+  --border-soft: #262637;
+  --header-height: 86px;
+  --logo-size: 86px;
+  --tap-size: 44px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', 'Pretendard', 'SF Pro Text', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'Roboto', 'Noto Sans KR', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga' 1, 'tnum' 0;
+  line-height: 1.5;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+}
+
+/* 스크롤바 최소화 */
+::-webkit-scrollbar {
+  width: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #303045;
+  border-radius: 999px;
+}
+
+/* 공통 페이지 카드 레이아웃 */
+.page-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.page-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-soft);
+}
+
+.page-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 카드 */
+.page-card {
+  background: radial-gradient(circle at top, #19192a 0, #101018 55%, #050508 100%);
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  padding: 16px 18px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+}
+
+/* 모바일 반응형: 전역 레이아웃 재배치 및 폭 90% */
+@media (max-width: 640px) {
+  :root {
+    --header-height: 64px;
+    --logo-size: 60px;
+  }
+  main[data-scroll-root='main'] {
+    padding: 8px;
+  }
+  .page-root {
+    width: 100%;
+    margin: 0 auto;
+    gap: 12px;
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .page-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .page-card {
+    width: 100%;
+    margin: 0 auto;
+    padding: 12px;
+  }
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-spacing: 0;
+  }
+
+  /* 헤더: 모바일에서 햄버거 사용, 기존 네비 숨김 */
+  .header-nav {
+    display: none !important;
+  }
+  .hamburger-btn {
+    display: inline-flex !important;
+  }
+  /* 두 컬럼 레이아웃을 모바일에서 세로 스택 */
+  .stack-mobile {
+    flex-direction: column !important;
+  }
+  .stack-mobile > .page-card {
+    width: 100%;
+  }
+}
+
+@media (min-width: 641px) {
+  .hamburger-btn {
+    display: none !important;
+  }
+
+  .btn {
+    width: 30%;
+    justify-content: center;
+  }
+
+  .page-actions .btn {
+    flex: 1 1 30%;
+  }
+
+  .page-card .table,
+  .page-card .form-grid {
+    width: 100%;
+  }
+}
+
+/* 테이블 내 버튼은 가독성을 위해 고정 폭 */
+.table .btn {
+  width: 96px !important;
+  min-width: 96px;
+  justify-content: center;
+}
+
+/* 인벤토리 페이지: 모바일에서도 버튼 가로 배치 유지 */
+.inventory-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.inventory-actions .btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* 폼 요소 가독성: 전폭 사용 */
+.input-wrapper,
+.input-field,
+select,
+textarea,
+input {
+  width: 100% !important;
+}
+
+/* 인터랙티브 요소 커서 포인터 */
+button,
+a[href],
+[role='button'],
+.clickable,
+[onclick] {
+  cursor: pointer;
+}
+
+/* 폼 섹션 그리드: 모바일에서 1열 */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--form-columns, 3), minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+  }
+}
+
+/* 테이블 기본 */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+.table thead tr {
+  background: #181824;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #25253a;
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.table tbody tr:hover {
+  background: rgba(243, 212, 122, 0.08);
+}
+
+.table tbody tr {
+  cursor: pointer;
+}
+
+/* 인풋/버튼 기본 (공통 컴포넌트가 감싸도 base 스타일용) */
+input,
+select,
+button {
+  font-family: inherit;
+}
+
+input[type='text'],
+input[type='number'],
+select {
+  background-color: #141420;
+  color: var(--text-main);
+  border-radius: 999px;
+  border: 1px solid #32324a;
+  padding: 6px 10px;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--gold-soft);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.2);
+}
+
+/* 공통 골드 보더 (중복 제거 용) */
+.gold-border {
+  border: 2px solid var(--gold);
+}
+
+/* 메인 스크롤 컨테이너 보장 */
+main[data-scroll-root='main'] {
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
+}
