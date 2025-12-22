@@ -599,6 +599,10 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       summary: {
         grossAmount: 0,
         netAmount: 0,
+        costAmount: 0,
+        grossProfit: 0,
+        rentAmount: 0,
+        ownerProfit: 0,
         transactionCount: 0,
         aov: 0,
         discountAmount: 0,
@@ -636,6 +640,34 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   const discountAmount = 0;
   const discountRate = 0;
+
+  const codesForCost = [...new Set(rows.map((r) => String(r.code || '').trim()))].filter(Boolean);
+  let kpriceByCode = new Map();
+  if (codesForCost.length) {
+    const inList = buildInList(codesForCost);
+    try {
+      const productsForCost = await sbSelect('products', {
+        select: 'code,kprice',
+        filters: [{ column: 'code', op: 'in', value: inList }],
+      });
+      kpriceByCode = new Map(
+        (productsForCost || []).map((p) => [String(p.code || '').trim(), Number(p.kprice ?? 0) || 0])
+      );
+    } catch (_e) {
+      void _e;
+      kpriceByCode = new Map();
+    }
+  }
+
+  const costAmount = rows.reduce((sum, r) => {
+    const code = String(r.code || '').trim();
+    const kprice = kpriceByCode.get(code) ?? 0;
+    const costUnitPhp = (Number(kprice || 0) || 0) / 25.5;
+    return sum + costUnitPhp * (Number(r.qty || 0) || 0);
+  }, 0);
+  const grossProfit = totalRevenue - costAmount;
+  const rentAmount = grossProfit * 0.1;
+  const ownerProfit = grossProfit * 0.9;
 
   function accumulate(list, keyFn, labelFn) {
     const map = new Map();
@@ -697,6 +729,10 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     summary: {
       grossAmount,
       netAmount,
+      costAmount,
+      grossProfit,
+      rentAmount,
+      ownerProfit,
       transactionCount,
       aov,
       discountAmount,

@@ -65,7 +65,9 @@ export default function ProductListTable({
           showToast('Product deleted.');
         },
         onError: (e) => {
-          showToast(`Deletion failed: ${e.message}`);
+          const msg = String(e?.message || e);
+          if (msg === 'ADMIN_REQUIRED') openLoginModal();
+          showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Deletion failed: ${msg}`);
         },
       });
       setDeleteTarget(null);

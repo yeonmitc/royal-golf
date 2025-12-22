@@ -81,6 +81,7 @@ export default function SalesHistoryPage() {
     const rows = salesData?.rows || [];
     if (!rows.length) return null;
     const columns = [
+      { key: 'soldAt', header: 'Date / Time' },
       { key: 'nameKo', header: 'Name' },
       { key: 'color', header: 'Color' },
       { key: 'sizeDisplay', header: 'Size' },
@@ -95,6 +96,7 @@ export default function SalesHistoryPage() {
       const finalUnit = isDiscounted ? discounted : original;
       const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
       return {
+        soldAt: row.soldAt || '',
         nameKo: row.nameKo,
         color: row.color || '',
         sizeDisplay: row.sizeDisplay,

@@ -4,6 +4,8 @@ import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useProductWithInventory, useUpdateInventoryMutation, useUpsertProductMutation } from '../productHooks';
+import { useToast } from '../../../context/ToastContext';
+import { useAdminStore } from '../../../store/adminStore';
 
 export default function ProductLookup({
   code,
@@ -17,6 +19,8 @@ export default function ProductLookup({
   const { data: prod, refetch } = useProductWithInventory(code);
   const [editLocal, setEditLocal] = useState(Boolean(autoEdit));
   const edit = editMode !== undefined ? Boolean(editMode) : editLocal;
+  const { showToast } = useToast();
+  const openLoginModal = useAdminStore((s) => s.openLoginModal);
   
   // Local state for product details
   const [localName, setLocalName] = useState('');
@@ -57,33 +61,37 @@ export default function ProductLookup({
   async function saveChanges() {
     if (!code) return;
 
-    // 1. Update Inventory
-    if (Object.keys(sizeChanges).length > 0) {
-      await updateInv({ code, changes: sizeChanges });
-    }
-
-    // 2. Update Product Details
-    if (prod) {
-      const currentName = prod.nameKo || '';
-      const currentPrice = prod.salePricePhp ?? 0;
-      
-      const newName = localName.trim();
-      const newPrice = Number(localPrice) || 0;
-
-      if (newName !== currentName || newPrice !== currentPrice) {
-        await upsertProd({
-          code,
-          nameKo: newName,
-          salePricePhp: newPrice,
-        });
+    try {
+      if (Object.keys(sizeChanges).length > 0) {
+        await updateInv({ code, changes: sizeChanges });
       }
-    }
 
-    setEditLocal(false);
-    setSizeChanges({});
-    onSaved?.(code);
-    sessionStorage.setItem('lastLookupCode', code);
-    await refetch();
+      if (prod) {
+        const currentName = prod.nameKo || '';
+        const currentPrice = prod.salePricePhp ?? 0;
+
+        const newName = localName.trim();
+        const newPrice = Number(localPrice) || 0;
+
+        if (newName !== currentName || newPrice !== currentPrice) {
+          await upsertProd({
+            code,
+            nameKo: newName,
+            salePricePhp: newPrice,
+          });
+        }
+      }
+
+      setEditLocal(false);
+      setSizeChanges({});
+      onSaved?.(code);
+      sessionStorage.setItem('lastLookupCode', code);
+      await refetch();
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (msg === 'ADMIN_REQUIRED') openLoginModal();
+      showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Update failed: ${msg}`);
+    }
   }
 
   return (

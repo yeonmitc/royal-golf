@@ -451,6 +451,10 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       summary: {
         grossAmount: 0,
         netAmount: 0,
+        costAmount: 0,
+        grossProfit: 0,
+        rentAmount: 0,
+        ownerProfit: 0,
         transactionCount: 0,
         aov: 0,
         discountAmount: 0,
@@ -480,9 +484,18 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const refundAmount = refunds.reduce((sum, r) => sum + (Number(r.amountPhp || 0) || 0), 0);
   const refundCount = refunds.length;
 
+  const costAmount = 0;
+  const grossProfit = totalRevenue - costAmount;
+  const rentAmount = grossProfit * 0.1;
+  const ownerProfit = grossProfit * 0.9;
+
   const summary = {
     grossAmount: totalRevenue,
     netAmount: totalRevenue - refundAmount,
+    costAmount,
+    grossProfit,
+    rentAmount,
+    ownerProfit,
     transactionCount,
     aov,
     refundCount,

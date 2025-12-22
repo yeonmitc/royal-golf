@@ -1,5 +1,5 @@
 // src/features/products/productApi.js
-import { sbDelete, sbSelect, sbUpsert } from '../../db/supabaseRest';
+import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import db from '../../db/dexieClient';
 import { requireAdminOrThrow } from '../../utils/admin';
 
@@ -259,54 +259,26 @@ export async function upsertProduct(payload) {
   const code = String(payload.code || '').trim();
   if (!code) throw new Error('Product code is required.');
   const row = toDbProductRow(payload);
-  try {
-    await sbUpsert('products', [row], { onConflict: 'code', returning: 'minimal' });
-    return code;
-  } catch (e) {
-    if (!isNetworkFailure(e)) throw e;
-    return db.transaction('rw', db.products, db.logs, async () => {
-      const existing = await db.products.get(code);
-      if (existing) {
-        const nextRow = { ...existing, ...payload, code };
-        await db.products.put(nextRow);
-        await db.logs
-          .add({
-            type: 'PRODUCT_UPDATE',
-            time: new Date().toISOString(),
-            code,
-            data: JSON.stringify({ payload: nextRow }),
-          })
-          .catch(() => null);
-        return code;
-      }
-
-      const parsed = parseCode(code);
-      const nextRow = {
-        code,
-        nameKo: String(payload.nameKo ?? '').trim(),
-        categoryCode: parsed.categoryCode,
-        genderCode: parsed.genderCode,
-        typeCode: parsed.typeCode,
-        brandCode: parsed.brandCode,
-        colorCode: parsed.colorCode,
-        modelNo: parsed.modelNo,
-        priceCny: Number(payload.priceCny ?? 0) || 0,
-        basePricePhp: Number(payload.basePricePhp ?? 0) || 0,
-        salePricePhp: Number(payload.salePricePhp ?? 0) || 0,
-        totalStock: Number(payload.totalStock ?? 0) || 0,
-      };
-      await db.products.add(nextRow);
-      await db.logs
-        .add({
-          type: 'PRODUCT_ADD',
-          time: new Date().toISOString(),
-          code,
-          data: JSON.stringify({ payload: nextRow }),
-        })
-        .catch(() => null);
-      return code;
-    });
+  const values = {
+    name: row.name,
+    sale_price: row.sale_price,
+    free_gift: row.free_gift,
+  };
+  const existing = await sbSelect('products', {
+    select: 'code',
+    filters: [{ column: 'code', op: 'eq', value: code }],
+    limit: 1,
+  });
+  if (Array.isArray(existing) && existing.length > 0) {
+    await sbUpdate(
+      'products',
+      values,
+      { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
+    );
+  } else {
+    await sbInsert('products', [{ code, ...values }], { returning: 'minimal' });
   }
+  return code;
 }
 
 /**
@@ -318,19 +290,8 @@ export async function deleteProduct(code) {
   requireAdminOrThrow();
   if (!code) return;
   const c = String(code).trim();
-  try {
-    await sbDelete('inventories', { filters: [{ column: 'code', op: 'eq', value: c }] });
-    await sbDelete('products', { filters: [{ column: 'code', op: 'eq', value: c }] });
-  } catch (e) {
-    if (!isNetworkFailure(e)) throw e;
-    await db.transaction('rw', db.products, db.inventory, db.logs, async () => {
-      await db.products.delete(c);
-      await db.inventory.where('code').equals(c).delete();
-      await db.logs
-        .add({ type: 'PRODUCT_DELETE', time: new Date().toISOString(), code: c })
-        .catch(() => null);
-    });
-  }
+  await sbDelete('inventories', { filters: [{ column: 'code', op: 'eq', value: c }] });
+  await sbDelete('products', { filters: [{ column: 'code', op: 'eq', value: c }] });
 }
 
 /**
@@ -360,57 +321,43 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
   if (!code) throw new Error('Code is required.');
   const c = String(code).trim();
 
-  try {
-    const changes = {};
-    for (const [sizeRaw, qty] of Object.entries(sizeQtyMap || {})) {
-      const sizeKey = normalizeSizeKey(sizeRaw);
-      const col = SIZE_TO_COLUMN[sizeKey];
-      if (!col) continue;
-      changes[col] = Number(qty) || 0;
-    }
-
-    await sbUpsert('inventories', [{ code: c, ...changes }], { onConflict: 'code', returning: 'minimal' });
-
-    const invRows = await sbSelect('inventories', {
-      select: '*',
-      filters: [{ column: 'code', op: 'eq', value: c }],
-      limit: 1,
-    });
-    const row = invRows?.[0];
-    return { code: c, totalStock: sumInventoriesRow(row) };
-  } catch (e) {
-    if (!isNetworkFailure(e)) throw e;
-    return db.transaction('rw', db.products, db.inventory, db.logs, async () => {
-      const entries = Object.entries(sizeQtyMap || {});
-      for (const [sizeRaw, qty] of entries) {
-        const size = normalizeSizeKey(sizeRaw);
-        const invRow = await db.inventory.where('[code+size]').equals([c, size || '']).first();
-        if (invRow) {
-          await db.inventory.update(invRow.id, { stockQty: Number(qty) || 0 });
-        } else {
-          await db.inventory.add({
-            code: c,
-            size,
-            stockQty: Number(qty) || 0,
-            sizeDisplay: size,
-          });
-        }
-      }
-      const inv = await db.inventory.where('code').equals(c).toArray();
-      const total = (inv || []).reduce((s, r) => s + (Number(r.stockQty) || 0), 0);
-      const product = await db.products.get(c);
-      if (product) await db.products.update(c, { totalStock: total });
-      await db.logs
-        .add({
-          type: 'INVENTORY_UPDATE',
-          time: new Date().toISOString(),
-          code: c,
-          data: JSON.stringify({ changes: entries }),
-        })
-        .catch(() => null);
-      return { code: c, totalStock: total };
-    });
+  const changes = {};
+  for (const [sizeRaw, qty] of Object.entries(sizeQtyMap || {})) {
+    const sizeKey = normalizeSizeKey(sizeRaw);
+    const col = SIZE_TO_COLUMN[sizeKey];
+    if (!col) continue;
+    changes[col] = Number(qty) || 0;
   }
+
+  const existing = await sbSelect('inventories', {
+    select: 'code',
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    limit: 1,
+  });
+
+  if (Array.isArray(existing) && existing.length > 0) {
+    await sbUpdate(
+      'inventories',
+      changes,
+      { filters: [{ column: 'code', op: 'eq', value: c }], returning: 'minimal' }
+    );
+  } else {
+    const insertRow = { code: c };
+    for (const sizeKey of SIZE_ORDER) {
+      const col = SIZE_TO_COLUMN[sizeKey];
+      insertRow[col] = 0;
+    }
+    Object.assign(insertRow, changes);
+    await sbInsert('inventories', [insertRow], { returning: 'minimal' });
+  }
+
+  const invRows = await sbSelect('inventories', {
+    select: '*',
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    limit: 1,
+  });
+  const row = invRows?.[0];
+  return { code: c, totalStock: sumInventoriesRow(row) };
 }
 
 export async function getNextSerialForPrefix(prefix) {

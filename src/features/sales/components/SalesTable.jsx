@@ -5,6 +5,19 @@ import { useToast } from '../../../context/ToastContext';
 export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const { showToast } = useToast();
 
+  function formatSoldAt(iso) {
+    const s = String(iso || '').trim();
+    if (!s) return '';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  }
+
   if (isLoading) {
     return <div className="p-4 text-sm text-gray-500">Loading sales history…</div>;
   }
@@ -25,6 +38,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     <div className="p-2 overflow-x-auto">
       <DataTable
         columns={[
+          { key: 'soldAt', header: 'Date / Time' },
           { key: 'nameKo', header: 'Name' },
           { key: 'color', header: 'Color' },
           {
@@ -49,16 +63,26 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           const finalUnit = isDiscounted ? discounted : original;
           const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
           const priceForCopy = finalUnit.toLocaleString('en-US');
+          const soldAtText = formatSoldAt(row.soldAt);
 
           return {
             id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
+            soldAt: soldAtText,
             nameKo: row.nameKo,
             color: row.color || '',
             sizeDisplay: row.sizeDisplay,
             qty: row.qty,
             unitPricePhp: finalUnit.toLocaleString('en-US'),
             gift: giftChecked ? 'gift' : '',
-            __copyText: [row.nameKo, row.color || '', row.sizeDisplay, row.qty, priceForCopy, giftChecked ? 'gift' : '']
+            __copyText: [
+              soldAtText,
+              row.nameKo,
+              row.color || '',
+              row.sizeDisplay,
+              row.qty,
+              priceForCopy,
+              giftChecked ? 'gift' : '',
+            ]
               .filter(Boolean)
               .join('\t'),
           };

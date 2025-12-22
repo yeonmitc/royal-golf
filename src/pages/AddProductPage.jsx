@@ -13,13 +13,16 @@ import {
 import { getNextSerialForPrefix, isProductCodeExists } from '../features/products/productApi';
 import { generateProductCode } from '../utils/codeGenerator';
 import { useToast } from '../context/ToastContext';
+import { useAdminStore } from '../store/adminStore';
 
 export default function AddProductPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const isAdmin = useAdminStore((s) => s.isAuthorized());
+  const openLoginModal = useAdminStore((s) => s.openLoginModal);
 
   const [category, setCategory] = useState('');
-  const [gender, setGender] = useState('');
+  const [kind, setKind] = useState('');
   const [type, setType] = useState('');
   const [brand, setBrand] = useState('');
   const [color, setColor] = useState('');
@@ -38,7 +41,7 @@ export default function AddProductPage() {
   const { mutateAsync: updateInv } = useUpdateInventoryMutation();
 
   const categoryOptions = codePartsSeed.category || [];
-  const genderOptions = codePartsSeed.gender || [];
+  const kindOptions = codePartsSeed.kind || [];
   const typeOptions = codePartsSeed.type || [];
   const brandOptions = codePartsSeed.brand || [];
   const colorOptions = codePartsSeed.color || [];
@@ -61,7 +64,7 @@ export default function AddProductPage() {
 
   async function recomputeCode(next = {}) {
     const c = next.category ?? category;
-    const g = next.gender ?? gender;
+    const g = next.kind ?? kind;
     const t = next.type ?? type;
     const b = next.brand ?? brand;
     const k = next.color ?? color;
@@ -96,7 +99,7 @@ export default function AddProductPage() {
     const exists = preview ? await isProductCodeExists(preview) : false;
     setDuplicate(exists);
 
-    const name = `${getLabel('category', c)}-${getLabel('gender', g)}-${getLabel(
+    const name = `${getLabel('category', c)}-${getLabel('kind', g)}-${getLabel(
       'brand',
       b
     )}-${getLabel('color', k)}-${nextSerial}`;
@@ -105,6 +108,11 @@ export default function AddProductPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!isAdmin) {
+      openLoginModal();
+      showToast('Admin required.');
+      return;
+    }
     if (!codePreview) {
       showToast('Code not generated. Please select all options.');
       return;
@@ -125,14 +133,20 @@ export default function AddProductPage() {
       salePricePhp: Number(salePricePhp || 0) || 0,
     };
 
-    const savedCode = await saveProduct(payload);
+    try {
+      const savedCode = await saveProduct(payload);
 
-    const changes = Object.fromEntries(
-      Object.entries(sizeInputs).map(([k, v]) => [k, Number(v || 0) || 0])
-    );
-    await updateInv({ code: savedCode, changes });
-    showToast(`Product added: ${savedCode}`);
-    navigate('/inventory');
+      const changes = Object.fromEntries(
+        Object.entries(sizeInputs).map(([k, v]) => [k, Number(v || 0) || 0])
+      );
+      await updateInv({ code: savedCode, changes });
+      showToast(`Product added: ${savedCode}`);
+      navigate('/inventory');
+    } catch (err) {
+      const msg = String(err?.message || err);
+      if (msg === 'ADMIN_REQUIRED') openLoginModal();
+      showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Add failed: ${msg}`);
+    }
   }
 
   function handleRecalcClick() {
@@ -191,14 +205,14 @@ export default function AddProductPage() {
                 <div style={{ marginBottom: 8 }}>
                   <Select
                     label="Kind"
-                    value={gender}
+                    value={kind}
                     onChange={(e) => {
-                      setGender(e.target.value);
-                      recomputeCode({ gender: e.target.value });
+                      setKind(e.target.value);
+                      recomputeCode({ kind: e.target.value });
                     }}
                   >
                     <option value="">Select</option>
-                    {genderOptions.map((item) => (
+                    {kindOptions.map((item) => (
                       <option key={item.code} value={item.code}>
                         {item.label}
                       </option>
