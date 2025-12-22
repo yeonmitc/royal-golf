@@ -99,6 +99,30 @@ export default function AnalyzePage() {
               </div>
             </div>
             <div className="page-card">
+              <div>Cost</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.costAmount || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Gross Profit</div>
+              <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
+                {Math.round(data.summary.grossProfit || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Rent (10%)</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.rentAmount || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>My Profit (90%)</div>
+              <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
+                {Math.round(data.summary.ownerProfit || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
               <div>Transactions</div>
               <div style={{ fontWeight: 700 }}>{data.summary.transactionCount}</div>
             </div>
