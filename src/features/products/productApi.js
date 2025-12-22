@@ -122,35 +122,41 @@ function toDbProductRow(payload) {
   return out;
 }
 
-async function getNextProductNo() {
-  const rows = await sbSelect('products', {
+async function getNextNo(table) {
+  const topRows = await sbSelect(table, {
     select: 'no',
-    order: { column: 'no', ascending: false },
+    filters: [{ column: 'no', op: 'not.is', value: 'null' }],
+    order: { column: 'no', ascending: false, nulls: 'last' },
     limit: 1,
   });
-  const maxNo = Number(rows?.[0]?.no ?? 0) || 0;
-  return maxNo + 1;
+  const topNo = Number(topRows?.[0]?.no ?? 0) || 0;
+  if (topNo > 0) return topNo + 1;
+
+  const anyRows = await sbSelect(table, { select: 'no', limit: 1 });
+  if (!Array.isArray(anyRows) || anyRows.length === 0) return 1;
+
+  let offset = 0;
+  let maxNo = 0;
+  while (true) {
+    const rows = await sbSelect(table, { select: 'no', limit: 1000, offset });
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    for (const r of rows) {
+      const n = Number(r?.no ?? 0) || 0;
+      if (n > maxNo) maxNo = n;
+    }
+    if (rows.length < 1000) break;
+    offset += 1000;
+    if (offset > 50000) break;
+  }
+  return (maxNo || 0) + 1;
+}
+
+async function getNextProductNo() {
+  return getNextNo('products');
 }
 
 async function getNextInventoryNo() {
-  const rows = await sbSelect('inventories', {
-    select: 'no',
-    order: { column: 'no', ascending: false },
-    limit: 1,
-  });
-  const maxNo = Number(rows?.[0]?.no ?? 0) || 0;
-  return maxNo + 1;
-}
-
-async function getProductNoByCode(code) {
-  const c = String(code || '').trim();
-  if (!c) return 0;
-  const rows = await sbSelect('products', {
-    select: 'no',
-    filters: [{ column: 'code', op: 'eq', value: c }],
-    limit: 1,
-  });
-  return Number(rows?.[0]?.no ?? 0) || 0;
+  return getNextNo('inventories');
 }
 
 /**
