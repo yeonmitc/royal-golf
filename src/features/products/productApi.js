@@ -406,8 +406,7 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
     const values = { ...changes, total_qty: totalQty };
     const existingNo = Number(existingRow?.no ?? 0) || 0;
     if (!existingNo) {
-      const productNo = await getProductNoByCode(c);
-      values.no = productNo || (await getNextInventoryNo());
+      values.no = await getNextInventoryNo();
     }
     await sbUpdate(
       'inventories',
@@ -422,8 +421,7 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
     }
     Object.assign(insertRow, changes);
     insertRow.total_qty = sumInventoriesRow(insertRow);
-    const productNo = await getProductNoByCode(c);
-    insertRow.no = productNo || (await getNextInventoryNo());
+    insertRow.no = await getNextInventoryNo();
     await sbInsert('inventories', [insertRow], { returning: 'minimal' });
   }
 
