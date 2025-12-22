@@ -30,8 +30,6 @@ export default function AddProductPage() {
 
   const [nameKo, setNameKo] = useState('');
   const [priceCny, setPriceCny] = useState('');
-  const [salePricePhp, setSalePricePhp] = useState('');
-  const [krwPrice, setKrwPrice] = useState('');
 
   const [codePreview, setCodePreview] = useState('');
   const [duplicate, setDuplicate] = useState(false);
@@ -61,6 +59,22 @@ export default function AddProductPage() {
     const found = arr.find((i) => i.code === code);
     return (found?.label || code || '').trim();
   }
+
+  function ceilToUnit(value, unit) {
+    const v = Number(value);
+    const u = Number(unit);
+    if (!Number.isFinite(v) || !Number.isFinite(u) || u <= 0) return 0;
+    return Math.ceil(v / u) * u;
+  }
+
+  const cnyValue = String(priceCny ?? '').trim();
+  const cnyNumber = Number(cnyValue);
+  const computedKrwPrice =
+    cnyValue === '' ? '' : String(Math.round((Number.isFinite(cnyNumber) ? cnyNumber : 0) * 220));
+  const computedSalePricePhp =
+    computedKrwPrice === ''
+      ? ''
+      : String(ceilToUnit((Number(computedKrwPrice) * 3) / 25.5, 100));
 
   async function recomputeCode(next = {}) {
     const c = next.category ?? category;
@@ -130,7 +144,7 @@ export default function AddProductPage() {
       code: codePreview,
       nameKo: nameKo.trim(),
       priceCny: Number(priceCny || 0) || 0,
-      salePricePhp: Number(salePricePhp || 0) || 0,
+      salePricePhp: Number(computedSalePricePhp || 0) || 0,
     };
 
     try {
@@ -315,16 +329,16 @@ export default function AddProductPage() {
                   <Input
                     label="KRW Price"
                     type="number"
-                    value={krwPrice}
-                    onChange={(e) => setKrwPrice(e.target.value)}
+                    value={computedKrwPrice}
+                    readOnly
                   />
                 </div>
                 <div style={{ flex: 1 }}>
                   <Input
                     label="Sale Price (PHP)"
                     type="number"
-                    value={salePricePhp}
-                    onChange={(e) => setSalePricePhp(e.target.value)}
+                    value={computedSalePricePhp}
+                    readOnly
                   />
                 </div>
               </FormSection>
@@ -343,10 +357,7 @@ export default function AddProductPage() {
                     type="number"
                     value={priceCny}
                     onChange={(e) => {
-                      const raw = e.target.value;
-                      setPriceCny(raw);
-                      const v = Number(raw || 0) || 0;
-                      setKrwPrice(String(Math.round(v * 220)));
+                      setPriceCny(e.target.value);
                     }}
                   />
                 </div>

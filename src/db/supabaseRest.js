@@ -75,9 +75,7 @@ async function request(path, { method = 'GET', query, body, headers } = {}) {
     apikey: SUPABASE_ANON_KEY,
     ...(headers || {}),
   };
-  if (SUPABASE_ANON_KEY.startsWith('eyJ')) {
-    baseHeaders.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
-  }
+  baseHeaders.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
   if (body) {
     baseHeaders['Content-Type'] = 'application/json';
   }
