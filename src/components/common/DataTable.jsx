@@ -22,20 +22,23 @@ export default function DataTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
-            <tr
-              key={row.id || idx}
-              className={`border-b hover:bg-gray-50 cursor-pointer ${row.className || ''}`}
-              style={row.style}
-              onClick={() => onRowClick && onRowClick(row)}
-            >
-              {columns.map((col) => (
-                <td key={col.key} className={col.tdClassName || ''}>
-                  {row[col.key]}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row, idx) => {
+            const clickable = row?.clickable !== false && !!onRowClick;
+            return (
+              <tr
+                key={row.id || idx}
+                className={`border-b ${clickable ? 'hover:bg-gray-50 cursor-pointer' : ''} ${row.className || ''}`}
+                style={row.style}
+                onClick={clickable ? () => onRowClick(row) : undefined}
+              >
+                {columns.map((col) => (
+                  <td key={col.key} className={col.tdClassName || ''}>
+                    {row[col.key]}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

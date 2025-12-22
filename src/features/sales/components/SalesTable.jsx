@@ -34,6 +34,57 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     return <div className="p-4 text-sm text-gray-500">No results found.</div>;
   }
 
+  let totalQty = 0;
+  let totalPrice = 0;
+  const tableRows = rows.map((row) => {
+    const original = Number(row.unitPricePhp || 0);
+    const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
+    const isDiscounted = discounted !== null && discounted !== original;
+    const finalUnit = isDiscounted ? discounted : original;
+    const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
+    const priceForCopy = finalUnit.toLocaleString('en-US');
+    const soldAtText = formatSoldAt(row.soldAt);
+    const qty = Number(row.qty || 0) || 0;
+
+    totalQty += qty;
+    totalPrice += finalUnit * qty;
+
+    return {
+      id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
+      soldAt: soldAtText,
+      nameKo: row.nameKo,
+      color: row.color || '',
+      sizeDisplay: row.sizeDisplay,
+      qty: qty,
+      unitPricePhp: finalUnit.toLocaleString('en-US'),
+      gift: giftChecked ? 'gift' : '',
+      __copyText: [
+        soldAtText,
+        row.nameKo,
+        row.color || '',
+        row.sizeDisplay,
+        qty,
+        priceForCopy,
+        giftChecked ? 'gift' : '',
+      ]
+        .filter(Boolean)
+        .join('\t'),
+    };
+  });
+
+  tableRows.push({
+    id: '__sales_total__',
+    clickable: false,
+    soldAt: '',
+    nameKo: 'TOTAL',
+    color: '',
+    sizeDisplay: '',
+    qty: totalQty.toLocaleString('en-US'),
+    unitPricePhp: totalPrice.toLocaleString('en-US'),
+    gift: '',
+    style: { color: 'var(--gold-soft)', fontWeight: 700 },
+  });
+
   return (
     <div className="p-2 overflow-x-auto">
       <DataTable
@@ -56,37 +107,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           },
           { key: 'gift', header: 'Gift', className: 'text-center', tdClassName: 'text-center' },
         ]}
-        rows={rows.map((row) => {
-          const original = Number(row.unitPricePhp || 0);
-          const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
-          const isDiscounted = discounted !== null && discounted !== original;
-          const finalUnit = isDiscounted ? discounted : original;
-          const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
-          const priceForCopy = finalUnit.toLocaleString('en-US');
-          const soldAtText = formatSoldAt(row.soldAt);
-
-          return {
-            id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
-            soldAt: soldAtText,
-            nameKo: row.nameKo,
-            color: row.color || '',
-            sizeDisplay: row.sizeDisplay,
-            qty: row.qty,
-            unitPricePhp: finalUnit.toLocaleString('en-US'),
-            gift: giftChecked ? 'gift' : '',
-            __copyText: [
-              soldAtText,
-              row.nameKo,
-              row.color || '',
-              row.sizeDisplay,
-              row.qty,
-              priceForCopy,
-              giftChecked ? 'gift' : '',
-            ]
-              .filter(Boolean)
-              .join('\t'),
-          };
-        })}
+        rows={tableRows}
         emptyMessage="No results found."
         onRowClick={async (r) => {
           const text = String(r.__copyText || '');
