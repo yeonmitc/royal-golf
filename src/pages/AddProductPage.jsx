@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -10,7 +10,7 @@ import {
   useUpdateInventoryMutation,
   useUpsertProductMutation,
 } from '../features/products/productHooks';
-import { getNextSerialForPrefix, isProductCodeExists } from '../features/products/productApi';
+import { getNextProductNo, getNextSerialForPrefix, isProductCodeExists } from '../features/products/productApi';
 import { generateProductCode } from '../utils/codeGenerator';
 import { useToast } from '../context/ToastContext';
 import { useAdminStore } from '../store/adminStore';
@@ -27,6 +27,7 @@ export default function AddProductPage() {
   const [brand, setBrand] = useState('');
   const [color, setColor] = useState('');
   const [serial, setSerial] = useState('01');
+  const [productNo, setProductNo] = useState('');
 
   const [nameKo, setNameKo] = useState('');
   const [priceCny, setPriceCny] = useState('');
@@ -55,6 +56,19 @@ export default function AddProductPage() {
     '3XL': '',
     Free: '',
   });
+
+  async function refreshProductNo() {
+    try {
+      const next = await getNextProductNo();
+      setProductNo(String(Number(next) || ''));
+    } catch {
+      setProductNo('');
+    }
+  }
+
+  useEffect(() => {
+    refreshProductNo();
+  }, []);
 
   function getLabel(group, code) {
     const arr = codePartsSeed[group] || [];
@@ -167,6 +181,8 @@ export default function AddProductPage() {
       p2price: Number(computedP2PricePhp || 0) || 0,
       p3price: Number(p3PriceForDb || 0) || 0,
     };
+    const noValue = Number(productNo) || 0;
+    if (noValue > 0) payload.no = noValue;
 
     try {
       const savedCode = await saveProduct(payload);
@@ -183,6 +199,7 @@ export default function AddProductPage() {
 
   function handleRecalcClick() {
     // 현재 state 기준으로 다시 계산
+    refreshProductNo();
     recomputeCode({});
   }
 
@@ -311,7 +328,11 @@ export default function AddProductPage() {
 
               <FormSection columns={2}>
                 <Input label="Serial" value={serial} readOnly />
-                <div className={`code-box ${duplicate ? 'code-box-error' : 'code-box-ok'}`}>
+                <Input label="Product No" value={productNo} readOnly />
+                <div
+                  className={`code-box ${duplicate ? 'code-box-error' : 'code-box-ok'}`}
+                  style={{ gridColumn: '1 / -1' }}
+                >
                   Code: {codePreview || '-'}
                 </div>
               </FormSection>

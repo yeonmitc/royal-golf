@@ -151,7 +151,7 @@ async function getNextNo(table) {
   return (maxNo || 0) + 1;
 }
 
-async function getNextProductNo() {
+export async function getNextProductNo() {
   return getNextNo('products');
 }
 
@@ -359,8 +359,22 @@ export async function deleteProduct(code) {
   requireAdminOrThrow();
   if (!code) return;
   const c = String(code).trim();
-  await sbDelete('inventories', { filters: [{ column: 'code', op: 'eq', value: c }] });
-  await sbDelete('products', { filters: [{ column: 'code', op: 'eq', value: c }] });
+  await sbDelete('inventories', {
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    returning: 'representation',
+  });
+  await sbDelete('products', {
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    returning: 'representation',
+  });
+  const stillThere = await sbSelect('products', {
+    select: 'code',
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    limit: 1,
+  });
+  if (Array.isArray(stillThere) && stillThere.length > 0) {
+    throw new Error('DELETE_NOT_APPLIED');
+  }
 }
 
 /**
