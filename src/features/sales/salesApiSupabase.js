@@ -28,14 +28,14 @@ function toMsFromIso(iso) {
       const hh = timeHit[1];
       const mm = timeHit[2];
       const ss = timeHit[3] || '00';
-      t = Date.parse(`${date}T${hh}:${mm}:${ss}Z`);
-      if (Number.isFinite(t)) return t;
       t = new Date(`${date}T${hh}:${mm}:${ss}`).getTime();
       if (Number.isFinite(t)) return t;
+      t = Date.parse(`${date}T${hh}:${mm}:${ss}Z`);
+      if (Number.isFinite(t)) return t;
     }
-    t = Date.parse(`${date}T00:00:00Z`);
-    if (Number.isFinite(t)) return t;
     t = new Date(`${date}T00:00:00`).getTime();
+    if (Number.isFinite(t)) return t;
+    t = Date.parse(`${date}T00:00:00Z`);
     if (Number.isFinite(t)) return t;
   }
 
@@ -46,13 +46,25 @@ function toMsFromIso(iso) {
 function startOfDayMs(dateStr) {
   const [y, m, d] = String(dateStr || '').split('-').map(Number);
   if (!y || !m || !d) return -Infinity;
-  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+  return Date.UTC(y, m - 1, d, 0, 0, 0, 0);
 }
 
 function endOfDayMs(dateStr) {
   const [y, m, d] = String(dateStr || '').split('-').map(Number);
   if (!y || !m || !d) return Infinity;
-  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  return Date.UTC(y, m - 1, d, 23, 59, 59, 999);
+}
+
+function nextDayStartMs(dateStr) {
+  const [y, m, d] = String(dateStr || '').split('-').map(Number);
+  if (!y || !m || !d) return Infinity;
+  return Date.UTC(y, m - 1, d + 1, 0, 0, 0, 0);
+}
+
+function toIsoNoMs(ms) {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 function includesIgnoreCase(hay, needle) {
@@ -453,10 +465,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
 
   const dateFilters = [];
   if (hasFrom && Number.isFinite(fromMs)) {
-    dateFilters.push({ column: 'sold_at', op: 'gte', value: new Date(fromMs).toISOString() });
+    dateFilters.push({ column: 'sold_at', op: 'gte', value: toIsoNoMs(fromMs) });
   }
-  if (hasTo && Number.isFinite(toMs)) {
-    dateFilters.push({ column: 'sold_at', op: 'lte', value: new Date(toMs).toISOString() });
+  if (hasTo) {
+    const toExclusiveMs = nextDayStartMs(toDate);
+    if (Number.isFinite(toExclusiveMs)) {
+      dateFilters.push({ column: 'sold_at', op: 'lt', value: toIsoNoMs(toExclusiveMs) });
+    }
   }
 
   let sales;
@@ -662,7 +677,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const costAmount = rows.reduce((sum, r) => {
     const code = String(r.code || '').trim();
     const kprice = kpriceByCode.get(code) ?? 0;
-    const costUnitPhp = (Number(kprice || 0) || 0) / 25.5;
+    const costUnitPhp = (Number(kprice || 0) || 0) / 25;
     return sum + costUnitPhp * (Number(r.qty || 0) || 0);
   }, 0);
   const grossProfit = totalRevenue - costAmount;

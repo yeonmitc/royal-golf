@@ -5,17 +5,18 @@ import { useToast } from '../../../context/ToastContext';
 export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const { showToast } = useToast();
 
-  function formatSoldAt(iso) {
+  function formatSoldAtParts(iso) {
     const s = String(iso || '').trim();
-    if (!s) return '';
+    if (!s) return { date: '', time: '' };
     const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return s;
-    const yyyy = d.getFullYear();
+    if (Number.isNaN(d.getTime())) return { date: s, time: '' };
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     const hh = String(d.getHours()).padStart(2, '0');
     const mi = String(d.getMinutes()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dow = days[d.getDay()] || '';
+    return { date: `${mm}-${dd} ${dow}`, time: `${hh}:${mi}` };
   }
 
   if (isLoading) {
@@ -43,7 +44,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     const finalUnit = isDiscounted ? discounted : original;
     const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
     const priceForCopy = finalUnit.toLocaleString('en-US');
-    const soldAtText = formatSoldAt(row.soldAt);
+    const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
 
     totalQty += qty;
@@ -51,7 +52,9 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
 
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
-      soldAt: soldAtText,
+      soldAtDate,
+      soldAtTime,
+      code: row.code,
       nameKo: row.nameKo,
       color: row.color || '',
       sizeDisplay: row.sizeDisplay,
@@ -59,7 +62,9 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       unitPricePhp: finalUnit.toLocaleString('en-US'),
       gift: giftChecked ? 'gift' : '',
       __copyText: [
-        soldAtText,
+        soldAtDate,
+        soldAtTime,
+        row.code,
         row.nameKo,
         row.color || '',
         row.sizeDisplay,
@@ -75,8 +80,10 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   tableRows.push({
     id: '__sales_total__',
     clickable: false,
-    soldAt: '',
-    nameKo: 'TOTAL',
+    soldAtDate: 'TOTAL',
+    soldAtTime: '',
+    code: '',
+    nameKo: '',
     color: '',
     sizeDisplay: '',
     qty: totalQty.toLocaleString('en-US'),
@@ -89,7 +96,9 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     <div className="p-2 overflow-x-auto">
       <DataTable
         columns={[
-          { key: 'soldAt', header: 'Date / Time' },
+          { key: 'soldAtDate', header: 'Date' },
+          { key: 'soldAtTime', header: 'Time', className: 'text-center', tdClassName: 'text-center' },
+          { key: 'code', header: 'Code' },
           { key: 'nameKo', header: 'Name' },
           { key: 'color', header: 'Color' },
           {
