@@ -228,7 +228,10 @@ export async function checkoutCart(cartItems) {
 
     const unitPriceOriginal =
       Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
-    const unitPriceCharged = Number(item.unitPricePhp ?? unitPriceOriginal) || unitPriceOriginal;
+    const unitPriceChargedCandidate = Number(item.unitPricePhp ?? unitPriceOriginal);
+    const unitPriceCharged = Number.isFinite(unitPriceChargedCandidate)
+      ? unitPriceChargedCandidate
+      : unitPriceOriginal;
     const lineTotal = unitPriceCharged * qty;
     const isFreeGift = unitPriceCharged === 0 || Boolean(product.freeGift);
 
@@ -246,10 +249,12 @@ export async function checkoutCart(cartItems) {
     const colorFromItem = String(item.color || '').trim();
     const colorFromCode = findLabel('color', String(code || '').split('-')[3] || '');
     const colorLabel = colorFromItem || colorFromCode;
+    const sizeRaw = String(item.sizeDisplay ?? item.size ?? '').trim() || sizeKey;
 
     salesToInsert.push({
       sold_at: soldAt,
       code: String(code).trim(),
+      size_raw: sizeRaw,
       size_std: sizeKey,
       color: colorLabel,
       qty: Number(qty || 0) || 0,

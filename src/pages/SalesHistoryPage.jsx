@@ -121,32 +121,38 @@ export default function SalesHistoryPage() {
       <h2 style={{ marginBottom: 12 }}>Sales History</h2>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label>From</label>
-          <input
-            type="date"
-            value={fromInput}
-            onChange={(e) => {
-              const v = e.target.value;
-              setFromInput(v);
-              setFilters((prev) => ({ ...prev, fromDate: v || '' }));
-              setCurrentPage(1);
-            }}
-          />
+        <div className="date-control">
+          <span className="date-control-label">From</span>
+          <div className="date-control-box">
+            <input
+              type="date"
+              className="input-field date-control-input"
+              value={fromInput}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFromInput(v);
+                setFilters((prev) => ({ ...prev, fromDate: v || '' }));
+                setCurrentPage(1);
+              }}
+            />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label>To</label>
-          <input
-            type="date"
-            value={toInput}
-            onChange={(e) => {
-              const v = e.target.value;
-              setToInput(v);
-              setFilters((prev) => ({ ...prev, toDate: v || '' }));
-              setCurrentPage(1);
-            }}
-          />
+        <div className="date-control">
+          <span className="date-control-label">To</span>
+          <div className="date-control-box">
+            <input
+              type="date"
+              className="input-field date-control-input"
+              value={toInput}
+              onChange={(e) => {
+                const v = e.target.value;
+                setToInput(v);
+                setFilters((prev) => ({ ...prev, toDate: v || '' }));
+                setCurrentPage(1);
+              }}
+            />
+          </div>
         </div>
 
         <Button type="button" onClick={setAllRange} size="sm" variant="outline" title="All" icon="reset" />

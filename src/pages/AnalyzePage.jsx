@@ -58,10 +58,28 @@ export default function AnalyzePage() {
           <div className="page-subtitle">Sales summary and analysis by category/brand/size/color</div>
         </div>
         <div className="page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label>From</label>
-          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-          <label>To</label>
-          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <div className="date-control">
+            <span className="date-control-label">From</span>
+            <div className="date-control-box">
+              <input
+                type="date"
+                className="input-field date-control-input"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="date-control">
+            <span className="date-control-label">To</span>
+            <div className="date-control-box">
+              <input
+                type="date"
+                className="input-field date-control-input"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+          </div>
           <Button variant="outline" size="sm" className="icon" title="Today" onClick={setToday} icon="today" />
           <Button variant="outline" size="sm" onClick={setWeek}>
             7D

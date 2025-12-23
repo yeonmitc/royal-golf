@@ -73,6 +73,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       qty: qty,
       brand,
       unitPricePhp: finalUnit.toLocaleString('en-US'),
+      style: giftChecked ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' } : undefined,
       __copyText: [
         soldAtDate,
         soldAtTime,
@@ -103,7 +104,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   });
 
   return (
-    <div className="p-2 overflow-x-auto">
+    <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
       <DataTable
         columns={[
           { key: 'soldAtDate', header: 'date' },

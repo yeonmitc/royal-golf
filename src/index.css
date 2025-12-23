@@ -210,6 +210,42 @@ input {
   color: var(--gold-soft);
 }
 
+.date-control {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.date-control-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.date-control-box {
+  width: 160px;
+}
+
+.date-control-input {
+  padding-right: 40px;
+}
+
+.date-control-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.7;
+}
+
+.date-control-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.date-control-input::-webkit-inner-spin-button,
+.date-control-input::-webkit-clear-button {
+  display: none;
+}
+
 /* 인터랙티브 요소 커서 포인터 */
 button,
 a[href],
@@ -217,6 +253,18 @@ a[href],
 .clickable,
 [onclick] {
   cursor: pointer;
+}
+
+.heart-toggle-btn {
+  transition: transform 120ms ease;
+}
+
+.heart-toggle-btn:hover {
+  transform: scale(1.2);
+}
+
+.heart-toggle-btn:active {
+  transform: scale(0.95);
 }
 
 /* 폼 섹션 그리드: 모바일에서 1열 */

@@ -104,8 +104,12 @@ export async function checkoutCart(cartItems) {
       const product = await db.products.get(code);
       if (!product) throw new Error(`상품 마스터 없음: ${code}`);
 
-      const unitPriceOriginal = Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePricePhp ?? 0) || 0;
-      const unitPriceCharged = Number(item.unitPricePhp ?? unitPriceOriginal) || unitPriceOriginal;
+      const unitPriceOriginal =
+        Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePricePhp ?? 0) || 0;
+      const unitPriceChargedCandidate = Number(item.unitPricePhp ?? unitPriceOriginal);
+      const unitPriceCharged = Number.isFinite(unitPriceChargedCandidate)
+        ? unitPriceChargedCandidate
+        : unitPriceOriginal;
       const lineTotal = unitPriceCharged * qty;
       const freeGift = unitPriceCharged === 0;
 
