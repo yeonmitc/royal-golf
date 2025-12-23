@@ -1,9 +1,20 @@
 // src/features/sales/components/SalesTable.jsx
 import DataTable from '../../../components/common/DataTable';
 import { useToast } from '../../../context/ToastContext';
+import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 
 export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const { showToast } = useToast();
+
+  function brandFromCode(code) {
+    const parts = String(code || '').split('-');
+    const brandCode = String(parts[2] || '').trim();
+    if (!brandCode) return '';
+    const arr = codePartsSeed.brand || [];
+    const hit = arr.find((i) => i.code === brandCode);
+    const label = String(hit?.label || brandCode).trim();
+    return label === 'NoBrand' ? 'nobrand' : label;
+  }
 
   function formatSoldAtParts(iso) {
     const s = String(iso || '').trim();
@@ -50,27 +61,27 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     totalQty += qty;
     totalPrice += finalUnit * qty;
 
+    const brand = brandFromCode(row.code);
+
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
       soldAtDate,
       soldAtTime,
       code: row.code,
-      nameKo: row.nameKo,
       color: row.color || '',
       sizeDisplay: row.sizeDisplay,
       qty: qty,
+      brand,
       unitPricePhp: finalUnit.toLocaleString('en-US'),
-      gift: giftChecked ? 'gift' : '',
       __copyText: [
         soldAtDate,
         soldAtTime,
         row.code,
-        row.nameKo,
-        row.color || '',
         row.sizeDisplay,
+        row.color || '',
         qty,
+        brand,
         priceForCopy,
-        giftChecked ? 'gift' : '',
       ]
         .filter(Boolean)
         .join('\t'),
@@ -83,12 +94,11 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     soldAtDate: 'TOTAL',
     soldAtTime: '',
     code: '',
-    nameKo: '',
     color: '',
     sizeDisplay: '',
+    brand: '',
     qty: totalQty.toLocaleString('en-US'),
     unitPricePhp: totalPrice.toLocaleString('en-US'),
-    gift: '',
     style: { color: 'var(--gold-soft)', fontWeight: 700 },
   });
 
@@ -96,25 +106,24 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     <div className="p-2 overflow-x-auto">
       <DataTable
         columns={[
-          { key: 'soldAtDate', header: 'Date' },
-          { key: 'soldAtTime', header: 'Time', className: 'text-center', tdClassName: 'text-center' },
-          { key: 'code', header: 'Code' },
-          { key: 'nameKo', header: 'Name' },
-          { key: 'color', header: 'Color' },
+          { key: 'soldAtDate', header: 'date' },
+          { key: 'soldAtTime', header: 'time', className: 'text-center', tdClassName: 'text-center' },
+          { key: 'code', header: 'code' },
           {
             key: 'sizeDisplay',
-            header: 'Size',
+            header: 'size',
             className: 'text-center',
             tdClassName: 'text-center',
           },
-          { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
+          { key: 'color', header: 'color' },
+          { key: 'qty', header: 'qty', className: 'text-right', tdClassName: 'text-right' },
+          { key: 'brand', header: 'brand' },
           {
             key: 'unitPricePhp',
-            header: 'Price (PHP)',
+            header: 'price',
             className: 'text-right',
             tdClassName: 'text-right',
           },
-          { key: 'gift', header: 'Gift', className: 'text-center', tdClassName: 'text-center' },
         ]}
         rows={tableRows}
         emptyMessage="No results found."
