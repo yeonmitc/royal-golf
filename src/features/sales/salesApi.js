@@ -339,14 +339,17 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
 
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
-  const fromMs = hasFrom ? startOfDayMs(fromDate) : -Infinity;
-  const toMs = hasTo ? endOfDayMs(toDate) : Infinity;
+  const fromKey = String(fromDate || '').trim();
+  const toKey = String(toDate || '').trim();
 
   const sales =
     hasFrom || hasTo
       ? salesAll.filter((s) => {
-          const t = toMsFromIso(s?.soldAt);
-          return t >= fromMs && t <= toMs;
+          const key = String(s?.soldAt || '').slice(0, 10);
+          if (!key) return false;
+          if (hasFrom && key < fromKey) return false;
+          if (hasTo && key > toKey) return false;
+          return true;
         })
       : salesAll;
 
@@ -440,14 +443,17 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' });
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
-  const fromMs = hasFrom ? startOfDayMs(fromDate) : -Infinity;
-  const toMs = hasTo ? endOfDayMs(toDate) : Infinity;
+  const fromKey = String(fromDate || '').trim();
+  const toKey = String(toDate || '').trim();
   const refundsAll = await db.refunds.orderBy('time').toArray();
   const refunds =
     hasFrom || hasTo
       ? refundsAll.filter((r) => {
-          const t = toMsFromIso(r?.time);
-          return t >= fromMs && t <= toMs;
+          const key = String(r?.time || '').slice(0, 10);
+          if (!key) return false;
+          if (hasFrom && key < fromKey) return false;
+          if (hasTo && key > toKey) return false;
+          return true;
         })
       : refundsAll;
   if (!rows.length) {

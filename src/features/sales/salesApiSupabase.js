@@ -46,19 +46,19 @@ function toMsFromIso(iso) {
 function startOfDayMs(dateStr) {
   const [y, m, d] = String(dateStr || '').split('-').map(Number);
   if (!y || !m || !d) return -Infinity;
-  return Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
 }
 
 function endOfDayMs(dateStr) {
   const [y, m, d] = String(dateStr || '').split('-').map(Number);
   if (!y || !m || !d) return Infinity;
-  return Date.UTC(y, m - 1, d, 23, 59, 59, 999);
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
 }
 
 function nextDayStartMs(dateStr) {
   const [y, m, d] = String(dateStr || '').split('-').map(Number);
   if (!y || !m || !d) return Infinity;
-  return Date.UTC(y, m - 1, d + 1, 0, 0, 0, 0);
+  return new Date(y, m - 1, d + 1, 0, 0, 0, 0).getTime();
 }
 
 function toIsoNoMs(ms) {
@@ -465,25 +465,13 @@ export async function setSaleFreeGift({ saleId, freeGift, code, size } = {}) {
 async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query = '' } = {}) {
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
-  const fromMs = hasFrom ? startOfDayMs(fromDate) : -Infinity;
-  const toMs = hasTo ? endOfDayMs(toDate) : Infinity;
-
-  const dateFilters = [];
-  if (hasFrom && Number.isFinite(fromMs)) {
-    dateFilters.push({ column: 'sold_at', op: 'gte', value: toIsoNoMs(fromMs) });
-  }
-  if (hasTo) {
-    const toExclusiveMs = nextDayStartMs(toDate);
-    if (Number.isFinite(toExclusiveMs)) {
-      dateFilters.push({ column: 'sold_at', op: 'lt', value: toIsoNoMs(toExclusiveMs) });
-    }
-  }
+  const fromKey = String(fromDate || '').trim();
+  const toKey = String(toDate || '').trim();
 
   let sales;
   try {
     sales = await sbSelectAll('sales', {
       select: 'id,sold_at,code,color,size_std,qty,price,free_gift,refunded_at,refund_reason',
-      filters: dateFilters,
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
@@ -491,7 +479,6 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     if (msg.includes('free_gift') || msg.includes('color')) {
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason',
-        filters: dateFilters,
         order: { column: 'sold_at', ascending: false },
       });
     } else {
@@ -502,8 +489,11 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const filtered =
     hasFrom || hasTo
       ? (sales || []).filter((s) => {
-          const t = toMsFromIso(s?.sold_at);
-          return t >= fromMs && t <= toMs;
+          const key = String(s?.sold_at || '').slice(0, 10);
+          if (!key) return false;
+          if (hasFrom && key < fromKey) return false;
+          if (hasTo && key > toKey) return false;
+          return true;
         })
       : sales || [];
 
@@ -560,8 +550,8 @@ export async function getSalesHistoryFilteredResult({ fromDate = '', toDate = ''
 export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
-  const fromMs = hasFrom ? startOfDayMs(fromDate) : -Infinity;
-  const toMs = hasTo ? endOfDayMs(toDate) : Infinity;
+  const fromKey = String(fromDate || '').trim();
+  const toKey = String(toDate || '').trim();
 
   let sales;
   try {
@@ -584,8 +574,11 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const inRange =
     hasFrom || hasTo
       ? (sales || []).filter((s) => {
-          const t = toMsFromIso(s?.sold_at);
-          return t >= fromMs && t <= toMs;
+          const key = String(s?.sold_at || '').slice(0, 10);
+          if (!key) return false;
+          if (hasFrom && key < fromKey) return false;
+          if (hasTo && key > toKey) return false;
+          return true;
         })
       : sales || [];
 
