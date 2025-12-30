@@ -30,28 +30,6 @@ function deriveNameFromCode(code) {
     .join(' - ');
 }
 
-/**
- * =========================
- * 날짜/검색 필터 유틸
- * soldAt는 ISO string: "2025-12-14T10:23:11.123Z"
- * =========================
- */
-function toMsFromIso(iso) {
-  if (!iso) return 0;
-  const t = Date.parse(String(iso));
-  return Number.isNaN(t) ? 0 : t;
-}
-
-function startOfDayMs(dateStr) {
-  const [y, m, d] = String(dateStr).split('-').map(Number);
-  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
-}
-
-function endOfDayMs(dateStr) {
-  const [y, m, d] = String(dateStr).split('-').map(Number);
-  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
-}
-
 function includesIgnoreCase(hay, needle) {
   return String(hay || '')
     .toLowerCase()

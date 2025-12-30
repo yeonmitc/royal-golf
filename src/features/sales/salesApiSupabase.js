@@ -51,30 +51,6 @@ function toMsFromIso(iso) {
   return Number.isFinite(t) ? t : 0;
 }
 
-function startOfDayMs(dateStr) {
-  const [y, m, d] = String(dateStr || '').split('-').map(Number);
-  if (!y || !m || !d) return -Infinity;
-  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
-}
-
-function endOfDayMs(dateStr) {
-  const [y, m, d] = String(dateStr || '').split('-').map(Number);
-  if (!y || !m || !d) return Infinity;
-  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
-}
-
-function nextDayStartMs(dateStr) {
-  const [y, m, d] = String(dateStr || '').split('-').map(Number);
-  if (!y || !m || !d) return Infinity;
-  return new Date(y, m - 1, d + 1, 0, 0, 0, 0).getTime();
-}
-
-function toIsoNoMs(ms) {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
-
 function includesIgnoreCase(hay, needle) {
   return String(hay || '').toLowerCase().includes(String(needle || '').toLowerCase());
 }

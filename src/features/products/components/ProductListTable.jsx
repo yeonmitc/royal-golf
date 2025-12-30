@@ -81,12 +81,9 @@ export default function ProductListTable({
     setDeleteTarget(code);
   };
 
-  let totalCodes = 0;
-  let totalQty = 0;
+  const totalCodes = filtered.length;
+  const totalQty = filtered.reduce((sum, p) => sum + (Number(p.totalStock ?? 0) || 0), 0);
   const tableRows = filtered.map((p) => {
-    totalCodes += 1;
-    totalQty += Number(p.totalStock ?? 0) || 0;
-
     const getLabel = (group, code) => {
       const arr = codePartsSeed[group] || [];
       const found = arr.find((i) => i.code === code);

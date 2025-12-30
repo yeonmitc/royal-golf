@@ -24,15 +24,12 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   function formatSoldAtParts(iso) {
     const s = String(iso || '').trim();
     if (!s) return { date: '', time: '' };
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return { date: s, time: '' };
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mi = String(d.getMinutes()).padStart(2, '0');
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dow = days[d.getDay()] || '';
-    return { date: `${mm}-${dd} ${dow}`, time: `${hh}:${mi}` };
+    const dateHit = s.match(/\d{4}-\d{2}-\d{2}/);
+    const timeHit = s.match(/[T\s](\d{2}:\d{2})/);
+    const date = dateHit ? dateHit[0] : '';
+    const time = timeHit ? timeHit[1] : '';
+    if (!date) return { date: s, time: '' };
+    return { date, time };
   }
 
   if (isLoading) {
@@ -47,13 +44,31 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     );
   }
 
-  if (rows.length === 0) {
+  const visibleRows = (rows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
+
+  if (visibleRows.length === 0) {
     return <div className="p-4 text-sm text-gray-500">No results found.</div>;
   }
 
-  let totalQty = 0;
-  let totalPrice = 0;
-  const tableRows = rows.map((row) => {
+  const { totalQty, totalPrice } = visibleRows.reduce(
+    (acc, row) => {
+      const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
+      const original = Number(row.unitPricePhp || 0);
+      const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
+      const isDiscounted = discounted !== null && discounted !== original;
+      const finalUnitRaw = isDiscounted ? discounted : original;
+      const finalUnit = isRefunded ? 0 : finalUnitRaw;
+      const qty = Number(row.qty || 0) || 0;
+      const qtyForTotal = isRefunded ? 0 : qty;
+
+      return {
+        totalQty: acc.totalQty + qtyForTotal,
+        totalPrice: acc.totalPrice + finalUnit * qtyForTotal,
+      };
+    },
+    { totalQty: 0, totalPrice: 0 }
+  );
+  const tableRows = visibleRows.map((row) => {
     const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
     const original = Number(row.unitPricePhp || 0);
     const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
@@ -65,9 +80,6 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
     const qtyForTotal = isRefunded ? 0 : qty;
-
-    totalQty += qtyForTotal;
-    totalPrice += finalUnit * qtyForTotal;
 
     const brand = brandFromCode(row.code);
     const refundReason = String(row?.refundReason || '').trim();

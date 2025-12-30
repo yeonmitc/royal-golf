@@ -1,5 +1,5 @@
 // src/pages/SalesHistoryPage.jsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import SalesTable from '../features/sales/components/SalesTable';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
@@ -71,14 +71,27 @@ export default function SalesHistoryPage() {
   });
 
   const allRows = salesData?.rows ?? EMPTY_ROWS;
-  const totalPages = Math.ceil(allRows.length / itemsPerPage);
+  const visibleRows = useMemo(() => {
+    return (allRows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
+  }, [allRows]);
+  const totalPages = Math.ceil(visibleRows.length / itemsPerPage);
+
+  useEffect(() => {
+    if (totalPages <= 0) {
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return allRows.slice(start, start + itemsPerPage);
-  }, [allRows, currentPage]);
+    const safeCurrent = totalPages > 0 ? Math.min(currentPage, totalPages) : 1;
+    const start = (safeCurrent - 1) * itemsPerPage;
+    return visibleRows.slice(start, start + itemsPerPage);
+  }, [visibleRows, currentPage, totalPages]);
 
   const exportActions = useMemo(() => {
-    const rows = salesData?.rows || [];
+    const rows = visibleRows || [];
     if (!rows.length) return null;
     const columns = [
       { key: 'soldAt', header: 'Date / Time' },
@@ -114,7 +127,7 @@ export default function SalesHistoryPage() {
         gdriveName="sales-history.csv"
       />
     );
-  }, [salesData]);
+  }, [visibleRows]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -193,7 +206,7 @@ export default function SalesHistoryPage() {
           isError={isError}
           error={error}
           pagination={{
-            current: currentPage,
+            current: totalPages > 0 ? Math.min(currentPage, totalPages) : 1,
             totalPages,
             onPageChange: setCurrentPage,
           }}
