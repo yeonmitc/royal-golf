@@ -13,6 +13,18 @@ const SIZE_TO_COLUMN = {
   Free: 'free',
 };
 
+function nowLocalIsoLikeUtc() {
+  const d = new Date();
+  const yyyy = String(d.getFullYear());
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}.${ms}Z`;
+}
+
 function sumInventoriesRow(row) {
   if (!row) return 0;
   return SIZE_ORDER.reduce((sum, sizeKey) => {
@@ -200,7 +212,7 @@ export async function checkoutCart(cartItems) {
 
   let totalAmount = 0;
   let totalQty = 0;
-  const soldAt = new Date().toISOString();
+  const soldAt = nowLocalIsoLikeUtc();
   const salesToInsert = [];
   const invUpdatesByCode = new Map();
 
@@ -383,7 +395,7 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
   mergedInv[col] = nextQty;
   const nextTotalQty = sumInventoriesRow(mergedInv);
 
-  const refundedAt = new Date().toISOString();
+  const refundedAt = nowLocalIsoLikeUtc();
   await sbUpdate(
     'sales',
     { refunded_at: refundedAt, refund_reason: reasonStr, price: 0 },

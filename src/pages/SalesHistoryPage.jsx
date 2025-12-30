@@ -1,5 +1,5 @@
 // src/pages/SalesHistoryPage.jsx
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import SalesTable from '../features/sales/components/SalesTable';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
@@ -28,22 +28,17 @@ export default function SalesHistoryPage() {
     query: '',
   });
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
-
   const applySearch = () => {
     setFilters({
       fromDate: fromInput || '',
       toDate: toInput || '',
       query: qInput.trim(),
     });
-    setCurrentPage(1);
   };
 
   const resetSearch = () => {
     setQInput('');
     setAllRange();
-    setCurrentPage(1);
   };
 
   const setAllRange = () => {
@@ -56,7 +51,29 @@ export default function SalesHistoryPage() {
     const t = toInputDate(new Date());
     setFromInput(t);
     setToInput(t);
-    setFilters((prev) => ({ ...prev, fromDate: t, toDate: t }));
+    setFilters((prev) => ({ ...prev, fromDate: t, toDate: t, query: qInput.trim() }));
+  };
+
+  const setWeekRange = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMon = (day + 6) % 7;
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMon);
+    const from = toInputDate(start);
+    const to = toInputDate(now);
+    setFromInput(from);
+    setToInput(to);
+    setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
+  };
+
+  const setMonthRange = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const from = toInputDate(start);
+    const to = toInputDate(now);
+    setFromInput(from);
+    setToInput(to);
+    setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
   };
 
   const {
@@ -74,21 +91,6 @@ export default function SalesHistoryPage() {
   const visibleRows = useMemo(() => {
     return (allRows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
   }, [allRows]);
-  const totalPages = Math.ceil(visibleRows.length / itemsPerPage);
-
-  useEffect(() => {
-    if (totalPages <= 0) {
-      if (currentPage !== 1) setCurrentPage(1);
-      return;
-    }
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-
-  const paginatedRows = useMemo(() => {
-    const safeCurrent = totalPages > 0 ? Math.min(currentPage, totalPages) : 1;
-    const start = (safeCurrent - 1) * itemsPerPage;
-    return visibleRows.slice(start, start + itemsPerPage);
-  }, [visibleRows, currentPage, totalPages]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -145,7 +147,6 @@ export default function SalesHistoryPage() {
                 const v = e.target.value;
                 setFromInput(v);
                 setFilters((prev) => ({ ...prev, fromDate: v || '' }));
-                setCurrentPage(1);
               }}
             />
           </div>
@@ -162,7 +163,6 @@ export default function SalesHistoryPage() {
                 const v = e.target.value;
                 setToInput(v);
                 setFilters((prev) => ({ ...prev, toDate: v || '' }));
-                setCurrentPage(1);
               }}
             />
           </div>
@@ -170,6 +170,8 @@ export default function SalesHistoryPage() {
 
         <Button type="button" onClick={setAllRange} size="sm" variant="outline" title="All" icon="reset" />
         <Button type="button" onClick={setTodayRange} size="sm" variant="outline" title="Today" icon="today" />
+        <Button type="button" onClick={setWeekRange} size="sm" variant="outline" title="Week" icon="calendar" />
+        <Button type="button" onClick={setMonthRange} size="sm" variant="outline" title="Month" icon="calendar" />
 
         <div
           style={{
@@ -201,15 +203,10 @@ export default function SalesHistoryPage() {
         actions={exportActions}
       >
         <SalesTable
-          rows={paginatedRows}
+          rows={visibleRows}
           isLoading={isLoading}
           isError={isError}
           error={error}
-          pagination={{
-            current: totalPages > 0 ? Math.min(currentPage, totalPages) : 1,
-            totalPages,
-            onPageChange: setCurrentPage,
-          }}
         />
       </Card>
     </div>

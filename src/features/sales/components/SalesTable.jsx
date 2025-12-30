@@ -29,7 +29,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     const date = dateHit ? dateHit[0] : '';
     const time = timeHit ? timeHit[1] : '';
     if (!date) return { date: s, time: '' };
-    return { date, time };
+
+    const [y, m, d] = date.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dow = days[dt.getUTCDay()] || '';
+    const mm = String(m || '').padStart(2, '0');
+    const dd = String(d || '').padStart(2, '0');
+    return { date: `${mm}-${dd} ${dow}`.trim(), time };
   }
 
   if (isLoading) {
