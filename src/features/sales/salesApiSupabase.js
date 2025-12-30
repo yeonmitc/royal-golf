@@ -13,6 +13,14 @@ const SIZE_TO_COLUMN = {
   Free: 'free',
 };
 
+function sumInventoriesRow(row) {
+  if (!row) return 0;
+  return SIZE_ORDER.reduce((sum, sizeKey) => {
+    const col = SIZE_TO_COLUMN[sizeKey];
+    return sum + (Number(row?.[col] ?? 0) || 0);
+  }, 0);
+}
+
 function toMsFromIso(iso) {
   const s = String(iso || '').trim();
   if (!s) return 0;
@@ -394,18 +402,49 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
   });
   const invRow = invRows?.[0];
   const currentQty = Number(invRow?.[col] ?? 0) || 0;
+  const nextQty = currentQty + q;
+  const mergedInv = { ...(invRow || {}) };
+  mergedInv[col] = nextQty;
+  const nextTotalQty = sumInventoriesRow(mergedInv);
 
   const refundedAt = new Date().toISOString();
   await sbUpdate(
     'sales',
-    { refunded_at: refundedAt, refund_reason: reasonStr },
+    { refunded_at: refundedAt, refund_reason: reasonStr, price: 0 },
     { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
   );
-  await sbUpdate(
-    'inventories',
-    { [col]: currentQty + q },
-    { filters: [{ column: 'code', op: 'eq', value: String(code).trim() }], returning: 'minimal' }
-  );
+  try {
+    await sbUpdate(
+      'inventories',
+      { [col]: nextQty, total_qty: nextTotalQty },
+      { filters: [{ column: 'code', op: 'eq', value: String(code).trim() }], returning: 'minimal' }
+    );
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (!msg.includes('total_qty')) throw e;
+    await sbUpdate(
+      'inventories',
+      { [col]: nextQty },
+      { filters: [{ column: 'code', op: 'eq', value: String(code).trim() }], returning: 'minimal' }
+    );
+  }
+
+  try {
+    const pRows = await sbSelect('products', {
+      select: 'code,qty',
+      filters: [{ column: 'code', op: 'eq', value: String(code).trim() }],
+      limit: 1,
+    });
+    const p = pRows?.[0];
+    const currentPQty = Number(p?.qty ?? 0) || 0;
+    await sbUpdate(
+      'products',
+      { qty: currentPQty + q },
+      { filters: [{ column: 'code', op: 'eq', value: String(code).trim() }], returning: 'minimal' }
+    );
+  } catch (_e) {
+    void _e;
+  }
 
   const amountPhp = (Number(row.price ?? 0) || 0) * q;
   try {
@@ -498,11 +537,12 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       : sales || [];
 
   const normalized = (filtered || [])
-    .filter((r) => !toMsFromIso(r?.refunded_at))
     .map((r) => {
       const qtyN = Number(r.qty ?? 0) || 0;
       const unit = Number(r.price ?? 0) || 0;
       const sizeKey = normalizeSizeKey(r.size_std);
+      const refundedAt = r?.refunded_at || null;
+      const isRefunded = Boolean(toMsFromIso(refundedAt));
       return {
         saleId: r.id,
         soldAt: r.sold_at,
@@ -511,10 +551,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         size: sizeKey,
         sizeDisplay: sizeKey,
         qty: qtyN,
-        unitPricePhp: unit,
+        unitPricePhp: isRefunded ? 0 : unit,
         discountUnitPricePhp: undefined,
-        lineTotalPhp: unit * qtyN,
+        lineTotalPhp: (isRefunded ? 0 : unit) * qtyN,
         freeGift: Boolean(r.free_gift ?? false) || unit === 0,
+        refundedAt,
+        refundReason: String(r.refund_reason || '').trim(),
+        isRefunded,
         nameKo: '',
       };
     })

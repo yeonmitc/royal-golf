@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -14,6 +14,12 @@ export default function RefundModal({ open, onClose, saleItem }) {
   const { showToast } = useToast();
   
   const { mutateAsync: processRefund, isPending } = useProcessRefundMutation();
+
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setErr('');
+  }, [open, saleItem?.saleId, saleItem?.code, saleItem?.size, saleItem?.sizeDisplay]);
 
   if (!open || !saleItem) return null;
 
@@ -83,6 +89,7 @@ export default function RefundModal({ open, onClose, saleItem }) {
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Max 50 chars"
+          maxLength={50}
           error={err || undefined}
         />
       </div>

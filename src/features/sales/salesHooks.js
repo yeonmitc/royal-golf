@@ -77,6 +77,8 @@ export function useProcessRefundMutation() {
     mutationFn: processRefund,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },

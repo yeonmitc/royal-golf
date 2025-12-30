@@ -18,8 +18,6 @@ export default function InventoryPage() {
   const [editMode, setEditMode] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
   const { data: allProducts = [], isLoading, isError, error } = useProductInventoryList();
 
   const isAdmin = useAdminStore((s) => s.isAuthorized());
@@ -67,16 +65,6 @@ export default function InventoryPage() {
     return filtered;
   }, [allProducts, gender, searchApplied]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [gender, searchApplied]);
-
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredProducts.slice(start, start + itemsPerPage);
-  }, [filteredProducts, currentPage]);
-
   return (
     <div className="page-root">
       <div className="page-header">
@@ -119,7 +107,7 @@ export default function InventoryPage() {
       <Card
         title="Product List"
         actions={
-          Array.isArray(paginatedProducts) && paginatedProducts.length > 0
+          Array.isArray(filteredProducts) && filteredProducts.length > 0
             ? [
                 <ExportActions
                   key="products"
@@ -129,7 +117,7 @@ export default function InventoryPage() {
                     { key: 'totalStock', header: 'Total Stock' },
                     { key: 'salePrice', header: 'Sale Price (PHP)' },
                   ]}
-                  rows={paginatedProducts.map((p) => ({
+                  rows={filteredProducts.map((p) => ({
                     code: p.code,
                     name: p.nameKo || '',
                     totalStock: p.totalStock ?? 0,
@@ -164,18 +152,13 @@ export default function InventoryPage() {
           </div>
         </div>
         <ProductListTable
-          products={paginatedProducts}
+          products={filteredProducts}
           isLoading={isLoading}
           isError={isError}
           error={error}
           onSelect={(p) => {
             setModalCode(p.code);
             setModalOpen(true);
-          }}
-          pagination={{
-            current: currentPage,
-            totalPages,
-            onPageChange: setCurrentPage,
           }}
         />
       </Card>

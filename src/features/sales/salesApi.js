@@ -369,11 +369,17 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
   const saleMap = new Map(sales.map((s) => [s.id, s]));
 
   const refundMap = new Map();
+  const refundInfoMap = new Map();
   const allRefunds = await db.refunds.toArray();
   for (const rf of allRefunds) {
     const key = `${rf.saleId}-${rf.code}-${rf.size}`;
     const prev = refundMap.get(key) || 0;
     refundMap.set(key, prev + rf.qty);
+    const prevInfo = refundInfoMap.get(key);
+    const time = String(rf?.time || '').trim();
+    if (!prevInfo || (time && String(prevInfo.time || '') < time)) {
+      refundInfoMap.set(key, { time, reason: String(rf?.reason || '').trim() });
+    }
   }
 
   const flat = allItems.map((i) => {
@@ -389,6 +395,8 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
 
     const refundedQty = refundMap.get(`${i.saleId}-${i.code}-${i.size}`) || 0;
     const remainingQty = Math.max(0, i.qty - refundedQty);
+    const isRefunded = remainingQty <= 0 && refundedQty > 0;
+    const refundInfo = refundInfoMap.get(`${i.saleId}-${i.code}-${i.size}`) || null;
 
     const finalUnit = i.discountUnitPricePhp ?? i.unitPricePhp;
     const freeGift = Boolean(i.freeGift ?? false) || finalUnit === 0;
@@ -401,15 +409,18 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
       color,
       nameKo,
       sizeDisplay,
-      qty: remainingQty, // Show only remaining quantity
+      qty: isRefunded ? i.qty : remainingQty,
       originalQty: i.qty,
       refundedQty,
-      unitPricePhp: i.unitPricePhp,
+      unitPricePhp: isRefunded ? 0 : i.unitPricePhp,
       discountUnitPricePhp: i.discountUnitPricePhp,
-      lineTotalPhp: finalUnit * remainingQty,
+      lineTotalPhp: (isRefunded ? 0 : finalUnit) * (isRefunded ? i.qty : remainingQty),
       freeGift,
+      refundedAt: refundInfo?.time || null,
+      refundReason: refundInfo?.reason || '',
+      isRefunded,
     };
-  }).filter(r => r.qty > 0); // Filter out fully refunded items
+  });
 
   const q = String(query || '').trim();
   if (!q) return flat;

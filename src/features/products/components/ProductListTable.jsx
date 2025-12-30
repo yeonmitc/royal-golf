@@ -28,7 +28,6 @@ export default function ProductListTable({
   error,
   onClearFilter: _onClearFilter,
   isFiltered: _isFiltered,
-  pagination,
 }) {
   // If products are provided, use them. Otherwise, we could fetch, but for now we assume they are passed if we want filtering from parent.
   // To maintain backward compatibility if needed, we could fetch if products is undefined.
@@ -82,8 +81,82 @@ export default function ProductListTable({
     setDeleteTarget(code);
   };
 
+  let totalCodes = 0;
+  let totalQty = 0;
+  const tableRows = filtered.map((p) => {
+    totalCodes += 1;
+    totalQty += Number(p.totalStock ?? 0) || 0;
+
+    const getLabel = (group, code) => {
+      const arr = codePartsSeed[group] || [];
+      const found = arr.find((i) => i.code === code);
+      return found?.label || code || '';
+    };
+    const fallbackName = [
+      getLabel('category', p.categoryCode),
+      getLabel('type', p.typeCode),
+      getLabel('brand', p.brandCode),
+      getLabel('color', p.colorCode),
+      p.modelNo,
+    ]
+      .filter(Boolean)
+      .join(' - ');
+
+    const visibleSizes = Array.isArray(p.sizes)
+      ? p.sizes.filter((s) => Number(s.stockQty || 0) > 0)
+      : [];
+
+    const isOutOfStock = (p.totalStock || 0) <= 0;
+
+    return {
+      id: p.code,
+      style: isOutOfStock ? { color: '#ef4444' } : undefined,
+      code: (
+        <span
+          className={`underline decoration-dotted underline-offset-2 ${isOutOfStock ? 'text-[#ef4444]' : 'text-[var(--gold-soft)]'}`}
+        >
+          {p.code}
+        </span>
+      ),
+      name: p.nameKo && p.nameKo.trim() ? p.nameKo : fallbackName || '-',
+      totalStock: p.totalStock,
+      salePrice: (p.salePricePhp || 0).toLocaleString('en-US'),
+      sizes:
+        visibleSizes.length > 0
+          ? visibleSizes
+              .map((s) => `${s.sizeDisplay || s.size || ''} x ${s.stockQty ?? 0}`)
+              .join(', ')
+          : '-',
+      manage: (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isDeleting}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDelete(p.code);
+          }}
+        >
+          Delete
+        </Button>
+      ),
+    };
+  });
+
+  tableRows.push({
+    id: '__product_total__',
+    clickable: false,
+    code: 'TOTAL',
+    name: `${totalCodes.toLocaleString('en-US')} codes`,
+    totalStock: totalQty.toLocaleString('en-US'),
+    salePrice: '',
+    sizes: '',
+    manage: '',
+    style: { color: 'var(--gold-soft)', fontWeight: 700 },
+  });
+
   return (
-    <div className="p-2 overflow-x-auto">
+    <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
       <DataTable
         columns={[
           { key: 'code', header: 'Code' },
@@ -103,67 +176,13 @@ export default function ProductListTable({
           { key: 'sizes', header: 'Size Stock' },
           { key: 'manage', header: 'Manage', className: 'text-center' },
         ]}
-        rows={filtered.map((p) => {
-          const getLabel = (group, code) => {
-            const arr = codePartsSeed[group] || [];
-            const found = arr.find((i) => i.code === code);
-            return found?.label || code || '';
-          };
-          const fallbackName = [
-            getLabel('category', p.categoryCode),
-            getLabel('type', p.typeCode),
-            getLabel('brand', p.brandCode),
-            getLabel('color', p.colorCode),
-            p.modelNo,
-          ]
-            .filter(Boolean)
-            .join(' - ');
-
-          const visibleSizes = Array.isArray(p.sizes)
-            ? p.sizes.filter((s) => Number(s.stockQty || 0) > 0)
-            : [];
-          
-          const isOutOfStock = (p.totalStock || 0) <= 0;
-
-          return {
-            id: p.code,
-            style: isOutOfStock ? { color: '#ef4444' } : undefined, // Red if no stock
-            code: (
-              <span className={`underline decoration-dotted underline-offset-2 ${isOutOfStock ? 'text-[#ef4444]' : 'text-[var(--gold-soft)]'}`}>
-                {p.code}
-              </span>
-            ),
-            name: p.nameKo && p.nameKo.trim() ? p.nameKo : fallbackName || '-',
-            totalStock: p.totalStock,
-            salePrice: (p.salePricePhp || 0).toLocaleString('en-US'),
-            sizes:
-              visibleSizes.length > 0
-                ? visibleSizes
-                    .map((s) => `${s.sizeDisplay || s.size || ''} x ${s.stockQty ?? 0}`)
-                    .join(', ')
-                : '-',
-            manage: (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isDeleting}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(p.code);
-                }}
-              >
-                Delete
-              </Button>
-            ),
-          };
-        })}
+        rows={tableRows}
         onRowClick={(row) => {
           // Allow viewing details without admin, but edit actions inside will be protected
           const selected = filtered.find((p) => p.code === row.id);
           if (onSelect && selected) onSelect(selected);
         }}
         emptyMessage="No products found."
-        pagination={pagination}
       />
       <Modal
         open={!!deleteTarget}
