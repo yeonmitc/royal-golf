@@ -25,6 +25,10 @@ export default function ProductLookup({
   // Local state for product details
   const [localName, setLocalName] = useState('');
   const [localPrice, setLocalPrice] = useState('');
+  const [localCprice, setLocalCprice] = useState('');
+  const [localKprice, setLocalKprice] = useState('');
+  const [localP2price, setLocalP2price] = useState('');
+  const [localP3price, setLocalP3price] = useState('');
 
   const [sizeChanges, setSizeChanges] = useState({});
   
@@ -37,11 +41,30 @@ export default function ProductLookup({
     if (prod) {
       setLocalName(prod.nameKo || '');
       setLocalPrice(prod.salePricePhp ?? 0);
+      setLocalCprice(prod.cprice ?? prod.priceCny ?? 0);
+      setLocalKprice(prod.kprice ?? 0);
+      setLocalP2price(prod.p2price ?? 0);
+      setLocalP3price(prod.p3price ?? 0);
     } else {
       setLocalName('');
       setLocalPrice('');
+      setLocalCprice('');
+      setLocalKprice('');
+      setLocalP2price('');
+      setLocalP3price('');
     }
   }, [prod]);
+
+  function handleCpriceChange(val) {
+    setLocalCprice(val);
+    const cnyValue = Number(val || 0);
+    const kp = Math.round(cnyValue * 220);
+    const p2 = Math.ceil((kp / 25 * 2) / 100) * 100;
+    const p3 = Math.ceil((kp / 25 * 3) / 100) * 100;
+    setLocalKprice(kp);
+    setLocalP2price(p2);
+    setLocalP3price(p3);
+  }
 
   const sizes = useMemo(() => {
     const standard = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
@@ -73,13 +96,17 @@ export default function ProductLookup({
         const newName = localName.trim();
         const newPrice = Number(localPrice) || 0;
 
-        if (newName !== currentName || newPrice !== currentPrice) {
-          await upsertProd({
-            code,
-            nameKo: newName,
-            salePricePhp: newPrice,
-          });
-        }
+        // Check if anything changed
+        // We always include prices in payload to ensure they are synced if user edited Cprice
+        await upsertProd({
+          code,
+          nameKo: newName,
+          salePricePhp: newPrice,
+          cprice: Number(localCprice || 0),
+          kprice: Number(localKprice || 0),
+          p2price: Number(localP2price || 0),
+          p3price: Number(localP3price || 0),
+        });
       }
 
       setEditLocal(false);
@@ -236,6 +263,40 @@ export default function ProductLookup({
                 />
               </div>
 
+              {edit && (
+                <div
+                  style={{
+                    marginBottom: 10,
+                    padding: 12,
+                    border: '1px solid var(--border-color, #333)',
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: 'var(--gold-soft)',
+                      marginBottom: 8,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Admin Pricing
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    <Input
+                      label="Cost (CNY)"
+                      type="number"
+                      value={localCprice}
+                      onChange={(e) => handleCpriceChange(e.target.value)}
+                    />
+                    <Input label="KRW Price" value={localKprice} readOnly />
+                    <Input label="P2 Price" value={localP2price} readOnly />
+                    <Input label="P3 Price" value={localP3price} readOnly />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div className="text-[11px] font-medium tracking-wide text-[var(--text-muted)] mb-1">
                   Stock by Size
@@ -287,7 +348,7 @@ export default function ProductLookup({
                         disabled={isPending}
                         onClick={saveChanges}
                       >
-                        Product updated.
+                        Save Changes
                       </Button>
                     )}
                     {showEditToggle && (

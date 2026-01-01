@@ -167,7 +167,10 @@ export default function InventoryPage() {
         open={modalOpen}
         title="Product Detail"
         size="content"
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          setEditMode(false);
+        }}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button

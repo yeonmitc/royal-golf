@@ -73,7 +73,11 @@ function normalizeProductRow(r) {
     brandCode: r.brandCode ?? r.brand_code ?? parsed.brandCode,
     colorCode: r.colorCode ?? r.color_code ?? parsed.colorCode,
     modelNo: r.modelNo ?? r.model_no ?? parsed.modelNo,
-    priceCny: Number(r.priceCny ?? r.price_cny ?? 0) || 0,
+    priceCny: Number(r.priceCny ?? r.price_cny ?? r.cprice ?? 0) || 0, // cprice alias
+    cprice: Number(r.cprice ?? r.priceCny ?? r.price_cny ?? 0) || 0,
+    kprice: Number(r.kprice ?? r.krwPrice ?? 0) || 0,
+    p2price: Number(r.p2price ?? 0) || 0,
+    p3price: Number(r.p3price ?? 0) || 0,
     basePricePhp: Number(r.basePricePhp ?? r.base_price_php ?? 0) || 0,
     salePricePhp: Number(r.salePricePhp ?? r.sale_price_php ?? r.sale_price ?? 0) || 0,
     totalStock: Number(r.totalStock ?? r.total_stock ?? 0) || 0,
@@ -167,7 +171,7 @@ export async function getProductByCode(code) {
   const c = String(code).trim();
   try {
     const rows = await sbSelect('products', {
-      select: 'code,name,sale_price,free_gift',
+      select: '*',
       filters: [{ column: 'code', op: 'eq', value: c }],
       limit: 1,
     });

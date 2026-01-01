@@ -87,19 +87,18 @@ export default function AddProductPage() {
   const cnyNumber = Number(cnyValue);
   const computedKrwPrice =
     cnyValue === '' ? '' : String(Math.round((Number.isFinite(cnyNumber) ? cnyNumber : 0) * 220));
-  const computedSalePricePhp =
-    computedKrwPrice === ''
-      ? ''
-      : String(ceilToUnit((Number(computedKrwPrice) * 3) / 25.5, 100));
   const computedP2PricePhp =
     computedKrwPrice === ''
       ? ''
-      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25.5, 100));
-  const effectiveSalePricePhp = salePriceManual ? salePricePhp : computedSalePricePhp;
-  const p3PriceForDb =
-    String(effectiveSalePricePhp ?? '').trim() === ''
+      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25, 100));
+
+  const computedP3PricePhp =
+    computedKrwPrice === ''
       ? ''
-      : String(ceilToUnit(Number(effectiveSalePricePhp || 0), 100));
+      : String(ceilToUnit((Number(computedKrwPrice) * 3) / 25, 100));
+
+  const effectiveSalePricePhp = salePriceManual ? salePricePhp : computedP3PricePhp;
+  const p3PriceForDb = computedP3PricePhp;
 
   async function recomputeCode(next = {}) {
     const c = next.category ?? category;
@@ -174,7 +173,7 @@ export default function AddProductPage() {
       code: codePreview,
       nameKo: nameKo.trim(),
       priceCny: Number(priceCny || 0) || 0,
-      salePricePhp: Number(p3PriceForDb || 0) || 0,
+      salePricePhp: Number(effectiveSalePricePhp || 0) || 0,
       qty: totalQty,
       kprice: Number(computedKrwPrice || 0) || 0,
       cprice: Number(priceCny || 0) || 0,
@@ -366,12 +365,44 @@ export default function AddProductPage() {
               <FormSection columns={2}>
                 <div style={{ flex: 1 }}>
                   <Input
+                    label="Cost (CNY)"
+                    type="number"
+                    value={priceCny}
+                    onChange={(e) => {
+                      setPriceCny(e.target.value);
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Input
                     label="KRW Price"
                     type="number"
                     value={computedKrwPrice}
                     readOnly
                   />
                 </div>
+              </FormSection>
+
+              <FormSection columns={2}>
+                <div style={{ flex: 1 }}>
+                  <Input
+                    label="P2 Price"
+                    type="number"
+                    value={computedP2PricePhp}
+                    readOnly
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Input
+                    label="P3 Price"
+                    type="number"
+                    value={computedP3PricePhp}
+                    readOnly
+                  />
+                </div>
+              </FormSection>
+
+              <FormSection columns={2}>
                 <div style={{ flex: 1 }}>
                   <Input
                     label="Sale Price (PHP)"
@@ -388,7 +419,7 @@ export default function AddProductPage() {
                       onClick={() => {
                         setSalePriceManual((v) => {
                           const next = !v;
-                          if (next) setSalePricePhp((prev) => (String(prev ?? '').trim() ? prev : computedSalePricePhp));
+                          if (next) setSalePricePhp((prev) => (String(prev ?? '').trim() ? prev : computedP3PricePhp));
                           return next;
                         });
                       }}
@@ -397,24 +428,11 @@ export default function AddProductPage() {
                     </Button>
                   </div>
                 </div>
-              </FormSection>
-
-              <FormSection columns={2}>
                 <div style={{ flex: 1 }}>
                   <Input
                     label="Product Name"
                     value={nameKo}
                     onChange={(e) => setNameKo(e.target.value)}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Input
-                    label="Cost (CNY)"
-                    type="number"
-                    value={priceCny}
-                    onChange={(e) => {
-                      setPriceCny(e.target.value);
-                    }}
                   />
                 </div>
               </FormSection>
