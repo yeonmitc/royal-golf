@@ -168,10 +168,44 @@ export default function SalesHistoryPage() {
           </div>
         </div>
 
-        <Button type="button" onClick={setAllRange} size="sm" variant="outline" title="All" icon="reset" />
-        <Button type="button" onClick={setTodayRange} size="sm" variant="outline" title="Today" icon="today" />
-        <Button type="button" onClick={setWeekRange} size="sm" variant="outline" title="Week" icon="calendar" />
-        <Button type="button" onClick={setMonthRange} size="sm" variant="outline" title="Month" icon="calendar" />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <Button
+            type="button"
+            onClick={setAllRange}
+            size="sm"
+            variant="outline"
+            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+          >
+            All
+          </Button>
+          <Button
+            type="button"
+            onClick={setTodayRange}
+            size="sm"
+            variant="outline"
+            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+          >
+            Today
+          </Button>
+          <Button
+            type="button"
+            onClick={setWeekRange}
+            size="sm"
+            variant="outline"
+            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+          >
+            Week
+          </Button>
+          <Button
+            type="button"
+            onClick={setMonthRange}
+            size="sm"
+            variant="outline"
+            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+          >
+            Month
+          </Button>
+        </div>
 
         <div
           style={{
