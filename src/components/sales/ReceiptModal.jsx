@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Button from '../common/Button';
 import './ReceiptModal.css';
-import blackLogo from '../../assets/black-logo.png';
+import logo from '../../assets/logo.png';
 
 export default function ReceiptModal({ open, onClose, receiptData }) {
   const printRef = useRef(null);
@@ -27,14 +27,21 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
     const printContent = printRef.current;
     if (!printContent) return;
 
+    // Convert images to absolute URLs for the print window
+    const contentHtml = printContent.innerHTML;
+    // Basic replacement for src="/" to include origin, handling both double and single quotes
+    const absoluteHtml = contentHtml
+      .replace(/src="\//g, `src="${window.location.origin}/`)
+      .replace(/src='\//g, `src='${window.location.origin}/`);
+
     const win = window.open('', '', 'width=400,height=600');
     win.document.write('<html><head><title>Receipt</title>');
     win.document.write('<style>');
     win.document.write(`
       @page { margin: 0; }
       body { margin: 0; font-family: monospace; font-size: 12px; color: #000; }
-      .receipt-container { width: 100%; max-width: 58mm; margin: 0 auto; padding: 10px; box-sizing: border-box; }
-      .receipt-logo { display: block; margin: 0 auto 5px auto; width: 80px; height: 90px; object-fit: contain; }
+      .receipt-container { width: 100%; max-width: 57mm; margin: 0 auto; padding: 10px; box-sizing: border-box; }
+      .receipt-logo { display: block; margin: 0 auto 5px auto; width: 80px; height: 90px; object-fit: contain; filter: grayscale(100%) brightness(0%); }
       .header { text-align: center; margin-bottom: 5px; }
       .title { font-size: 14px; font-weight: bold; margin-bottom: 0; }
       .info { font-size: 10px; margin-bottom: 0; }
@@ -48,15 +55,16 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
     `);
     win.document.write('</style></head><body>');
     win.document.write('<div class="receipt-container">');
-    win.document.write(printContent.innerHTML);
+    win.document.write(absoluteHtml);
     win.document.write('</div>');
     win.document.write('</body></html>');
     win.document.close();
     win.focus();
+    // Allow time for images to load in the new window
     setTimeout(() => {
       win.print();
       win.close();
-    }, 250);
+    }, 500);
   };
 
   const formattedDate = new Date(soldAt).toLocaleString('en-PH', {
@@ -72,7 +80,12 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
       <div className="receipt-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="receipt-preview" ref={printRef}>
           <div className="header">
-            <img src={blackLogo} alt="Hole No.0" className="receipt-logo" />
+            <img 
+              src={logo} 
+              alt="Hole No.0" 
+              className="receipt-logo" 
+              style={{ filter: 'grayscale(100%) brightness(0%)' }}
+            />
             <div className="title">Hole No.0 royal golf proshop</div>
             <div className="info">+63 917-129-5567 </div>
             <div className="info">Date: {formattedDate}</div>

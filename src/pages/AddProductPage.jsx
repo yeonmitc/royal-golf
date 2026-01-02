@@ -5,7 +5,7 @@ import Card from '../components/common/Card';
 import FormSection from '../components/common/FormSection';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
-import codePartsSeed from '../db/seed/seed-code-parts.json';
+import { useCodeParts } from '../features/codes/codeHooks';
 import {
   useUpdateInventoryMutation,
   useUpsertProductMutation,
@@ -20,6 +20,9 @@ export default function AddProductPage() {
   const { showToast } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
+
+  // Fetch code parts from Supabase (or Dexie fallback)
+  const { data: allCodeParts = [] } = useCodeParts();
 
   const [category, setCategory] = useState('');
   const [kind, setKind] = useState('');
@@ -41,11 +44,21 @@ export default function AddProductPage() {
   const { mutateAsync: saveProduct, isPending } = useUpsertProductMutation();
   const { mutateAsync: updateInv } = useUpdateInventoryMutation();
 
-  const categoryOptions = codePartsSeed.category || [];
-  const kindOptions = codePartsSeed.kind || [];
-  const typeOptions = codePartsSeed.type || [];
-  const brandOptions = codePartsSeed.brand || [];
-  const colorOptions = codePartsSeed.color || [];
+  const categoryOptions = allCodeParts
+    .filter((p) => p.group === 'category')
+    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  const kindOptions = allCodeParts
+    .filter((p) => p.group === 'kind')
+    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  const typeOptions = allCodeParts
+    .filter((p) => p.group === 'type')
+    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  const brandOptions = allCodeParts
+    .filter((p) => p.group === 'brand')
+    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  const colorOptions = allCodeParts
+    .filter((p) => p.group === 'color')
+    .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
 
   const [sizeInputs, setSizeInputs] = useState({
     S: '',
@@ -71,9 +84,8 @@ export default function AddProductPage() {
   }, []);
 
   function getLabel(group, code) {
-    const arr = codePartsSeed[group] || [];
-    const found = arr.find((i) => i.code === code);
-    return (found?.label || code || '').trim();
+    const found = allCodeParts.find((p) => p.group === group && p.code === code);
+    return (found?.label || found?.labelKo || code || '').trim();
   }
 
   function ceilToUnit(value, unit) {
@@ -207,7 +219,7 @@ export default function AddProductPage() {
         <div>
           <div className="page-title">Add Product</div>
           <div className="page-subtitle">
-            Auto code generation and duplicate check based on seed-code-parts
+            Auto code generation and duplicate check based on Supabase code-parts
           </div>
         </div>
       </div>

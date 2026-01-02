@@ -109,20 +109,14 @@ export function CloudUploadIcon({ className, size = 16, strokeWidth = 1.5, color
 
 export function ReceiptIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
   return (
-    <div
-      className={className}
+    <img
+      src={receiptImg}
+      className={`${className} icon-img`}
+      alt="Receipt"
       style={{
         width: size,
         height: size,
-        backgroundColor: color,
-        maskImage: `url(${receiptImg})`,
-        maskSize: 'contain',
-        maskRepeat: 'no-repeat',
-        maskPosition: 'center',
-        WebkitMaskImage: `url(${receiptImg})`,
-        WebkitMaskSize: 'contain',
-        WebkitMaskRepeat: 'no-repeat',
-        WebkitMaskPosition: 'center',
+        objectFit: 'contain',
       }}
     />
   );
@@ -130,20 +124,14 @@ export function ReceiptIcon({ className, size = 16, strokeWidth = 1.5, color = '
 
 export function RefundIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
   return (
-    <div
-      className={className}
+    <img
+      src={refundImg}
+      className={`${className} icon-img`}
+      alt="Refund"
       style={{
         width: size,
         height: size,
-        backgroundColor: color,
-        maskImage: `url(${refundImg})`,
-        maskSize: 'contain',
-        maskRepeat: 'no-repeat',
-        maskPosition: 'center',
-        WebkitMaskImage: `url(${refundImg})`,
-        WebkitMaskSize: 'contain',
-        WebkitMaskRepeat: 'no-repeat',
-        WebkitMaskPosition: 'center',
+        objectFit: 'contain',
       }}
     />
   );

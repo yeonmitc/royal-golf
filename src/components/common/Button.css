@@ -51,6 +51,26 @@
   transform: scale(1.1);
 }
 
+/* Add active state for outline to ensure consistency */
+.btn.outline:active {
+  background: var(--gold); /* Keep gold background on active to match hover intent */
+  color: black;
+  transform: scale(0.96);
+}
+
+/* Image Icon coloring logic for Outline buttons */
+/* Default: Gold filter (assuming source image is black) */
+.btn.outline .icon-img {
+  filter: invert(85%) sepia(21%) saturate(1074%) hue-rotate(355deg) brightness(88%) contrast(93%);
+  transition: filter 0.2s ease;
+}
+
+/* Hover/Active: No filter (Original Black) */
+.btn.outline:hover .icon-img,
+.btn.outline:active .icon-img {
+  filter: none;
+}
+
 /* --- Variant: ghost --- */
 .btn.ghost {
   background: transparent;
