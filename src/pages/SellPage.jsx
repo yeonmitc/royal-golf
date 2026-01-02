@@ -1,6 +1,7 @@
 // src/pages/SellPage.jsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import BarcodeListener from '../components/common/BarcodeListener';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -11,11 +12,16 @@ import { useCheckoutCartMutation } from '../features/sales/salesHooks';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { useCartStore } from '../store/cartStore';
 import { useToast } from '../context/ToastContext';
+import { getGuides } from '../features/guides/guideApi';
+import Select from '../components/common/Select';
+import ReceiptModal from '../components/sales/ReceiptModal';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
   const navigate = useNavigate();
   const { showToast } = useToast();
+
+  const { data: guides } = useQuery({ queryKey: ['guides'], queryFn: getGuides });
 
   const cartItems = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
@@ -23,22 +29,53 @@ export default function SellPage() {
   const totalPrice = useCartStore((s) => s.totalPrice);
   const togglePromo = useCartStore((s) => s.togglePromo);
   const setItemColor = useCartStore((s) => s.setItemColor);
+  const guideId = useCartStore((s) => s.guideId);
+  const setGuideId = useCartStore((s) => s.setGuideId);
 
   const { mutateAsync: checkoutCart, isPending: isCheckoutPending } = useCheckoutCartMutation();
+
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
 
   const handleCheckout = async () => {
     // Get latest items from store directly to ensure we have the updated prices (e.g. after discount)
     const currentItems = useCartStore.getState().items;
+    const currentGuideId = useCartStore.getState().guideId;
     if (currentItems.length === 0) return;
     try {
-      await checkoutCart(currentItems);
+      const result = await checkoutCart({ items: currentItems, guideId: currentGuideId });
+      
+      // Prepare receipt data
+      setReceiptData({
+        id: result.saleId.toString(), // Assuming saleId is returned
+        soldAt: result.soldAt || new Date().toISOString(),
+        items: currentItems.map(item => ({
+          code: item.code,
+          name: item.name || item.nameKo,
+          color: item.color,
+          size: item.sizeDisplay || item.size,
+          qty: item.qty,
+          price: item.unitPricePhp || item.price,
+        })),
+        totalAmount: result.totalAmount,
+        totalQty: result.itemCount,
+        guideId: currentGuideId,
+      });
+      setReceiptOpen(true);
+      
       clearCart();
       showToast('Sale completed successfully.');
-      navigate('/sales');
+      // navigate('/sales'); // Stay on page to print receipt
     } catch (e) {
       console.error(e);
       showToast(e.message || 'Payment failed.');
     }
+  };
+
+  const handleReceiptClose = () => {
+    setReceiptOpen(false);
+    setReceiptData(null);
+    navigate('/sales');
   };
 
   return (
@@ -169,9 +206,29 @@ export default function SellPage() {
             )}
 
             {cartItems.length > 0 && (
-              <div
-                style={{
-                  display: 'flex',
+              <div className="mt-4 px-1">
+                <div className="mb-2">
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">
+                    Guide (Commission 10%)
+                  </label>
+                  <select
+                    className="w-full border rounded px-2 py-1.5 text-sm"
+                    value={guideId || ''}
+                    onChange={(e) => setGuideId(e.target.value)}
+                    style={{ borderColor: 'var(--border-soft)' }}
+                  >
+                    <option value="">No Guide</option>
+                    {(guides || []).map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 12,
@@ -213,10 +270,16 @@ export default function SellPage() {
                   {isCheckoutPending ? 'Processing payment...' : 'Payment'}
                 </Button>
               </div>
+              </div>
             )}
           </Card>
         </div>
       </div>
+      <ReceiptModal
+        open={receiptOpen}
+        receiptData={receiptData}
+        onClose={handleReceiptClose}
+      />
     </div>
   );
 }

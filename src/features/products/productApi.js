@@ -425,9 +425,9 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
   const hasExisting = Array.isArray(existingRows) && existingRows.length > 0;
 
   if (hasExisting) {
-    const merged = { ...(existingRow || {}), ...changes };
-    const totalQty = sumInventoriesRow(merged);
-    const values = { ...changes, total_qty: totalQty };
+    // DB trigger `set_inventory_total_qty` will auto-calculate total_qty
+    // DB trigger `sync_products_qty_from_inventories` will auto-update products.qty
+    const values = { ...changes };
     const existingNo = Number(existingRow?.no ?? 0) || 0;
     if (!existingNo) {
       values.no = await getNextInventoryNo();
@@ -444,11 +444,12 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
       insertRow[col] = 0;
     }
     Object.assign(insertRow, changes);
-    insertRow.total_qty = sumInventoriesRow(insertRow);
+    // insertRow.total_qty = sumInventoriesRow(insertRow); // Handled by trigger
     insertRow.no = await getNextInventoryNo();
     await sbInsert('inventories', [insertRow], { returning: 'minimal' });
   }
 
+  // Fetch updated row to return correct total
   const invRows = await sbSelect('inventories', {
     select: '*',
     filters: [{ column: 'code', op: 'eq', value: c }],

@@ -172,9 +172,63 @@ export default function AnalyzePage() {
                 {Math.round(data.summary.refundAmount).toLocaleString('en-PH')} PHP
               </div>
             </div>
+            <div className="page-card">
+              <div>Total Commission</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.totalCommission || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
           </div>
         )}
       </Card>
+
+      <Card
+        title="Sales by Guide"
+        actions={
+          data && data.byGuide.length > 0 ? [
+            <ExportActions
+              key="by-guide"
+              label="Guide"
+              columns={[
+                { key: 'key', header: 'Guide' },
+                { key: 'qty', header: 'Qty' },
+                { key: 'revenue', header: 'Revenue (PHP)' },
+                { key: 'commission', header: 'Commission (PHP)' },
+              ]}
+              rows={data.byGuide.map((r) => ({
+                key: r.key,
+                qty: r.qty,
+                revenue: Math.round(r.revenue).toLocaleString('en-PH'),
+                commission: Math.round(r.commission).toLocaleString('en-PH'),
+              }))}
+              filename="sales-by-guide.csv"
+              gdriveName="sales-by-guide.csv"
+              csvLabel="Guide CSV"
+              driveLabel="Guide Drive"
+            />
+          ] : null
+        }
+      >
+        {!data ? (
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
+        ) : (
+          <DataTable
+            columns={[
+              { key: 'key', header: 'Guide' },
+              { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
+              { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+              { key: 'commission', header: 'Commission (PHP)', className: 'text-right', tdClassName: 'text-right' },
+            ]}
+            rows={data.byGuide.map((r) => ({
+              id: r.key,
+              ...r,
+              revenue: Math.round(r.revenue).toLocaleString('en-PH'),
+              commission: Math.round(r.commission).toLocaleString('en-PH'),
+            }))}
+          />
+        )}
+      </Card>
+
 
       <Card
         title="Sales by Product (Best/Worst)"

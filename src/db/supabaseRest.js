@@ -186,3 +186,10 @@ export async function sbDelete(table, { filters = [], returning = 'minimal' } = 
     },
   });
 }
+
+export async function sbRpc(funcName, params = {}) {
+  return request(`/rest/v1/rpc/${funcName}`, {
+    method: 'POST',
+    body: params,
+  });
+}

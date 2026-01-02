@@ -3,6 +3,7 @@ import { useState } from 'react';
 import DataTable from '../../../components/common/DataTable';
 import Button from '../../../components/common/Button';
 import RefundModal from '../../../components/sales/RefundModal';
+import ReceiptModal from '../../../components/sales/ReceiptModal';
 import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 
@@ -10,6 +11,8 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   const { showToast } = useToast();
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundTarget, setRefundTarget] = useState(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
 
   function brandFromCode(code) {
     const parts = String(code || '').split('-');
@@ -57,7 +60,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     return <div className="p-4 text-sm text-gray-500">No results found.</div>;
   }
 
-  const { totalQty, totalPrice } = visibleRows.reduce(
+  const { totalQty, totalPrice, totalCommission } = visibleRows.reduce(
     (acc, row) => {
       const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
       const original = Number(row.unitPricePhp || 0);
@@ -67,14 +70,18 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       const finalUnit = isRefunded ? 0 : finalUnitRaw;
       const qty = Number(row.qty || 0) || 0;
       const qtyForTotal = isRefunded ? 0 : qty;
+      const commission = Number(row.commission || 0);
+      const commissionForTotal = isRefunded ? 0 : commission;
 
       return {
         totalQty: acc.totalQty + qtyForTotal,
         totalPrice: acc.totalPrice + finalUnit * qtyForTotal,
+        totalCommission: acc.totalCommission + commissionForTotal,
       };
     },
-    { totalQty: 0, totalPrice: 0 }
+    { totalQty: 0, totalPrice: 0, totalCommission: 0 }
   );
+
   const tableRows = visibleRows.map((row) => {
     const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
     const original = Number(row.unitPricePhp || 0);
@@ -87,6 +94,8 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
     const qtyForTotal = isRefunded ? 0 : qty;
+    const commission = Number(row.commission || 0);
+    const commissionForTotal = isRefunded ? 0 : commission;
 
     const brand = brandFromCode(row.code);
     const refundReason = String(row?.refundReason || '').trim();
@@ -100,8 +109,9 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       sizeDisplay: row.sizeDisplay,
       qty: qty,
       brand,
+      commission: commissionForTotal > 0 ? commissionForTotal.toLocaleString('en-US') : '-',
       unitPricePhp: (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'center', paddingRight: '12px' }}>
           <span>{finalUnit.toLocaleString('en-US')}</span>
           {isRefunded && refundReason ? (
             <span style={{ color: 'var(--text-muted)', fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -110,20 +120,65 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           ) : null}
         </div>
       ),
-      refund: (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isRefunded}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isRefunded) return;
-            setRefundTarget(row);
-            setRefundOpen(true);
-          }}
-        >
-          {isRefunded ? 'Refunded' : 'Refund'}
-        </Button>
+      action: (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+          <Button
+            variant="outline"
+            icon="receipt"
+            title="Receipt"
+            disabled={isRefunded}
+            style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', minWidth: '28px', flex: '0 0 28px' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const groupItems = row.saleGroupId
+                ? visibleRows.filter((r) => r.saleGroupId === row.saleGroupId)
+                : visibleRows.filter((r) => r.soldAt === row.soldAt && r.guideId === row.guideId);
+
+              const items = groupItems.map((r) => {
+                const rIsRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
+                const rOriginal = Number(r.unitPricePhp || 0);
+                const rDiscounted = r.discountUnitPricePhp != null ? Number(r.discountUnitPricePhp) : null;
+                const rIsDiscounted = rDiscounted !== null && rDiscounted !== rOriginal;
+                const rFinalRaw = rIsDiscounted ? rDiscounted : rOriginal;
+                const rFinal = rIsRefunded ? 0 : rFinalRaw;
+                return {
+                  code: r.code,
+                  name: r.nameKo || r.name,
+                  color: r.color,
+                  size: r.sizeDisplay,
+                  qty: Number(r.qty || 0),
+                  price: rFinal,
+                };
+              });
+              
+              const totalAmt = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+              const totalQ = items.reduce((sum, i) => sum + i.qty, 0);
+
+              setReceiptData({
+                id: row.saleGroupId || row.saleId.toString(),
+                soldAt: row.soldAt,
+                items,
+                totalAmount: totalAmt,
+                totalQty: totalQ,
+                guideId: row.guideId,
+              });
+              setReceiptOpen(true);
+            }}
+          />
+          <Button
+            variant="outline"
+            icon="refund"
+            title={isRefunded ? 'Refunded' : 'Refund'}
+            disabled={isRefunded}
+            style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', minWidth: '28px', flex: '0 0 28px' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isRefunded) return;
+              setRefundTarget(row);
+              setRefundOpen(true);
+            }}
+          />
+        </div>
       ),
       style: isRefunded
         ? { backgroundColor: 'rgba(148, 163, 184, 0.18)', color: 'var(--text-main)' }
@@ -155,8 +210,9 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     sizeDisplay: '',
     brand: '',
     qty: totalQty.toLocaleString('en-US'),
+    commission: totalCommission > 0 ? totalCommission.toLocaleString('en-US') : '-',
     unitPricePhp: totalPrice.toLocaleString('en-US'),
-    refund: '',
+    action: '',
     style: { color: 'var(--gold-soft)', fontWeight: 700 },
   });
 
@@ -180,10 +236,16 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
             {
               key: 'unitPricePhp',
               header: 'price',
-              className: 'text-right',
-              tdClassName: 'text-right',
+              className: 'text-left',
+              tdClassName: 'text-left',
             },
-            { key: 'refund', header: 'refund', className: 'text-center', tdClassName: 'text-center' },
+            {
+              key: 'commission',
+              header: 'comm.',
+              className: 'text-right text-xs',
+              tdClassName: 'text-right text-xs text-muted',
+            },
+            { key: 'action', header: 'receipt / refund', className: 'text-center', tdClassName: 'text-center' },
           ]}
           rows={tableRows}
           emptyMessage="No results found."
@@ -215,6 +277,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
         onClose={() => {
           setRefundOpen(false);
           setRefundTarget(null);
+        }}
+      />
+      <ReceiptModal
+        open={receiptOpen}
+        receiptData={receiptData}
+        onClose={() => {
+          setReceiptOpen(false);
+          setReceiptData(null);
         }}
       />
     </>

@@ -10,6 +10,7 @@ import SalesHistoryPage from './pages/SalesHistoryPage';
 import SellPage from './pages/SellPage';
 import SettingsPage from './pages/SettingsPage';
 import AnalyzePage from './pages/AnalyzePage';
+import GuidesPage from './pages/GuidesPage';
 
 const LogsPageDev = import.meta.env.DEV ? lazy(() => import('./pages/LogsPage')) : null;
 
@@ -26,6 +27,14 @@ export default function App() {
           element={
             <AdminRoute>
               <AnalyzePage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/guides"
+          element={
+            <AdminRoute>
+              <GuidesPage />
             </AdminRoute>
           }
         />

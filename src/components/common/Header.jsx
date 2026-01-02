@@ -97,6 +97,7 @@ export default function Header() {
             { to: '/sell', label: 'sell product' },
             { to: '/sales', label: 'sell list' },
             { to: '/analyze', label: 'analyze' },
+            { to: '/guides', label: 'guides' },
             { to: '/add', label: 'add product' },
             { to: '/settings', label: 'setting' },
           ].map((item) => (

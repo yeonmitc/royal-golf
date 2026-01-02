@@ -1,3 +1,6 @@
+import receiptImg from '../../assets/receipt.png';
+import refundImg from '../../assets/refund.png';
+
 export function SearchIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
   return (
     <svg
@@ -104,6 +107,48 @@ export function CloudUploadIcon({ className, size = 16, strokeWidth = 1.5, color
   );
 }
 
+export function ReceiptIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+  return (
+    <div
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        maskImage: `url(${receiptImg})`,
+        maskSize: 'contain',
+        maskRepeat: 'no-repeat',
+        maskPosition: 'center',
+        WebkitMaskImage: `url(${receiptImg})`,
+        WebkitMaskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+      }}
+    />
+  );
+}
+
+export function RefundIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+  return (
+    <div
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        maskImage: `url(${refundImg})`,
+        maskSize: 'contain',
+        maskRepeat: 'no-repeat',
+        maskPosition: 'center',
+        WebkitMaskImage: `url(${refundImg})`,
+        WebkitMaskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+      }}
+    />
+  );
+}
+
 const ICON_MAP = {
   search: SearchIcon,
   refresh: RefreshIcon,
@@ -113,6 +158,8 @@ const ICON_MAP = {
   today: CalendarIcon,
   upload: CloudUploadIcon,
   cloud: CloudUploadIcon,
+  receipt: ReceiptIcon,
+  refund: RefundIcon,
 };
 
 export default function Icon({ name, ...props }) {

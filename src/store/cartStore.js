@@ -23,11 +23,12 @@ export const useCartStore = create((set, get) => ({
   items: [],
   totalQty: 0,
   totalPrice: 0,
+  guideId: null,
 
   /**
    * 장바구니 비우기 (결제 완료 후 호출)
    */
-  clearCart: () => set({ items: [], totalQty: 0, totalPrice: 0 }),
+  clearCart: () => set({ items: [], totalQty: 0, totalPrice: 0, guideId: null }),
 
   /**
    * 장바구니에 아이템 추가
@@ -179,4 +180,6 @@ export const useCartStore = create((set, get) => ({
   getTotalQty: () => get().items.reduce((sum, i) => sum + i.qty, 0),
 
   getTotalAmount: () => get().items.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0),
+
+  setGuideId: (id) => set({ guideId: id }),
 }));

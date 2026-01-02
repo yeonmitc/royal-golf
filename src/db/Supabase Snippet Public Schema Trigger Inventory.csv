@@ -1,0 +1,586 @@
+schema,function_name,function_def
+public,enforce_free_gift_when_price_zero,"CREATE OR REPLACE FUNCTION public.enforce_free_gift_when_price_zero()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if coalesce(new.price, 0) = 0 then
+    new.free_gift := true;
+  end if;
+  return new;
+end;
+$function$
+"
+public,finalize_sale_group,"CREATE OR REPLACE FUNCTION public.finalize_sale_group(p_group_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+declare
+  v_subtotal numeric;
+  v_guide_id bigint;
+  v_rate numeric;
+  v_commission numeric;
+begin
+  -- 영수증 헤더 락(중복 finalize 방지)
+  select guide_id, guide_rate
+    into v_guide_id, v_rate
+  from public.sale_groups
+  where id = p_group_id
+  for update;
+
+  if not found then
+    raise exception 'sale_group not found: %', p_group_id;
+  end if;
+
+  -- 라인 합계(정상가 기준)
+  select coalesce(sum(price * qty), 0)
+    into v_subtotal
+  from public.sales
+  where sale_group_id = p_group_id
+    and refunded_at is null;
+
+  -- 고객 결제 금액은 정상가 그대로
+  update public.sale_groups
+  set subtotal = v_subtotal,
+      total = v_subtotal
+  where id = p_group_id;
+
+  -- 가이드가 선택된 경우: 내부 커미션/포인트 적립
+  if v_guide_id is not null then
+    v_commission := round(v_subtotal * v_rate, 2);
+
+    update public.sale_groups
+    set guide_commission = v_commission
+    where id = p_group_id;
+
+    -- 같은 영수증 중복 적립 방지
+    if not exists (
+      select 1
+      from public.guide_point_ledger
+      where sale_group_id = p_group_id
+        and reason = 'earn_from_sale'
+    ) then
+      insert into public.guide_point_ledger
+        (guide_id, delta, reason, sale_group_id, note)
+      values
+        (v_guide_id, v_commission, 'earn_from_sale', p_group_id, 'Auto earn 10% from sale');
+    end if;
+  end if;
+end $function$
+"
+public,inv_apply_delta,"CREATE OR REPLACE FUNCTION public.inv_apply_delta(p_code text, p_size size_std, p_qty integer)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if p_qty is null or p_qty = 0 then
+    return;
+  end if;
+
+  if p_size = 'S' then
+    update public.inventories set s = s + p_qty where code = p_code;
+  elsif p_size = 'M' then
+    update public.inventories set m = m + p_qty where code = p_code;
+  elsif p_size = 'L' then
+    update public.inventories set l = l + p_qty where code = p_code;
+  elsif p_size = 'XL' then
+    update public.inventories set xl = xl + p_qty where code = p_code;
+  elsif p_size = '2XL' then
+    update public.inventories set ""2xl"" = ""2xl"" + p_qty where code = p_code;
+  elsif p_size = '3XL' then
+    update public.inventories set ""3xl"" = ""3xl"" + p_qty where code = p_code;
+  elsif p_size = 'Free' then
+    update public.inventories set free = free + p_qty where code = p_code;
+  else
+    raise exception 'Unknown size_std: %', p_size;
+  end if;
+
+  if not found then
+    raise exception 'Inventory row not found for code=%', p_code;
+  end if;
+end $function$
+"
+public,normalize_sale_input,"CREATE OR REPLACE FUNCTION public.normalize_sale_input(p_code_raw text, p_size_raw text)
+ RETURNS TABLE(code text, size_std size_std, warning text)
+ LANGUAGE plpgsql
+AS $function$
+declare
+  c text := btrim(coalesce(p_code_raw,''));
+  s text := btrim(coalesce(p_size_raw,''));
+  item_code text;
+  label text;
+  num int;
+  mapped public.size_std;
+begin
+  if c = '' then
+    return query select null::text, null::public.size_std, 'EMPTY_CODE';
+    return;
+  end if;
+
+  item_code := split_part(c,'-',2);
+
+  if lower(s) = 'free' then
+    return query select c, 'Free'::public.size_std, null;
+    return;
+  end if;
+
+  if s ~* '^(S|M|L|XL|2XL|3XL)\s*\(\d+\)$' then
+    label := upper(regexp_replace(s,'^([A-Za-z0-9]+)\s*\(\d+\)$','\1'));
+    num := (regexp_replace(s,'^[A-Za-z0-9]+\s*\((\d+)\)$','\1'))::int;
+
+    if item_code = 'GG' then
+      select gsm.size_std into mapped
+      from public.glove_size_map gsm
+      where gsm.glove_num = num;
+
+      if mapped is not null then
+        if mapped::text <> label then
+          return query select c, mapped, 'SIZE_LABEL_NUMERIC_MISMATCH(label='||label||', num='||num||', mapped='||mapped||')';
+          return;
+        end if;
+        return query select c, mapped, null;
+        return;
+      end if;
+    end if;
+
+    return query select c, label::public.size_std, null;
+    return;
+  end if;
+
+  if upper(s) in ('S','M','L','XL','2XL','3XL') then
+    return query select c, upper(s)::public.size_std, null;
+    return;
+  end if;
+
+  if s ~ '^[0-9]+$' and item_code = 'GG' then
+    num := s::int;
+    select gsm.size_std into mapped
+    from public.glove_size_map gsm
+    where gsm.glove_num = num;
+
+    if mapped is not null then
+      return query select c, mapped, null;
+      return;
+    end if;
+  end if;
+
+  return query select c, null, 'UNKNOWN_SIZE(raw='||s||')';
+end $function$
+"
+public,refund_item,"CREATE OR REPLACE FUNCTION public.refund_item(p_sale_id bigint, p_reason text DEFAULT NULL::text, p_refunded_at timestamp with time zone DEFAULT now())
+ RETURNS TABLE(refund_id bigint, sale_id bigint, out_code text, size_std size_std, qty integer, remaining integer)
+ LANGUAGE plpgsql
+AS $function$
+declare
+  srec record;
+  col_name text;
+  current_stock int;
+  new_stock int;
+  v_refund_id bigint;
+begin
+  -- 1) sale 존재 + 잠금 (동시 환불 방지)
+  select id, code, size_std, qty
+    into srec
+  from public.sales
+  where id = p_sale_id
+  for update;
+
+  if not found then
+    raise exception 'sale not found: %', p_sale_id;
+  end if;
+
+  if srec.size_std is null then
+    raise exception 'sale has null size_std (cannot restock): sale_id=%', p_sale_id;
+  end if;
+
+  -- 2) 이미 환불됐는지 체크 (refunds unique(sale_id)로도 막힘)
+  if exists (select 1 from public.refunds r where r.sale_id = p_sale_id) then
+    raise exception 'sale already refunded: %', p_sale_id;
+  end if;
+
+  -- 3) inventory 잠금
+  perform 1
+  from public.inventories i
+  where i.code = srec.code
+  for update;
+
+  if not found then
+    raise exception 'inventory not found for code: %', srec.code;
+  end if;
+
+  -- 4) 사이즈 컬럼 결정
+  col_name := case srec.size_std::text
+    when 'S'    then 's'
+    when 'M'    then 'm'
+    when 'L'    then 'l'
+    when 'XL'   then 'xl'
+    when '2XL'  then '2xl'
+    when '3XL'  then '3xl'
+    when 'Free' then 'free'
+    else null
+  end;
+
+  if col_name is null then
+    raise exception 'unsupported size_std in sale: %', srec.size_std::text;
+  end if;
+
+  -- 5) 현재 재고 읽기
+  execute format('select %I from public.inventories i where i.code = $1', col_name)
+    into current_stock
+    using srec.code;
+
+  if current_stock is null then
+    current_stock := 0;
+  end if;
+
+  new_stock := current_stock + srec.qty;
+
+  -- 6) 재고 복구
+  execute format('update public.inventories i set %I = $1, updated_at = now() where i.code = $2', col_name)
+    using new_stock, srec.code;
+
+  -- 7) refunds 기록
+  insert into public.refunds(sale_id, refunded_at, reason)
+  values (p_sale_id, p_refunded_at, p_reason)
+  returning id into v_refund_id;
+
+  -- 8) sales에도 표시
+  update public.sales
+  set refunded_at = p_refunded_at,
+      refund_reason = p_reason
+  where id = p_sale_id;
+
+  -- 9) 반환
+  return query
+  select v_refund_id, p_sale_id, srec.code, srec.size_std, srec.qty, new_stock;
+
+end $function$
+"
+public,sell_item,"CREATE OR REPLACE FUNCTION public.sell_item(p_code_raw text, p_size_raw text, p_qty integer DEFAULT 1, p_unit_price_php numeric DEFAULT NULL::numeric, p_discount_unit_price_php numeric DEFAULT NULL::numeric, p_sold_at timestamp with time zone DEFAULT now())
+ RETURNS TABLE(sale_id bigint, out_code text, size_std size_std, qty integer, unit_price_php numeric, discount_unit_price_php numeric, charged_unit_php numeric, line_total_php numeric, warning text, remaining integer)
+ LANGUAGE plpgsql
+AS $function$
+declare
+  norm record;
+  col_name text;
+  current_stock int;
+  new_stock int;
+  v_sale_id bigint;
+
+  v_unit numeric(12,2);
+  v_disc_unit numeric(12,2);
+  v_charged_unit numeric(12,2);
+  v_line_total numeric(12,2);
+
+  v_is_freegift boolean;
+  v_product_price numeric(12,2);
+begin
+  if p_qty is null or p_qty <= 0 then
+    raise exception 'qty must be >= 1';
+  end if;
+
+  select * into norm
+  from public.normalize_sale_input(p_code_raw, p_size_raw);
+
+  if norm.code is null or norm.code = '' then
+    raise exception 'invalid code';
+  end if;
+
+  if norm.size_std is null then
+    raise exception 'cannot normalize size: %', coalesce(p_size_raw,'(null)');
+  end if;
+
+  -- 제품 정보(가격, freegift)
+  select p.free_gift, p.sale_price
+    into v_is_freegift, v_product_price
+  from public.products p
+  where p.code = norm.code;
+
+  if not found then
+    raise exception 'product not found for code: %', norm.code;
+  end if;
+
+  -- unit 결정
+  v_unit := coalesce(p_unit_price_php, v_product_price, 0);
+  if v_unit < 0 then
+    raise exception 'unit_price_php must be >= 0';
+  end if;
+
+  -- discount override unit (nullable)
+  v_disc_unit := p_discount_unit_price_php;
+  if v_disc_unit is not null and v_disc_unit < 0 then
+    raise exception 'discount_unit_price_php must be >= 0';
+  end if;
+
+  -- freegift 강제 (어떤 값이 오든 0으로 override)
+  if v_is_freegift then
+    v_disc_unit := 0;
+  end if;
+
+  -- inventory row lock
+  perform 1
+  from public.inventories i
+  where i.code = norm.code
+  for update;
+
+  if not found then
+    raise exception 'inventory not found for code: %', norm.code;
+  end if;
+
+  col_name := case norm.size_std::text
+    when 'S'    then 's'
+    when 'M'    then 'm'
+    when 'L'    then 'l'
+    when 'XL'   then 'xl'
+    when '2XL'  then '2xl'
+    when '3XL'  then '3xl'
+    when 'Free' then 'free'
+    else null
+  end;
+
+  if col_name is null then
+    raise exception 'unsupported size_std: %', norm.size_std::text;
+  end if;
+
+  execute format('select %I from public.inventories i where i.code = $1', col_name)
+    into current_stock
+    using norm.code;
+
+  current_stock := coalesce(current_stock, 0);
+
+  if current_stock < p_qty then
+    raise exception 'insufficient stock: code=% size=% have=% need=%',
+      norm.code, norm.size_std::text, current_stock, p_qty;
+  end if;
+
+  new_stock := current_stock - p_qty;
+
+  execute format('update public.inventories i set %I = $1, updated_at = now() where i.code = $2', col_name)
+    using new_stock, norm.code;
+
+  -- charged unit + totals (override 모델)
+  v_charged_unit := coalesce(v_disc_unit, v_unit);
+  v_line_total := v_charged_unit * p_qty;
+
+  insert into public.sales (
+    sold_at, code_raw, code, size_raw, size_std, qty,
+    unit_price_php, discount_unit_price_php, line_total_php,
+    price, warning
+  )
+  values (
+    p_sold_at, p_code_raw, norm.code, p_size_raw, norm.size_std, p_qty,
+    v_unit, v_disc_unit, v_line_total,
+    v_line_total, norm.warning
+  )
+  returning id into v_sale_id;
+
+  return query
+  select v_sale_id, norm.code, norm.size_std, p_qty,
+         v_unit, v_disc_unit, v_charged_unit, v_line_total,
+         norm.warning, new_stock;
+end $function$
+"
+public,sell_item,"CREATE OR REPLACE FUNCTION public.sell_item(p_code_raw text, p_size_raw text, p_qty integer DEFAULT 1, p_price numeric DEFAULT 0, p_sold_at timestamp with time zone DEFAULT now())
+ RETURNS TABLE(sale_id bigint, out_code text, size_std size_std, qty integer, price numeric, warning text, remaining integer)
+ LANGUAGE plpgsql
+AS $function$
+declare
+  norm record;
+  col_name text;
+  current_stock int;
+  new_stock int;
+  v_sale_id bigint;
+begin
+  if p_qty is null or p_qty <= 0 then
+    raise exception 'qty must be >= 1';
+  end if;
+
+  -- 1) Normalize (trim + glove mapping + size parsing)
+  select * into norm
+  from public.normalize_sale_input(p_code_raw, p_size_raw);
+
+  if norm.code is null or norm.code = '' then
+    raise exception 'invalid code';
+  end if;
+
+  if norm.size_std is null then
+    raise exception 'cannot normalize size: %', coalesce(p_size_raw,'(null)');
+  end if;
+
+  -- 2) Lock inventory row to avoid race conditions
+  perform 1
+  from public.inventories i
+  where i.code = norm.code
+  for update;
+
+  if not found then
+    raise exception 'inventory not found for code: %', norm.code;
+  end if;
+
+  -- 3) Decide which qty column to decrement
+  col_name := case norm.size_std::text
+    when 'S'    then 's'
+    when 'M'    then 'm'
+    when 'L'    then 'l'
+    when 'XL'   then 'xl'
+    when '2XL'  then '2xl'
+    when '3XL'  then '3xl'
+    when 'Free' then 'free'
+    else null
+  end;
+
+  if col_name is null then
+    raise exception 'unsupported size_std: %', norm.size_std::text;
+  end if;
+
+  -- 4) Read current stock
+  execute format('select %I from public.inventories i where i.code = $1', col_name)
+    into current_stock
+    using norm.code;
+
+  if current_stock is null then
+    current_stock := 0;
+  end if;
+
+  if current_stock < p_qty then
+    raise exception 'insufficient stock: code=% size=% have=% need=%',
+      norm.code, norm.size_std::text, current_stock, p_qty;
+  end if;
+
+  new_stock := current_stock - p_qty;
+
+  -- 5) Decrement stock
+  execute format('update public.inventories i set %I = $1, updated_at = now() where i.code = $2', col_name)
+    using new_stock, norm.code;
+
+  -- 6) Insert sale record
+  insert into public.sales (sold_at, code_raw, code, size_raw, size_std, qty, price, warning)
+  values (p_sold_at, p_code_raw, norm.code, p_size_raw, norm.size_std, p_qty, p_price, norm.warning)
+  returning id into v_sale_id;
+
+  -- 7) Return result
+  return query
+  select v_sale_id, norm.code, norm.size_std, p_qty, p_price, norm.warning, new_stock;
+
+end $function$
+"
+public,set_inventory_total_qty,"CREATE OR REPLACE FUNCTION public.set_inventory_total_qty()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  new.total_qty :=
+    coalesce(new.s, 0) +
+    coalesce(new.m, 0) +
+    coalesce(new.l, 0) +
+    coalesce(new.xl, 0) +
+    coalesce(new.""2xl"", 0) +
+    coalesce(new.""3xl"", 0) +
+    coalesce(new.free, 0);
+  return new;
+end;
+$function$
+"
+public,sync_products_qty_from_inventories,"CREATE OR REPLACE FUNCTION public.sync_products_qty_from_inventories()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  UPDATE products
+  SET qty = NEW.total_qty
+  WHERE code = NEW.code;
+
+  RETURN NEW;
+END;
+$function$
+"
+public,trg_sales_apply_stock_on_insert,"CREATE OR REPLACE FUNCTION public.trg_sales_apply_stock_on_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+declare
+  v_available integer;
+begin
+  -- 이미 적용된 row면 스킵
+  if new.stock_applied_at is not null then
+    return new;
+  end if;
+
+  -- 재고 부족 방지: 해당 사이즈의 현재 재고를 읽고 체크
+  if new.size_std = 'S' then
+    select s into v_available from public.inventories where code = new.code for update;
+  elsif new.size_std = 'M' then
+    select m into v_available from public.inventories where code = new.code for update;
+  elsif new.size_std = 'L' then
+    select l into v_available from public.inventories where code = new.code for update;
+  elsif new.size_std = 'XL' then
+    select xl into v_available from public.inventories where code = new.code for update;
+  elsif new.size_std = '2XL' then
+    select ""2xl"" into v_available from public.inventories where code = new.code for update;
+  elsif new.size_std = '3XL' then
+    select ""3xl"" into v_available from public.inventories where code = new.code for update;
+  elsif new.size_std = 'Free' then
+    select free into v_available from public.inventories where code = new.code for update;
+  else
+    raise exception 'Invalid size_std=%', new.size_std;
+  end if;
+
+  if v_available is null then
+    raise exception 'Inventory row missing for code=%', new.code;
+  end if;
+
+  if v_available < new.qty then
+    raise exception 'Insufficient stock: code=% size=% requested=% available=%',
+      new.code, new.size_std, new.qty, v_available;
+  end if;
+
+  -- 차감 적용 (판매=감소)
+  perform public.inv_apply_delta(new.code, new.size_std, -new.qty);
+
+  new.stock_applied_at := now();
+  return new;
+end $function$
+"
+public,trg_sales_fill_group_id,"CREATE OR REPLACE FUNCTION public.trg_sales_fill_group_id()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if new.sale_group_id is null then
+    new.sale_group_id := gen_random_uuid();
+  end if;
+  return new;
+end $function$
+"
+public,trg_sales_restore_stock_on_refund,"CREATE OR REPLACE FUNCTION public.trg_sales_restore_stock_on_refund()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if old.refunded_at is null and new.refunded_at is not null then
+    if old.stock_applied_at is not null then
+      perform public.inv_apply_delta(old.code, old.size_std, old.qty);
+    end if;
+  end if;
+
+  return new;
+end $function$
+"
+public,trim_product_code,"CREATE OR REPLACE FUNCTION public.trim_product_code()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  new.product_code := btrim(new.product_code);
+  return new;
+end $function$
+"
+public,trim_sale_code,"CREATE OR REPLACE FUNCTION public.trim_sale_code()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  new.product_code := btrim(new.product_code);
+  return new;
+end $function$
+"

@@ -90,8 +90,7 @@ export default function AddProductPage() {
   const computedP2PricePhp =
     computedKrwPrice === ''
       ? ''
-      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25, 100));
-
+      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25, 100))
   const computedP3PricePhp =
     computedKrwPrice === ''
       ? ''
