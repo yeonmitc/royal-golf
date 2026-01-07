@@ -186,7 +186,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
           : undefined,
       __copyText: [
-        soldAtDate,
+        soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
         row.code,
         row.sizeDisplay,
