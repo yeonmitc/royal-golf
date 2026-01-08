@@ -463,6 +463,24 @@ export async function setSaleFreeGift({ saleId, freeGift, code, size } = {}) {
   return { ok: true, saleId: sid, freeGift: Boolean(freeGift), code, size };
 }
 
+export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 } = {}) {
+  requireAdminOrThrow();
+  const gid = String(saleGroupId || '').trim();
+  if (!gid) throw new Error('INVALID_SALE_GROUP_ID');
+  const guide = guideId ? Number(guideId) : null;
+  await sbUpdate(
+    'sale_groups',
+    { guide_id: guide, guide_rate: guide ? Number(guideRate || 0.1) : 0 },
+    { filters: [{ column: 'id', op: 'eq', value: gid }], returning: 'minimal' }
+  );
+  try {
+    await sbRpc('finalize_sale_group', { p_group_id: gid });
+  } catch {
+    // ignore
+  }
+  return { ok: true };
+}
+
 async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query = '' } = {}) {
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;

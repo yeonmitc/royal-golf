@@ -1,11 +1,15 @@
 // src/features/sales/components/SalesTable.jsx
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import DataTable from '../../../components/common/DataTable';
 import Button from '../../../components/common/Button';
 import RefundModal from '../../../components/sales/RefundModal';
 import ReceiptModal from '../../../components/sales/ReceiptModal';
+import Modal from '../../../components/common/Modal';
 import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
+import { getGuides } from '../../guides/guideApi';
+import { useSetSaleGroupGuideMutation } from '../salesHooks';
 
 export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const { showToast } = useToast();
@@ -13,6 +17,11 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   const [refundTarget, setRefundTarget] = useState(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideTargetGroup, setGuideTargetGroup] = useState(null);
+  const [selectedGuide, setSelectedGuide] = useState('');
+  const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
+  const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
 
   function brandFromCode(code) {
     const parts = String(code || '').split('-');
@@ -102,6 +111,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
 
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
+      saleGroupId: row.saleGroupId,
       soldAtDate,
       soldAtTime,
       code: row.code,
@@ -251,22 +261,11 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           emptyMessage="No results found."
           onRowClick={async (r) => {
             if (r?.clickable === false) return;
-            const text = String(r.__copyText || '');
-            if (!text) return;
-            try {
-              await navigator.clipboard.writeText(text);
-            } catch {
-              const ta = document.createElement('textarea');
-              ta.value = text;
-              ta.setAttribute('readonly', '');
-              ta.style.position = 'fixed';
-              ta.style.left = '-9999px';
-              document.body.appendChild(ta);
-              ta.select();
-              document.execCommand('copy');
-              document.body.removeChild(ta);
-            }
-            showToast('Row copied.');
+            const grp = r?.saleGroupId;
+            if (!grp) return;
+            setGuideTargetGroup(grp);
+            setSelectedGuide('');
+            setGuideOpen(true);
           }}
           pagination={pagination}
         />
@@ -287,6 +286,57 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
           setReceiptData(null);
         }}
       />
+      <Modal
+        open={guideOpen}
+        onClose={() => {
+          setGuideOpen(false);
+          setGuideTargetGroup(null);
+          setSelectedGuide('');
+        }}
+        title="Assign Guide (10% Commission)"
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <Button variant="outline" onClick={() => { setGuideOpen(false); setGuideTargetGroup(null); setSelectedGuide(''); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                if (!guideTargetGroup) return;
+                try {
+                  await setGroupGuide({ saleGroupId: guideTargetGroup, guideId: selectedGuide || null, guideRate: 0.1 });
+                  setGuideOpen(false);
+                  setGuideTargetGroup(null);
+                  setSelectedGuide('');
+                  showToast('Guide commission applied.');
+                } catch (e) {
+                  showToast(String(e?.message || e) || 'Failed to set guide.');
+                }
+              }}
+              disabled={settingGuide}
+            >
+              {settingGuide ? 'Saving...' : 'Apply'}
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <label className="input-label">Guide</label>
+          <select
+            className="w-full rounded-full border border-[#32324a] bg-[#141420] px-3 py-1.5 text-sm text-[var(--text-main)] pr-8 focus:outline-none focus:border-[var(--gold-soft)] focus:ring-1 focus:ring-[var(--gold-soft)]"
+            value={selectedGuide}
+            onChange={(e) => setSelectedGuide(e.target.value)}
+          >
+            <option value="">No Guide</option>
+            {(guides || []).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </Modal>
     </>
   );
 }

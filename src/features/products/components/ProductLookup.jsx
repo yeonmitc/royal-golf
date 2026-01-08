@@ -159,6 +159,24 @@ export default function ProductLookup({
                 }}
                 placeholder="Scan barcode or enter code"
                 readOnly={codeInputReadOnly}
+                onClick={async () => {
+                  const v = String(code || '').trim();
+                  if (!v) return;
+                  try {
+                    await navigator.clipboard.writeText(v);
+                  } catch {
+                    const ta = document.createElement('textarea');
+                    ta.value = v;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                  }
+                  showToast('Code copied.');
+                }}
               />
             </div>
           </div>

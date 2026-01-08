@@ -78,3 +78,7 @@ export function setSaleFreeGift(payload) {
     () => local.setSaleFreeGift(payload)
   );
 }
+
+export function setSaleGroupGuide(payload) {
+  return supabase.setSaleGroupGuide(payload);
+}

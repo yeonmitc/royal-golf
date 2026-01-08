@@ -29,6 +29,7 @@ export default function SellPage() {
   const totalPrice = useCartStore((s) => s.totalPrice);
   const togglePromo = useCartStore((s) => s.togglePromo);
   const setItemColor = useCartStore((s) => s.setItemColor);
+  const removeItem = useCartStore((s) => s.removeItem);
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
 
@@ -129,6 +130,7 @@ export default function SellPage() {
                       className: 'text-right',
                       tdClassName: 'text-right',
                     },
+                    { key: 'action', header: 'Action', className: 'text-center', tdClassName: 'text-center' },
                   ]}
                   rows={cartItems.map((item, idx) => {
                     const isFree = item.unitPricePhp === 0;
@@ -199,6 +201,18 @@ export default function SellPage() {
                       ),
                       qty: item.qty,
                       amount: (item.qty * item.unitPricePhp).toLocaleString('en-PH'),
+                      action: (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeItem(item.code, item.size);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      ),
                     };
                   })}
                 />

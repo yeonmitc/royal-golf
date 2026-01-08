@@ -1,4 +1,5 @@
 // src/features/products/components/ProductScanResult.jsx
+import { useEffect, useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
@@ -14,6 +15,18 @@ import { useProductWithInventory } from '../productHooks';
 export default function ProductScanResult({ code }) {
   const { data, isLoading, isError, error } = useProductWithInventory(code);
   const addItem = useCartStore((s) => s.addItem);
+  const [localStocks, setLocalStocks] = useState({});
+
+  useEffect(() => {
+    const bySize = new Map((data?.inventory || []).map((r) => [r.size || 'Free', r]));
+    const standard = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
+    const init = {};
+    standard.forEach((sz) => {
+      const r = bySize.get(sz);
+      init[sz] = Number(r?.stockQty ?? 0) || 0;
+    });
+    setLocalStocks(init);
+  }, [data?.code]);
 
   if (!code) {
     return (
@@ -55,6 +68,9 @@ export default function ProductScanResult({ code }) {
   const defaultColor = findLabel('color', data.colorCode);
 
   const handleAddToCart = (sizeRow) => {
+    const sizeKey = sizeRow.size;
+    const remaining = Number(localStocks[sizeKey] ?? sizeRow.stockQty ?? 0) || 0;
+    if (remaining <= 0) return;
     addItem({
       code: data.code,
       size: sizeRow.size,
@@ -64,6 +80,10 @@ export default function ProductScanResult({ code }) {
       unitPricePhp: data.salePricePhp,
       qty: 1,
     });
+    setLocalStocks((prev) => ({
+      ...prev,
+      [sizeKey]: Math.max(0, (Number(prev[sizeKey] ?? sizeRow.stockQty ?? 0) || 0) - 1),
+    }));
   };
 
   return (
@@ -138,12 +158,12 @@ export default function ProductScanResult({ code }) {
               rows={rows.map((row) => ({
                 id: `${row.code}-${row.size}`,
                 size: row.sizeDisplay || row.size || '-',
-                stock: row.stockQty ?? 0,
+                stock: Number(localStocks[row.size] ?? row.stockQty ?? 0) || 0,
                 action: (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!row.stockQty}
+                    disabled={!((Number(localStocks[row.size] ?? row.stockQty ?? 0) || 0) > 0)}
                     onClick={() => handleAddToCart(row)}
                   >
                     + Add
