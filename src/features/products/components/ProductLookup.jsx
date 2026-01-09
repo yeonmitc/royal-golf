@@ -90,9 +90,6 @@ export default function ProductLookup({
       }
 
       if (prod) {
-        const currentName = prod.nameKo || '';
-        const currentPrice = prod.salePricePhp ?? 0;
-
         const newName = localName.trim();
         const newPrice = Number(localPrice) || 0;
 

@@ -107,7 +107,7 @@ export function CloudUploadIcon({ className, size = 16, strokeWidth = 1.5, color
   );
 }
 
-export function ReceiptIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+export function ReceiptIcon({ className, size = 16, strokeWidth: _strokeWidth = 1.5, color: _color = 'currentColor' }) {
   return (
     <img
       src={receiptImg}
@@ -122,7 +122,7 @@ export function ReceiptIcon({ className, size = 16, strokeWidth = 1.5, color = '
   );
 }
 
-export function RefundIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+export function RefundIcon({ className, size = 16, strokeWidth: _strokeWidth = 1.5, color: _color = 'currentColor' }) {
   return (
     <img
       src={refundImg}
@@ -137,6 +137,22 @@ export function RefundIcon({ className, size = 16, strokeWidth = 1.5, color = 'c
   );
 }
 
+export function PersonIcon({ className, size = 16, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill={color}
+      className={className}
+    >
+      <circle cx="32" cy="22" r="14" />
+      <path d="M8 60c0-13.254 10.745-24 24-24s24 10.746 24 24H8z" />
+    </svg>
+  );
+}
+
 const ICON_MAP = {
   search: SearchIcon,
   refresh: RefreshIcon,
@@ -148,6 +164,7 @@ const ICON_MAP = {
   cloud: CloudUploadIcon,
   receipt: ReceiptIcon,
   refund: RefundIcon,
+  person: PersonIcon,
 };
 
 export default function Icon({ name, ...props }) {

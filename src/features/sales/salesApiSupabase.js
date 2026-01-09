@@ -25,14 +25,6 @@ function nowLocalIsoLikeUtc() {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}.${ms}Z`;
 }
 
-function sumInventoriesRow(row) {
-  if (!row) return 0;
-  return SIZE_ORDER.reduce((sum, sizeKey) => {
-    const col = SIZE_TO_COLUMN[sizeKey];
-    return sum + (Number(row?.[col] ?? 0) || 0);
-  }, 0);
-}
-
 function toMsFromIso(iso) {
   const s = String(iso || '').trim();
   if (!s) return 0;
@@ -204,12 +196,9 @@ export async function checkoutCart(payload) {
   const invByCode = new Map((inventories || []).map((r) => [String(r?.code || '').trim(), r]));
 
   for (const item of items) {
-    const { code, size, qty } = item;
+    const { code } = item;
     if (!code) throw new Error('Missing product code.');
-    const sizeKey = normalizeSizeKey(size ?? item.sizeDisplay);
-    const col = SIZE_TO_COLUMN[sizeKey];
-    const invRow = invByCode.get(String(code).trim());
-    const currentQty = Number(invRow?.[col] ?? 0) || 0;
+    invByCode.get(String(code).trim());
     // We no longer manually check stock here because:
     // 1. The user believes the client check is seeing stale/incorrect data ("phantom deduction").
     // 2. The database trigger `trg_sales_apply_stock_on_insert` handles inventory deduction.
@@ -426,7 +415,7 @@ export async function getSaleItemsBySaleId(saleId) {
   return withMeta;
 }
 
-export async function processRefund({ saleId, reason, qty, code, size } = {}) {
+export async function processRefund({ saleId, reason, qty: _qty, code: _code, size: _size } = {}) {
   requireAdminOrThrow();
   const sid = Number(saleId);
   if (!sid) throw new Error('INVALID_SALE_ID');
@@ -538,7 +527,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
           filters: [{ column: 'id', op: 'in', value: inList }]
         });
         groups.forEach(g => groupMap.set(g.id, g.guide_id));
-      } catch (e) {
+      } catch {
          // If IN list is too long, fallback to fetching all sale_groups (lightweight select)
          // filtering by date if possible would be better, but we lack easy access to date range here if we used 'all'.
          // If hasFrom/hasTo, we can filter sale_groups by date.
@@ -668,7 +657,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
           filters: [{ column: 'id', op: 'in', value: inList }]
         });
         groups.forEach(g => groupMap.set(g.id, g.guide_id));
-      } catch (e) {
+      } catch {
          // Fallback: fetch all if IN list fails
          const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
          groups.forEach(g => groupMap.set(g.id, g.guide_id));
@@ -690,12 +679,14 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
           saleId: r.id,
           soldAt: r.sold_at,
           code: r.code,
+          color: String(r.color || '').trim(),
           size: sizeKey,
           sizeDisplay: sizeKey,
           qty: qtyN,
           unitPricePhp: unit,
           discountUnitPricePhp: undefined,
           lineTotalPhp: unit * qtyN,
+          freeGift: Boolean(r.free_gift ?? false) || unit === 0,
           nameKo: '',
           guideId: guideId,
           saleGroupId: r.sale_group_id,
@@ -734,28 +725,62 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       bySize: [],
       byColor: [],
       byGuide: [],
+      bestByCategory: [],
+      bestColorByCategory: [],
       discountShare: { discountedTransactions: 0, totalTransactions: 0 },
       weeklyRevenue: [],
       monthlyRevenue: [],
     };
   }
 
+  // Fetch guide names for mapping
+  let guideMap = new Map();
+  const guideIds = [...new Set(analyzedRows.map(r => r.guideId).filter(Boolean))];
+  if (guideIds.length > 0) {
+    try {
+      const allGuides = await sbSelect('guides', { select: 'id,name' });
+      guideMap = new Map((allGuides || []).map(g => [g.id, g.name]));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const totalRevenue = analyzedRows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
   const totalCommission = analyzedRows.reduce((sum, r) => sum + (Number(r.commission || 0) || 0), 0);
+  let mrMoonCommission = 0;
+  let mrMoonRevenue = 0;
+  try {
+    analyzedRows.forEach((r) => {
+      const name = r.guideId ? String(guideMap.get(r.guideId) || '').toLowerCase() : '';
+      const isMrMoon = name === 'mr.moon';
+      if (isMrMoon) {
+        mrMoonCommission += (Number(r.commission || 0) || 0);
+        mrMoonRevenue += (Number(r.lineTotalPhp || 0) || 0);
+      }
+    });
+  } catch {
+    mrMoonCommission = 0;
+    mrMoonRevenue = 0;
+  }
 
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
   const transactionKeys = new Set(analyzedRows.map((r) => r.saleGroupId || String(r.soldAt || '')));
   const transactionCount = transactionKeys.size;
-  const grossAmount = totalRevenue;
   const refundAmount = refundedRows.reduce(
     (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
     0
   );
-  const netAmount = grossAmount - refundAmount;
+  
+  // New Total Sales definition: Revenue - All Commissions (Mr.Moon + Guides)
+  // This represents the "Net Revenue" after deducting discounts/commissions.
+  const realTotalSales = totalRevenue - totalCommission;
+  
+  const grossAmount = realTotalSales; 
+  const netAmount = realTotalSales; // Already net of refunds and commissions
+
   const aov = transactionCount ? grossAmount / transactionCount : 0;
 
-  const discountAmount = 0;
-  const discountRate = 0;
+  const discountRate = 0.1;
 
   const codesForCost = [...new Set(analyzedRows.map((r) => String(r.code || '').trim()))].filter(Boolean);
   let kpriceByCode = new Map();
@@ -781,9 +806,20 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     const costUnitPhp = (Number(kprice || 0) || 0) / 25;
     return sum + costUnitPhp * (Number(r.qty || 0) || 0);
   }, 0);
-  const grossProfit = totalRevenue - costAmount;
-  const rentAmount = grossProfit * 0.1;
-  const ownerProfit = grossProfit * 0.9 - totalCommission;
+  
+  // Gross Profit is now based on Real Total Sales
+  const grossProfit = realTotalSales - costAmount;
+  
+  // Rent calculation based on Net Sales (after commission)
+  const netMrMoonSales = mrMoonRevenue - mrMoonCommission;
+  // realTotalSales includes everything, so subtract netMrMoonSales to get "Others"
+  const netOtherSales = realTotalSales - netMrMoonSales;
+  
+  const normalRent = netOtherSales * 0.10;
+  const mrMoonRent = netMrMoonSales * 0.05;
+  const totalRent = normalRent + mrMoonRent;
+  
+  const ownerProfit = realTotalSales - totalRent - costAmount;
 
   function accumulate(list, keyFn, labelFn) {
     const map = new Map();
@@ -800,11 +836,15 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     return [...map.values()].sort((a, b) => b.revenue - a.revenue);
   }
 
-  const byCategory = accumulate(analyzedRows, (r) => String(r.code || '').split('-')[0]?.[0] || '', (k) =>
+  const revenueRows = analyzedRows.filter((r) => !r.freeGift && (Number(r.unitPricePhp || 0) > 0) && (Number(r.lineTotalPhp || 0) > 0));
+  const byCategory = accumulate(revenueRows, (r) => String(r.code || '').split('-')[0]?.[0] || '', (k) =>
     findLabel('category', k)
   );
-  const byBrand = accumulate(analyzedRows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
+  const byBrand = accumulate(revenueRows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
     findLabel('brand', k)
+  );
+  const byType = accumulate(revenueRows, (r) => String(r.code || '').split('-')[1] || '', (k) =>
+    findLabel('type', k)
   );
   const byColor = accumulate(
     analyzedRows,
@@ -821,25 +861,14 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       return '';
     }
   );
-  const bySize = accumulate(analyzedRows, (r) => r.sizeDisplay || r.size || '', (k) => k);
+  const bySize = accumulate(revenueRows, (r) => r.sizeDisplay || r.size || '', (k) => k);
   const byGender = accumulate(
-    analyzedRows,
+    revenueRows,
     (r) => String(r.code || '').split('-')[0]?.[1] || '',
     (k) => findLabel('gender', k)
   );
   
   // Fetch guide names for mapping
-  let guideMap = new Map();
-  const guideIds = [...new Set(analyzedRows.map(r => r.guideId).filter(Boolean))];
-  if (guideIds.length > 0) {
-    try {
-      const allGuides = await sbSelect('guides', { select: 'id,name' });
-      guideMap = new Map((allGuides || []).map(g => [g.id, g.name]));
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
   const byGuide = accumulate(
     analyzedRows.filter(r => r.guideId),
     (r) => r.guideId,
@@ -860,17 +889,127 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const best = sku.slice(0, 10);
   const worst = sku.slice().reverse().slice(0, 10);
 
+  // Best product per category
+  const bestByCategoryMap = new Map();
+  for (const s of sku) {
+    const categoryCode = String(s.code || '').split('-')[0]?.[0] || '';
+    if (!categoryCode) continue;
+    const prev = bestByCategoryMap.get(categoryCode);
+    if (!prev || s.revenue > prev.revenue) {
+      bestByCategoryMap.set(categoryCode, {
+        category: findLabel('category', categoryCode),
+        code: s.code,
+        qty: s.qty,
+        revenue: s.revenue,
+      });
+    }
+  }
+  const bestByCategory = [...bestByCategoryMap.values()].sort((a, b) => b.revenue - a.revenue);
+
+  const bestColorAgg = new Map();
+  for (const r of analyzedRows) {
+    const categoryCode = String(r.code || '').split('-')[0]?.[0] || '';
+    if (!categoryCode) continue;
+    const colorLabel =
+      String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
+    if (!colorLabel) continue;
+    const catMap = bestColorAgg.get(categoryCode) || new Map();
+    const prev = catMap.get(colorLabel) || { color: colorLabel, qty: 0, revenue: 0 };
+    prev.qty += Number(r.qty || 0) || 0;
+    prev.revenue += Number(r.lineTotalPhp || 0) || 0;
+    catMap.set(colorLabel, prev);
+    bestColorAgg.set(categoryCode, catMap);
+  }
+  const bestColorByCategory = [];
+  for (const [catCode, cmap] of bestColorAgg.entries()) {
+    let best = null;
+    for (const v of cmap.values()) {
+      if (!best || v.revenue > best.revenue) best = v;
+    }
+    if (best) {
+      bestColorByCategory.push({
+        category: findLabel('category', catCode),
+        color: best.color,
+        qty: best.qty,
+        revenue: best.revenue,
+      });
+    }
+  }
+  bestColorByCategory.sort((a, b) => b.revenue - a.revenue);
+
+  // Color totals grouped by Type
+  const colorByTypeAgg = new Map();
+  for (const r of analyzedRows) {
+    const typeCode = String(r.code || '').split('-')[1] || '';
+    if (!typeCode) continue;
+    const typeLabel = findLabel('type', typeCode);
+    const colorLabel = String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
+    if (!colorLabel) continue;
+    const typeMap = colorByTypeAgg.get(typeLabel) || new Map();
+    const prev = typeMap.get(colorLabel) || { type: typeLabel, color: colorLabel, qty: 0, revenue: 0 };
+    prev.qty += Number(r.qty || 0) || 0;
+    prev.revenue += Number(r.lineTotalPhp || 0) || 0;
+    typeMap.set(colorLabel, prev);
+    colorByTypeAgg.set(typeLabel, typeMap);
+  }
+  const colorByType = [];
+  for (const [, cmap] of colorByTypeAgg.entries()) {
+    for (const v of cmap.values()) {
+      colorByType.push(v);
+    }
+  }
+  colorByType.sort((a, b) => b.revenue - a.revenue);
+
+  // Pivot (Qty) for Color x Type
+  const typeAllow = new Set(['top','bottom','bag','hat','golfbag','golfBag','pouch','belt'].map((s) => s.toLowerCase()));
+  const pivotTypes = [...new Set(colorByType.map((v) => v.type))].filter((t) =>
+    typeAllow.has(String(t || '').toLowerCase())
+  );
+  const pivotColors = [...new Set(colorByType.map((v) => v.color))];
+  const colorTypePivotRows = pivotColors.map((c) => {
+    const row = { color: c };
+    for (const t of pivotTypes) {
+      const hit = colorByType.find((v) => v.type === t && v.color === c);
+      row[t] = hit ? (Number(hit.qty || 0) || 0) : 0;
+    }
+    return row;
+  });
+  const colorTypePivotColumns = pivotTypes;
+
+  const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const byWeekdayQtyMap = new Map(weekdayNames.map((n, i) => [i, { key: n, qty: 0 }]));
+  const byHourQtyMap = new Map(Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }]));
+  for (const r of analyzedRows) {
+    const dt = new Date(r.soldAt);
+    const day = dt.getUTCDay();
+    const hour = dt.getUTCHours();
+    const qtyN = Number(r.qty || 0) || 0;
+    const wd = byWeekdayQtyMap.get(day);
+    if (wd) wd.qty += qtyN;
+    if (hour >= 6 && hour <= 17) {
+      const hh = byHourQtyMap.get(hour);
+      if (hh) hh.qty += qtyN;
+    }
+  }
+  const byWeekdayQty = [...byWeekdayQtyMap.values()];
+  const byHourQty = [...byHourQtyMap.values()];
+  const bestWeekday = byWeekdayQty.slice().sort((a, b) => b.qty - a.qty)[0] || { key: '', qty: 0 };
+  const bestHour = byHourQty.slice().sort((a, b) => b.qty - a.qty)[0] || { hour: 0, qty: 0 };
+
   return {
     summary: {
       grossAmount,
       netAmount,
       costAmount,
       grossProfit,
-      rentAmount,
+      rentAmount: normalRent,
       ownerProfit,
+      totalCommission: totalCommission - mrMoonCommission,
       transactionCount,
       aov,
-      discountAmount,
+      discountAmount: mrMoonCommission,
+      mrMoonRevenue,
+      mrMoonRent,
       discountRate,
       refundCount: refundedRows.length,
       refundAmount,
@@ -880,10 +1019,20 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     sku,
     byCategory,
     byBrand,
+    byType,
     byGender,
     bySize,
     byColor,
     byGuide,
+    bestByCategory,
+    bestColorByCategory,
+    colorByType,
+    colorTypePivotColumns,
+    colorTypePivotRows,
+    byWeekdayQty,
+    byHourQty,
+    bestWeekday,
+    bestHour,
     discountShare: { discountedTransactions: 0, totalTransactions: transactionCount },
     weeklyRevenue: [],
     monthlyRevenue: [],

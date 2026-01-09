@@ -1,4 +1,4 @@
-import { sbSelect, sbInsert, sbRpc } from '../../db/supabaseRest';
+import { sbSelect, sbInsert } from '../../db/supabaseRest';
 
 /**
  * Get all active guides

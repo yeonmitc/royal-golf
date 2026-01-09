@@ -111,12 +111,6 @@ export default function AnalyzePage() {
               </div>
             </div>
             <div className="page-card">
-              <div>Net Sales</div>
-              <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
-                {Math.round(data.summary.netAmount).toLocaleString('en-PH')} PHP
-              </div>
-            </div>
-            <div className="page-card">
               <div>Cost</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.costAmount || 0).toLocaleString('en-PH')} PHP
@@ -151,9 +145,21 @@ export default function AnalyzePage() {
               </div>
             </div>
             <div className="page-card">
-              <div>Discount Amount</div>
+              <div>Mr. Moon Discount</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.discountAmount).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Mr. Moon Sales</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.mrMoonRevenue || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Rent (5%)</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.mrMoonRent || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
@@ -183,6 +189,88 @@ export default function AnalyzePage() {
       </Card>
 
       <Card
+        title="Color × Type (Qty)"
+        actions={
+          data
+            ? [
+                <ExportActions
+                  key="color-type-pivot"
+                  label="Color×Type (Qty)"
+                  columns={[
+                    { key: 'color', header: 'Color' },
+                    ...(data.colorTypePivotColumns || []).map((t) => ({
+                      key: t,
+                      header: t,
+                    })),
+                  ]}
+                  rows={(data.colorTypePivotRows || []).map((r) => ({
+                    ...r,
+                  }))}
+                  filename="color-type-pivot.csv"
+                  gdriveName="color-type-pivot.csv"
+                  csvLabel="ColorTypePivot CSV"
+                  driveLabel="ColorTypePivot Drive"
+                />,
+              ]
+            : null
+        }
+      >
+        {!data ? (
+          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
+        ) : (
+          (() => {
+            const pivotCols = (data.colorTypePivotColumns || []).filter((t) => {
+              const allow = new Set(['top','bottom','bag','hat','golfbag','pouch','belt'].map((s) => s.toLowerCase()));
+              return allow.has(String(t || '').toLowerCase());
+            });
+            const pivotRows = data.colorTypePivotRows || [];
+            const topByCol = {};
+            for (const c of pivotCols) {
+              const sorted = pivotRows
+                .map((r) => ({ color: r.color, qty: Number(r[c] || 0) || 0 }))
+                .sort((a, b) => b.qty - a.qty)
+                .slice(0, 3)
+                .filter((x) => x.qty > 0);
+              topByCol[c] = new Set(sorted.map((x) => x.color));
+            }
+            const columns = [
+              { key: 'color', header: 'Color' },
+              ...pivotCols.map((t) => ({
+                key: t,
+                header: t,
+                className: 'text-right',
+                tdClassName: 'text-right',
+              })),
+            ];
+            const rows = pivotRows.map((r) => {
+              const base = { id: r.color, color: r.color };
+              for (const c of pivotCols) {
+                const val = r[c] ?? 0;
+                base[c] = topByCol[c]?.has(r.color) ? (
+                  <div
+                    style={{
+                      background: 'rgba(212,175,55,0.5)',
+                      borderRadius: 4,
+                      padding: '0 6px',
+                      display: 'inline-block',
+                      minWidth: 24,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {val}
+                  </div>
+                ) : (
+                  val
+                );
+              }
+              return base;
+            });
+            return <DataTable columns={columns} rows={rows} />;
+          })()
+        )}
+      </Card>
+
+      <Card
         title="Sales by Guide"
         actions={
           data && data.byGuide.length > 0 ? [
@@ -190,13 +278,13 @@ export default function AnalyzePage() {
               key="by-guide"
               label="Guide"
               columns={[
-                { key: 'key', header: 'Guide' },
+                { key: 'label', header: 'Guide' },
                 { key: 'qty', header: 'Qty' },
                 { key: 'revenue', header: 'Revenue (PHP)' },
                 { key: 'commission', header: 'Commission (PHP)' },
               ]}
               rows={data.byGuide.map((r) => ({
-                key: r.key,
+                label: r.label,
                 qty: r.qty,
                 revenue: Math.round(r.revenue).toLocaleString('en-PH'),
                 commission: Math.round(r.commission).toLocaleString('en-PH'),
@@ -214,7 +302,7 @@ export default function AnalyzePage() {
         ) : (
           <DataTable
             columns={[
-              { key: 'key', header: 'Guide' },
+              { key: 'label', header: 'Guide' },
               { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
               { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
               { key: 'commission', header: 'Commission (PHP)', className: 'text-right', tdClassName: 'text-right' },
@@ -229,119 +317,30 @@ export default function AnalyzePage() {
         )}
       </Card>
 
-
       <Card
-        title="Sales by Product (Best/Worst)"
+        title="Best by Category"
         actions={
           data
             ? [
                 <ExportActions
-                  key="best"
-                  label="Best"
+                  key="best-by-category"
+                  label="Best by Category"
                   columns={[
+                    { key: 'category', header: 'Category' },
                     { key: 'code', header: 'Code' },
                     { key: 'qty', header: 'Qty' },
                     { key: 'revenue', header: 'Revenue (PHP)' },
                   ]}
-                  rows={data.best.map((r) => ({
+                  rows={(data.bestByCategory || []).map((r) => ({
+                    category: r.category,
                     code: r.code,
                     qty: r.qty,
                     revenue: Math.round(r.revenue).toLocaleString('en-PH'),
                   }))}
-                  filename="best-products.csv"
-                  gdriveName="best-products.csv"
-                  csvLabel="Best CSV"
-                  driveLabel="Best Drive"
-                />,
-                <ExportActions
-                  key="worst"
-                  label="Worst"
-                  columns={[
-                    { key: 'code', header: 'Code' },
-                    { key: 'qty', header: 'Qty' },
-                    { key: 'revenue', header: 'Revenue (PHP)' },
-                  ]}
-                  rows={data.worst.map((r) => ({
-                    code: r.code,
-                    qty: r.qty,
-                    revenue: Math.round(r.revenue).toLocaleString('en-PH'),
-                  }))}
-                  filename="worst-products.csv"
-                  gdriveName="worst-products.csv"
-                  csvLabel="Worst CSV"
-                  driveLabel="Worst Drive"
-                />,
-              ]
-            : null
-        }
-      >
-        {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
-        ) : (
-          <div
-            className="grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: 12,
-            }}
-          >
-            <div>
-              <div className="muted" style={{ marginBottom: 6 }}>Best</div>
-              <DataTable
-                columns={[
-                  { key: 'code', header: 'Code' },
-                  { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                  { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
-                ]}
-                rows={data.best.map((r) => ({
-                  ...r,
-                  id: r.code,
-                  revenue: Math.round(r.revenue).toLocaleString('en-PH'),
-                }))}
-              />
-            </div>
-            <div>
-              <div className="muted" style={{ marginBottom: 6 }}>Worst</div>
-              <DataTable
-                columns={[
-                  { key: 'code', header: 'Code' },
-                  { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                  { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
-                ]}
-                rows={data.worst.map((r) => ({
-                  ...r,
-                  id: r.code,
-                  revenue: Math.round(r.revenue).toLocaleString('en-PH'),
-                }))}
-              />
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <Card
-        title="Sales Quantity/Revenue by SKU"
-        actions={
-          data
-            ? [
-                <ExportActions
-                  key="sku"
-                  label="SKU"
-                  columns={[
-                    { key: 'code', header: 'Code' },
-                    { key: 'qty', header: 'Qty' },
-                    { key: 'revenue', header: 'Revenue (PHP)' },
-                  ]}
-                  rows={data.sku.map((r) => ({
-                    code: r.code,
-                    qty: r.qty,
-                    revenue: Math.round(r.revenue).toLocaleString('en-PH'),
-                  }))}
-                  filename="sku-sales.csv"
-                  gdriveName="sku-sales.csv"
-                  csvLabel="SKU CSV"
-                  driveLabel="SKU Drive"
+                  filename="best-by-category.csv"
+                  gdriveName="best-by-category.csv"
+                  csvLabel="BestByCategory CSV"
+                  driveLabel="BestByCategory Drive"
                 />,
               ]
             : null
@@ -352,21 +351,24 @@ export default function AnalyzePage() {
         ) : (
           <DataTable
             columns={[
+              { key: 'category', header: 'Category' },
               { key: 'code', header: 'Code' },
               { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
               { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
             ]}
-            rows={data.sku.map((r) => ({
-              ...r,
+            rows={(data.bestByCategory || []).map((r) => ({
               id: r.code,
+              ...r,
               revenue: Math.round(r.revenue).toLocaleString('en-PH'),
             }))}
           />
         )}
       </Card>
 
+      {/* Removed: Best Color by Category */}
+
       <Card
-        title="Revenue by Category/Brand/Gender/Size/Color"
+        title="Revenue by Category/Brand/Gender/Size/Type"
         actions={
           data
             ? [
@@ -390,6 +392,7 @@ export default function AnalyzePage() {
                 />,
                 <ExportActions
                   key="by-brand"
+                  label="Brand"
                   columns={[
                     { key: 'key', header: 'Brand' },
                     { key: 'qty', header: 'Qty' },
@@ -442,22 +445,22 @@ export default function AnalyzePage() {
                   driveLabel="Size Drive"
                 />,
                 <ExportActions
-                  key="by-color"
-                  label="Color"
+                  key="by-type"
+                  label="Type"
                   columns={[
-                    { key: 'key', header: 'Color' },
+                    { key: 'key', header: 'Type' },
                     { key: 'qty', header: 'Qty' },
                     { key: 'revenue', header: 'Revenue (PHP)' },
                   ]}
-                  rows={data.byColor.map((r) => ({
+                  rows={(data.byType || []).map((r) => ({
                     key: r.key,
                     qty: r.qty,
                     revenue: Math.round(r.revenue).toLocaleString('en-PH'),
                   }))}
-                  filename="sales-by-color.csv"
-                  gdriveName="sales-by-color.csv"
-                  csvLabel="Color CSV"
-                  driveLabel="Color Drive"
+                  filename="sales-by-type.csv"
+                  gdriveName="sales-by-type.csv"
+                  csvLabel="Type CSV"
+                  driveLabel="Type Drive"
                 />,
               ]
             : null
@@ -524,11 +527,11 @@ export default function AnalyzePage() {
             />
             <DataTable
               columns={[
-                { key: 'key', header: 'Color' },
+                { key: 'key', header: 'Type' },
                 { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
                 { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
               ]}
-              rows={data.byColor.map((r) => ({
+              rows={(data.byType || []).map((r) => ({
                 id: r.key,
                 ...r,
                 revenue: Math.round(r.revenue).toLocaleString('en-PH'),
@@ -538,32 +541,98 @@ export default function AnalyzePage() {
         )}
       </Card>
 
-      <Card title="Weekly/Monthly Revenue">
+      <Card
+        title="Sales by Weekday and Hour"
+        actions={
+          data
+            ? [
+                <ExportActions
+                  key="by-weekday-qty"
+                  label="Weekday Qty"
+                  columns={[
+                    { key: 'key', header: 'Weekday' },
+                    { key: 'qty', header: 'Qty' },
+                  ]}
+                  rows={(data.byWeekdayQty || []).map((r, idx) => ({
+                    id: `wd-${idx}`,
+                    ...r,
+                  }))}
+                  filename="sales-by-weekday-qty.csv"
+                  gdriveName="sales-by-weekday-qty.csv"
+                  csvLabel="WeekdayQty CSV"
+                  driveLabel="WeekdayQty Drive"
+                />,
+                <ExportActions
+                  key="by-hour-qty"
+                  label="Hour Qty"
+                  columns={[
+                    { key: 'hour', header: 'Hour' },
+                    { key: 'qty', header: 'Qty' },
+                  ]}
+                  rows={(data.byHourQty || []).map((r) => ({
+                    id: `hr-${r.hour}`,
+                    ...r,
+                  }))}
+                  filename="sales-by-hour-qty.csv"
+                  gdriveName="sales-by-hour-qty.csv"
+                  csvLabel="HourQty CSV"
+                  driveLabel="HourQty Drive"
+                />,
+              ]
+            : null
+        }
+      >
         {!data ? (
           <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
-          <div
-            className="grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: 12,
-            }}
-          >
-            <div>
-              <div className="muted" style={{ marginBottom: 6 }}>Weekly Revenue</div>
-              <BarChart
-                data={data.weeklyRevenue.map((r) => ({ key: r.key, amount: r.amount }))}
-                title="weekly-revenue"
-                height={240}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+            <div className="page-card">
+              <div>Best Weekday</div>
+              <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
+                {(data.bestWeekday?.key || '')} / {Number(data.bestWeekday?.qty || 0)}
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Best Hour (6–17)</div>
+              <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
+                {(() => {
+                  const h = Number(data.bestHour?.hour || 0);
+                  const hh = h % 12 || 12;
+                  const suf = h >= 12 ? 'PM' : 'AM';
+                  return `${hh}${suf}`;
+                })()} / {Number(data.bestHour?.qty || 0)}
+              </div>
+            </div>
+            <div className="page-card" style={{ gridColumn: '1 / -1' }}>
+              <div className="font-semibold text-sm text-[var(--gold-soft)]">Weekday (Qty)</div>
+              <DataTable
+                columns={[
+                  { key: 'key', header: 'Weekday' },
+                  { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
+                ]}
+                rows={(data.byWeekdayQty || []).map((r, idx) => ({
+                  id: `wd-${idx}`,
+                  ...r,
+                }))}
               />
             </div>
-            <div>
-              <div className="muted" style={{ marginBottom: 6 }}>Monthly Revenue</div>
-              <BarChart
-                data={data.monthlyRevenue.map((r) => ({ key: r.key, amount: r.amount }))}
-                title="monthly-revenue"
-                height={240}
+            <div className="page-card" style={{ gridColumn: '1 / -1' }}>
+              <div className="font-semibold text-sm text-[var(--gold-soft)]">Hour 6–17 (Qty)</div>
+              <DataTable
+                columns={[
+                  { key: 'hourLabel', header: 'Hour' },
+                  { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
+                ]}
+                rows={(data.byHourQty || []).map((r) => ({
+                  id: `hr-${r.hour}`,
+                  hourLabel: (() => {
+                    const h = Number(r.hour || 0);
+                    const hh = h % 12 || 12;
+                    const suf = h >= 12 ? 'PM' : 'AM';
+                    return `${hh}${suf}`;
+                  })(),
+                  ...r,
+                }))}
               />
             </div>
           </div>

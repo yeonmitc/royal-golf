@@ -81,7 +81,7 @@ export default function SellPage() {
 
   return (
     <div className="page-root">
-      {/* 상단 헤더 */}
+      {/* Header */}
       <div className="page-header">
         <div>
           <div className="page-title">Sell</div>
@@ -99,7 +99,7 @@ export default function SellPage() {
         </div>
       </div>
 
-      {/* 본문: 스캔 결과 + 장바구니 (가로 배치, 모바일에서는 세로 스택) */}
+      {/* Body: scan result + cart (row layout, stacked on mobile) */}
       <div className="stack-mobile" style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Card title="Scan Result">
@@ -232,11 +232,27 @@ export default function SellPage() {
                     style={{ borderColor: 'var(--border-soft)' }}
                   >
                     <option value="">No Guide</option>
-                    {(guides || []).map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
+                    {(guides || [])
+                      .slice()
+                      .sort((a, b) => {
+                        const nameA = String(a.name || '').toLowerCase();
+                        const nameB = String(b.name || '').toLowerCase();
+                        if (nameA === 'mr.moon') return -1;
+                        if (nameB === 'mr.moon') return 1;
+                        return nameA.localeCompare(nameB);
+                      })
+                      .map((g) => {
+                        const isMrMoon = String(g.name || '').toLowerCase() === 'mr.moon';
+                        return (
+                          <option
+                            key={g.id}
+                            value={g.id}
+                            style={isMrMoon ? { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' } : {}}
+                          >
+                            {g.name}
+                          </option>
+                        );
+                      })}
                   </select>
                 </div>
 

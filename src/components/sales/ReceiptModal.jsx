@@ -15,7 +15,7 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
   if (!open || !receiptData) return null;
 
   const {
-    id,
+    id: _id,
     soldAt,
     items = [],
     totalAmount,

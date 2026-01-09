@@ -469,6 +469,8 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       byGender: [],
       bySize: [],
       byColor: [],
+      bestByCategory: [],
+      bestColorByCategory: [],
       discountShare: { discountedTransactions: 0, totalTransactions: 0 },
       weeklyRevenue: [],
       monthlyRevenue: [],
@@ -485,18 +487,22 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   const costAmount = 0;
   const grossProfit = totalRevenue - costAmount;
-  const rentAmount = grossProfit * 0.1;
-  const ownerProfit = grossProfit * 0.9;
+  const netAmount = totalRevenue - refundAmount;
+  const rentAmount = netAmount * 0.1;
+  const ownerProfit = netAmount - rentAmount - costAmount;
 
   const summary = {
     grossAmount: totalRevenue,
-    netAmount: totalRevenue - refundAmount,
+    netAmount,
     costAmount,
     grossProfit,
     rentAmount,
     ownerProfit,
+    totalCommission: 0,
     transactionCount,
     aov,
+    discountAmount: 0,
+    discountRate: 0.1,
     refundCount,
     refundAmount,
   };
@@ -513,6 +519,94 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const best = [...sku].sort((a, b) => b.revenue - a.revenue).slice(0, 20);
   const worst = [...sku].sort((a, b) => a.revenue - b.revenue).slice(0, 20);
 
+  // Best product per category
+  const bestByCategoryMap = new Map();
+  for (const s of sku) {
+    const categoryCode = String(s.code || '').split('-')[0]?.[0] || '';
+    if (!categoryCode) continue;
+    const prev = bestByCategoryMap.get(categoryCode);
+    if (!prev || s.revenue > prev.revenue) {
+      bestByCategoryMap.set(categoryCode, {
+        category: findLabel('category', categoryCode),
+        code: s.code,
+        qty: s.qty,
+        revenue: s.revenue,
+      });
+    }
+  }
+  const bestByCategory = [...bestByCategoryMap.values()].sort((a, b) => b.revenue - a.revenue);
+
+  const bestColorAgg = new Map();
+  for (const r of rows) {
+    const categoryCode = String(r.code || '').split('-')[0]?.[0] || '';
+    if (!categoryCode) continue;
+    const colorLabel =
+      String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
+    if (!colorLabel) continue;
+    const catMap = bestColorAgg.get(categoryCode) || new Map();
+    const prev = catMap.get(colorLabel) || { color: colorLabel, qty: 0, revenue: 0 };
+    prev.qty += Number(r.qty || 0) || 0;
+    prev.revenue += Number(r.lineTotalPhp || 0) || 0;
+    catMap.set(colorLabel, prev);
+    bestColorAgg.set(categoryCode, catMap);
+  }
+  const bestColorByCategory = [];
+  for (const [catCode, cmap] of bestColorAgg.entries()) {
+    let best = null;
+    for (const v of cmap.values()) {
+      if (!best || v.revenue > best.revenue) best = v;
+    }
+    if (best) {
+      bestColorByCategory.push({
+        category: findLabel('category', catCode),
+        color: best.color,
+        qty: best.qty,
+        revenue: best.revenue,
+      });
+    }
+  }
+  bestColorByCategory.sort((a, b) => b.revenue - a.revenue);
+
+  // Color totals grouped by Type
+  const colorByTypeAgg = new Map();
+  for (const r of rows) {
+    const typeCode = String(r.code || '').split('-')[1] || '';
+    if (!typeCode) continue;
+    const typeLabel = findLabel('type', typeCode);
+    const colorLabel =
+      String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
+    if (!colorLabel) continue;
+    const typeMap = colorByTypeAgg.get(typeLabel) || new Map();
+    const prev = typeMap.get(colorLabel) || { type: typeLabel, color: colorLabel, qty: 0, revenue: 0 };
+    prev.qty += Number(r.qty || 0) || 0;
+    prev.revenue += Number(r.lineTotalPhp || 0) || 0;
+    typeMap.set(colorLabel, prev);
+    colorByTypeAgg.set(typeLabel, typeMap);
+  }
+  const colorByType = [];
+  for (const [, cmap] of colorByTypeAgg.entries()) {
+    for (const v of cmap.values()) {
+      colorByType.push(v);
+    }
+  }
+  colorByType.sort((a, b) => b.revenue - a.revenue);
+
+  // Pivot (Qty) for Color x Type
+  const typeAllow = new Set(['top','bottom','bag','hat','golfbag','golfBag','pouch','belt'].map((s) => s.toLowerCase()));
+  const pivotTypes = [...new Set(colorByType.map((v) => v.type))].filter((t) =>
+    typeAllow.has(String(t || '').toLowerCase())
+  );
+  const pivotColors = [...new Set(colorByType.map((v) => v.color))];
+  const colorTypePivotRows = pivotColors.map((c) => {
+    const row = { color: c };
+    for (const t of pivotTypes) {
+      const hit = colorByType.find((v) => v.type === t && v.color === c);
+      row[t] = hit ? (Number(hit.qty || 0) || 0) : 0;
+    }
+    return row;
+  });
+  const colorTypePivotColumns = pivotTypes;
+
   function accumulate(arr, keyGetter, labelGetter) {
     const m = new Map();
     for (const r of arr) {
@@ -527,20 +621,24 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       .filter((x) => x.qty > 0 || x.revenue > 0);
   }
 
-  const byCategory = accumulate(rows, (r) => String(r.code || '').split('-')[0]?.[0] || '', (k) =>
+  const revenueRows = rows.filter((r) => !r.freeGift && (Number(r.lineTotalPhp || 0) > 0));
+  const byCategory = accumulate(revenueRows, (r) => String(r.code || '').split('-')[0]?.[0] || '', (k) =>
     findLabel('category', k)
   );
-  const byBrand = accumulate(rows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
+  const byBrand = accumulate(revenueRows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
     findLabel('brand', k)
+  );
+  const byType = accumulate(revenueRows, (r) => String(r.code || '').split('-')[1] || '', (k) =>
+    findLabel('type', k)
   );
   const byColor = accumulate(
     rows,
     (r) => String(r.color || '').trim() || String(r.code || '').split('-')[3] || '',
     (k) => (String(k || '').trim().length > 2 ? k : findLabel('color', k))
   );
-  const bySize = accumulate(rows, (r) => r.sizeDisplay || r.size || '', (k) => k);
+  const bySize = accumulate(revenueRows, (r) => r.sizeDisplay || r.size || '', (k) => k);
   const byGender = accumulate(
-    rows,
+    revenueRows,
     (r) => String(r.code || '').split('-')[0]?.[1] || '',
     (k) => findLabel('gender', k)
   );
@@ -575,6 +673,27 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     .map(([key, amount]) => ({ key, amount }))
     .sort((a, b) => (a.key < b.key ? -1 : 1));
 
+  const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const byWeekdayQtyMap = new Map(weekdayNames.map((n, i) => [i, { key: n, qty: 0 }]));
+  const byHourQtyMap = new Map(Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }]));
+  for (const r of rows) {
+    if (!r.soldAt) continue;
+    const dt = new Date(r.soldAt);
+    const day = dt.getDay();
+    const hour = dt.getHours();
+    const qtyN = Number(r.qty || 0) || 0;
+    const wd = byWeekdayQtyMap.get(day);
+    if (wd) wd.qty += qtyN;
+    if (hour >= 6 && hour <= 17) {
+      const hh = byHourQtyMap.get(hour);
+      if (hh) hh.qty += qtyN;
+    }
+  }
+  const byWeekdayQty = [...byWeekdayQtyMap.values()];
+  const byHourQty = [...byHourQtyMap.values()];
+  const bestWeekday = byWeekdayQty.slice().sort((a, b) => b.qty - a.qty)[0] || { key: '', qty: 0 };
+  const bestHour = byHourQty.slice().sort((a, b) => b.qty - a.qty)[0] || { hour: 0, qty: 0 };
+
   return {
     summary,
     best,
@@ -582,10 +701,20 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     sku,
     byCategory,
     byBrand,
+    byType,
     byGender,
     bySize,
     byColor,
+    bestByCategory,
+    bestColorByCategory,
+    colorTypePivotColumns,
+    colorTypePivotRows,
+    colorByType,
     weeklyRevenue,
     monthlyRevenue,
+    byWeekdayQty,
+    byHourQty,
+    bestWeekday,
+    bestHour,
   };
 }

@@ -10,9 +10,12 @@ import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { getGuides } from '../../guides/guideApi';
 import { useSetSaleGroupGuideMutation } from '../salesHooks';
+import { useAdminStore } from '../../../store/adminStore';
 
 export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
   const { showToast } = useToast();
+  const isAdmin = useAdminStore((s) => s.isAuthorized());
+  const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundTarget, setRefundTarget] = useState(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -22,6 +25,24 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   const [selectedGuide, setSelectedGuide] = useState('');
   const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
+
+  async function copyTextToClipboard(text) {
+    const v = String(text || '').trim();
+    if (!v) return;
+    try {
+      await navigator.clipboard.writeText(v);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = v;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  }
 
   function brandFromCode(code) {
     const parts = String(code || '').split('-');
@@ -99,10 +120,11 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     const finalUnitRaw = isDiscounted ? discounted : original;
     const finalUnit = isRefunded ? 0 : finalUnitRaw;
     const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
-    const priceForCopy = finalUnit.toLocaleString('en-US');
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
     const qtyForTotal = isRefunded ? 0 : qty;
+    const lineTotal = finalUnit * qtyForTotal;
+    const priceForCopy = lineTotal.toLocaleString('en-US');
     const commission = Number(row.commission || 0);
     const commissionForTotal = isRefunded ? 0 : commission;
 
@@ -112,6 +134,8 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
       saleGroupId: row.saleGroupId,
+      soldAt: row.soldAt,
+      guideId: row.guideId,
       soldAtDate,
       soldAtTime,
       code: row.code,
@@ -122,7 +146,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       commission: commissionForTotal > 0 ? commissionForTotal.toLocaleString('en-US') : '-',
       unitPricePhp: (
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'center', paddingRight: '12px' }}>
-          <span>{finalUnit.toLocaleString('en-US')}</span>
+          <span>{lineTotal.toLocaleString('en-US')}</span>
           {isRefunded && refundReason ? (
             <span style={{ color: 'var(--text-muted)', fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {refundReason}
@@ -186,6 +210,25 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
               if (isRefunded) return;
               setRefundTarget(row);
               setRefundOpen(true);
+            }}
+          />
+          <Button
+            variant="outline"
+            icon="person"
+            title="Guide commission"
+            disabled={isRefunded || !row.saleGroupId}
+            style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', minWidth: '28px', flex: '0 0 28px' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!row.saleGroupId) return;
+              if (!isAdmin) {
+                openLoginModal();
+                showToast('Admin required.');
+                return;
+              }
+              setGuideTargetGroup(row.saleGroupId);
+              setSelectedGuide('');
+              setGuideOpen(true);
             }}
           />
         </div>
@@ -255,17 +298,16 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
               className: 'text-right text-xs',
               tdClassName: 'text-right text-xs text-muted',
             },
-            { key: 'action', header: 'receipt / refund', className: 'text-center', tdClassName: 'text-center' },
+            { key: 'action', header: 'actions', className: 'text-center', tdClassName: 'text-center' },
           ]}
           rows={tableRows}
           emptyMessage="No results found."
           onRowClick={async (r) => {
             if (r?.clickable === false) return;
-            const grp = r?.saleGroupId;
-            if (!grp) return;
-            setGuideTargetGroup(grp);
-            setSelectedGuide('');
-            setGuideOpen(true);
+            const text = String(r?.__copyText || '').trim();
+            if (!text) return;
+            await copyTextToClipboard(text);
+            showToast('Copied.');
           }}
           pagination={pagination}
         />
@@ -304,6 +346,11 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
               variant="primary"
               onClick={async () => {
                 if (!guideTargetGroup) return;
+                if (!isAdmin) {
+                  openLoginModal();
+                  showToast('Admin required.');
+                  return;
+                }
                 try {
                   await setGroupGuide({ saleGroupId: guideTargetGroup, guideId: selectedGuide || null, guideRate: 0.1 });
                   setGuideOpen(false);
@@ -311,7 +358,13 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
                   setSelectedGuide('');
                   showToast('Guide commission applied.');
                 } catch (e) {
-                  showToast(String(e?.message || e) || 'Failed to set guide.');
+                  const msg = String(e?.message || e);
+                  if (msg === 'ADMIN_REQUIRED') {
+                    openLoginModal();
+                    showToast('Admin required.');
+                    return;
+                  }
+                  showToast(msg || 'Failed to set guide.');
                 }
               }}
               disabled={settingGuide}
