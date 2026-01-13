@@ -1,15 +1,16 @@
 // src/pages/InventoryPage.jsx
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import soldoutSvg from '../assets/soldout.svg';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
+import ExportActions from '../components/common/ExportActions';
+import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
+import { useToast } from '../context/ToastContext';
 import ProductListTable from '../features/products/components/ProductListTable';
 import ProductLookup from '../features/products/components/ProductLookup';
-import Input from '../components/common/Input';
-import ExportActions from '../components/common/ExportActions';
 import { useProductInventoryList } from '../features/products/productHooks';
 import { useAdminStore } from '../store/adminStore';
-import { useToast } from '../context/ToastContext';
 
 export default function InventoryPage() {
   const [gender, setGender] = useState(''); // '', 'M', 'W', 'A'
@@ -18,6 +19,7 @@ export default function InventoryPage() {
   const [editMode, setEditMode] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
+  const [onlyZeroStock, setOnlyZeroStock] = useState(false);
   const { data: allProducts = [], isLoading, isError, error } = useProductInventoryList();
 
   const isAdmin = useAdminStore((s) => s.isAuthorized());
@@ -46,11 +48,19 @@ export default function InventoryPage() {
     const q = (isCodeSearch ? qRaw.slice(1) : qRaw).toLowerCase();
     if (q) {
       if (isCodeSearch) {
-        filtered = filtered.filter((p) => String(p.code || '').toLowerCase().includes(q));
+        filtered = filtered.filter((p) =>
+          String(p.code || '')
+            .toLowerCase()
+            .includes(q)
+        );
       } else {
         filtered = filtered.filter((p) => {
-          const inCode = String(p.code || '').toLowerCase().includes(q);
-          const inName = String(p.nameKo || '').toLowerCase().includes(q);
+          const inCode = String(p.code || '')
+            .toLowerCase()
+            .includes(q);
+          const inName = String(p.nameKo || '')
+            .toLowerCase()
+            .includes(q);
           const sizeText = Array.isArray(p.sizes)
             ? p.sizes
                 .map((s) => [s.size, s.sizeDisplay, s.location].filter(Boolean).join(' '))
@@ -62,8 +72,11 @@ export default function InventoryPage() {
         });
       }
     }
+    if (onlyZeroStock) {
+      filtered = filtered.filter((p) => (p.totalStock || 0) === 0);
+    }
     return filtered;
-  }, [allProducts, gender, searchApplied]);
+  }, [allProducts, gender, searchApplied, onlyZeroStock]);
 
   return (
     <div className="page-root">
@@ -132,8 +145,25 @@ export default function InventoryPage() {
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-          <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 0, maxWidth: 560, display: 'flex', gap: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              width: '100%',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                maxWidth: 560,
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+              }}
+            >
               <div style={{ flex: 1 }}>
                 <Input
                   placeholder="Search (Start with # for partial code search)"
@@ -147,7 +177,48 @@ export default function InventoryPage() {
                   }}
                 />
               </div>
-              <Button variant="outline" size="sm" onClick={clearSearch} title="Reset" icon="refresh" />
+              <Button
+                variant="outline"
+                size="md"
+                onClick={clearSearch}
+                title="Reset"
+                icon="refresh"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setOnlyZeroStock(!onlyZeroStock)}
+                title="Only 0 Stock"
+                style={{
+                  width: 40,
+                  height: 40,
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  boxShadow: 'none',
+                  marginTop: 0,
+                }}
+              >
+                <div
+                  style={{
+                    marginTop: 0,
+                    width: 40,
+                    height: 40,
+                    backgroundColor: onlyZeroStock ? '#ef4444' : 'var(--gold-soft)',
+                    maskImage: `url(${soldoutSvg})`,
+                    WebkitMaskImage: `url(${soldoutSvg})`,
+                    maskSize: 'contain',
+                    WebkitMaskSize: 'contain',
+                    maskRepeat: 'no-repeat',
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskPosition: 'center',
+                    WebkitMaskPosition: 'center',
+                  }}
+                />
+              </Button>
             </div>
           </div>
         </div>
