@@ -74,6 +74,8 @@ export default function InventoryPage() {
     }
     if (onlyZeroStock) {
       filtered = filtered.filter((p) => (p.totalStock || 0) === 0);
+    } else {
+      filtered = filtered.filter((p) => (p.totalStock || 0) > 0);
     }
     return filtered;
   }, [allProducts, gender, searchApplied, onlyZeroStock]);
