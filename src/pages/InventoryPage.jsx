@@ -46,7 +46,8 @@ export default function InventoryPage() {
     const qRaw = String(searchApplied || '').trim();
     const isCodeSearch = qRaw.startsWith('#');
     const q = (isCodeSearch ? qRaw.slice(1) : qRaw).toLowerCase();
-    if (q) {
+    const hasSearch = !!q;
+    if (hasSearch) {
       if (isCodeSearch) {
         filtered = filtered.filter((p) =>
           String(p.code || '')
@@ -71,11 +72,22 @@ export default function InventoryPage() {
           return inCode || inName || inSizes;
         });
       }
+      return filtered;
     }
     if (onlyZeroStock) {
-      filtered = filtered.filter((p) => (p.totalStock || 0) === 0);
+      filtered = filtered.filter(
+        (p) =>
+          (p.totalStock || 0) === 0 &&
+          Array.isArray(p.sizes) &&
+          p.sizes.length > 0
+      );
     } else {
-      filtered = filtered.filter((p) => (p.totalStock || 0) > 0);
+      filtered = filtered.filter(
+        (p) =>
+          (p.totalStock || 0) > 0 ||
+          !Array.isArray(p.sizes) ||
+          p.sizes.length === 0
+      );
     }
     return filtered;
   }, [allProducts, gender, searchApplied, onlyZeroStock]);
