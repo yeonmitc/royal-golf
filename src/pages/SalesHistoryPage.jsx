@@ -1,9 +1,11 @@
 // src/pages/SalesHistoryPage.jsx
+import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import SalesTable from '../features/sales/components/SalesTable';
-import Card from '../components/common/Card';
 import Button from '../components/common/Button';
+import Card from '../components/common/Card';
 import ExportActions from '../components/common/ExportActions';
+import { getGuides } from '../features/guides/guideApi';
+import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
 const EMPTY_ROWS = [];
@@ -20,6 +22,8 @@ export default function SalesHistoryPage() {
   const [fromInput, setFromInput] = useState('');
   const [toInput, setToInput] = useState('');
   const [qInput, setQInput] = useState('');
+  const [sortAscending, setSortAscending] = useState(false);
+  const [noGuideOnly, setNoGuideOnly] = useState(false);
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
   const [filters, setFilters] = useState({
@@ -87,10 +91,33 @@ export default function SalesHistoryPage() {
     query: filters.query,
   });
 
+  const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
+
   const allRows = salesData?.rows ?? EMPTY_ROWS;
   const visibleRows = useMemo(() => {
-    return (allRows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
-  }, [allRows]);
+    const base = (allRows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
+
+    const mrMoonGuideIds = new Set(
+      (guides || [])
+        .filter((g) => String(g.name || '').toLowerCase() === 'mr.moon')
+        .map((g) => String(g.id))
+    );
+
+    const filtered = noGuideOnly
+      ? base.filter((r) => {
+          const gid = r.guideId;
+          if (!gid) return true;
+          return mrMoonGuideIds.has(String(gid));
+        })
+      : base;
+
+    if (!sortAscending) return filtered;
+    return [...filtered].sort((a, b) => {
+      const at = new Date(a.soldAt || 0).getTime();
+      const bt = new Date(b.soldAt || 0).getTime();
+      return at - bt;
+    });
+  }, [allRows, sortAscending, noGuideOnly, guides]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -130,6 +157,35 @@ export default function SalesHistoryPage() {
       />
     );
   }, [visibleRows]);
+
+  const cardActions = useMemo(() => {
+    const actions = [
+      <Button
+        key="ascending-toggle"
+        type="button"
+        onClick={() => setSortAscending((prev) => !prev)}
+        size="sm"
+        variant={sortAscending ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        Ascending
+      </Button>,
+      <Button
+        key="no-guide-toggle"
+        type="button"
+        onClick={() => setNoGuideOnly((prev) => !prev)}
+        size="sm"
+        variant={noGuideOnly ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        NoGuide
+      </Button>,
+    ];
+    if (exportActions) {
+      actions.push(exportActions);
+    }
+    return actions;
+  }, [sortAscending, noGuideOnly, exportActions]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -227,21 +283,27 @@ export default function SalesHistoryPage() {
             }}
             style={{ flex: '1 1 240px', minWidth: 180 }}
           />
-          <Button type="button" onClick={applySearch} size="sm" variant="primary" title="Search" icon="search" />
-          <Button type="button" onClick={resetSearch} size="sm" variant="outline" title="Reset" icon="reset" />
+          <Button
+            type="button"
+            onClick={applySearch}
+            size="sm"
+            variant="primary"
+            title="Search"
+            icon="search"
+          />
+          <Button
+            type="button"
+            onClick={resetSearch}
+            size="sm"
+            variant="outline"
+            title="Reset"
+            icon="reset"
+          />
         </div>
       </div>
 
-      <Card
-        title="Sales Records"
-        actions={exportActions}
-      >
-        <SalesTable
-          rows={visibleRows}
-          isLoading={isLoading}
-          isError={isError}
-          error={error}
-        />
+      <Card title="Sales Records" actions={cardActions}>
+        <SalesTable rows={visibleRows} isLoading={isLoading} isError={isError} error={error} />
       </Card>
     </div>
   );

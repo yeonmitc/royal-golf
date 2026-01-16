@@ -59,7 +59,12 @@ export default function SettingsPage() {
       await sbSelect('products', { select: 'code', limit: 1 });
       showToast('Supabase connected.');
     } catch (e) {
-      showToast(e?.message || 'Supabase request failed.');
+      const msg = String(e?.message || '').trim();
+      if (msg === 'SUPABASE_CONFIG_MISSING') {
+        showToast('Supabase 설정이 없습니다. .env에 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY를 넣어주세요.');
+      } else {
+        showToast(msg || 'Supabase request failed.');
+      }
     } finally {
       setBusy(false);
     }

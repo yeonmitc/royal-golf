@@ -56,6 +56,9 @@ export function isSupabaseConfigured() {
 }
 
 function buildUrl(path, query) {
+  if (!hasSupabaseConfig()) {
+    throw new Error('SUPABASE_CONFIG_MISSING');
+  }
   const u = new URL(SUPABASE_URL + path);
   if (query) {
     Object.entries(query).forEach(([k, v]) => {

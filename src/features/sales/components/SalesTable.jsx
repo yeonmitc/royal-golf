@@ -1,18 +1,24 @@
 // src/features/sales/components/SalesTable.jsx
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import DataTable from '../../../components/common/DataTable';
+import { useState } from 'react';
 import Button from '../../../components/common/Button';
-import RefundModal from '../../../components/sales/RefundModal';
-import ReceiptModal from '../../../components/sales/ReceiptModal';
+import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
+import ReceiptModal from '../../../components/sales/ReceiptModal';
+import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
+import { useAdminStore } from '../../../store/adminStore';
 import { getGuides } from '../../guides/guideApi';
 import { useSetSaleGroupGuideMutation } from '../salesHooks';
-import { useAdminStore } from '../../../store/adminStore';
 
-export default function SalesTable({ rows = [], pagination, isLoading = false, isError = false, error = null }) {
+export default function SalesTable({
+  rows = [],
+  pagination,
+  isLoading = false,
+  isError = false,
+  error = null,
+}) {
   const { showToast } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
@@ -78,9 +84,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
 
   if (isError) {
     return (
-      <div className="p-4 text-sm text-red-600">
-        Failed to load sales history: {String(error)}
-      </div>
+      <div className="p-4 text-sm text-red-600">Failed to load sales history: {String(error)}</div>
     );
   }
 
@@ -89,6 +93,12 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   if (visibleRows.length === 0) {
     return <div className="p-4 text-sm text-gray-500">No results found.</div>;
   }
+
+  const mrMoonGuideIds = new Set(
+    (guides || [])
+      .filter((g) => String(g.name || '').toLowerCase() === 'mr.moon')
+      .map((g) => String(g.id))
+  );
 
   const { totalQty, totalPrice, totalCommission } = visibleRows.reduce(
     (acc, row) => {
@@ -102,17 +112,21 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
       const commissionForTotal = isRefunded ? 0 : commission;
+      const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+      const lineTotalForTotal = isMrMoon
+        ? finalUnit * qtyForTotal - commissionForTotal
+        : finalUnit * qtyForTotal;
 
       return {
         totalQty: acc.totalQty + qtyForTotal,
-        totalPrice: acc.totalPrice + finalUnit * qtyForTotal,
+        totalPrice: acc.totalPrice + lineTotalForTotal,
         totalCommission: acc.totalCommission + commissionForTotal,
       };
     },
     { totalQty: 0, totalPrice: 0, totalCommission: 0 }
   );
 
-  const tableRows = visibleRows.map((row) => {
+  const tableRows = visibleRows.map((row, index) => {
     const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
     const original = Number(row.unitPricePhp || 0);
     const discounted = row.discountUnitPricePhp != null ? Number(row.discountUnitPricePhp) : null;
@@ -133,6 +147,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
 
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
+      no: index + 1,
       saleGroupId: row.saleGroupId,
       soldAt: row.soldAt,
       guideId: row.guideId,
@@ -145,10 +160,27 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       brand,
       commission: commissionForTotal > 0 ? commissionForTotal.toLocaleString('en-US') : '-',
       unitPricePhp: (
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, alignItems: 'center', paddingRight: '12px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-start',
+            gap: 8,
+            alignItems: 'center',
+            paddingRight: '12px',
+          }}
+        >
           <span>{lineTotal.toLocaleString('en-US')}</span>
           {isRefunded && refundReason ? (
-            <span style={{ color: 'var(--text-muted)', fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span
+              style={{
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                maxWidth: 220,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {refundReason}
             </span>
           ) : null}
@@ -161,7 +193,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
             icon="receipt"
             title="Receipt"
             disabled={isRefunded}
-            style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', minWidth: '28px', flex: '0 0 28px' }}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
             onClick={(e) => {
               e.stopPropagation();
               const groupItems = row.saleGroupId
@@ -171,7 +210,8 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
               const items = groupItems.map((r) => {
                 const rIsRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
                 const rOriginal = Number(r.unitPricePhp || 0);
-                const rDiscounted = r.discountUnitPricePhp != null ? Number(r.discountUnitPricePhp) : null;
+                const rDiscounted =
+                  r.discountUnitPricePhp != null ? Number(r.discountUnitPricePhp) : null;
                 const rIsDiscounted = rDiscounted !== null && rDiscounted !== rOriginal;
                 const rFinalRaw = rIsDiscounted ? rDiscounted : rOriginal;
                 const rFinal = rIsRefunded ? 0 : rFinalRaw;
@@ -184,7 +224,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
                   price: rFinal,
                 };
               });
-              
+
               const totalAmt = items.reduce((sum, i) => sum + i.price * i.qty, 0);
               const totalQ = items.reduce((sum, i) => sum + i.qty, 0);
 
@@ -204,7 +244,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
             icon="refund"
             title={isRefunded ? 'Refunded' : 'Refund'}
             disabled={isRefunded}
-            style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', minWidth: '28px', flex: '0 0 28px' }}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
             onClick={(e) => {
               e.stopPropagation();
               if (isRefunded) return;
@@ -217,7 +264,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
             icon="person"
             title="Guide commission"
             disabled={isRefunded || !row.saleGroupId}
-            style={{ width: '28px', height: '28px', padding: 0, borderRadius: '50%', minWidth: '28px', flex: '0 0 28px' }}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
             onClick={(e) => {
               e.stopPropagation();
               if (!row.saleGroupId) return;
@@ -236,8 +290,8 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       style: isRefunded
         ? { backgroundColor: 'rgba(148, 163, 184, 0.18)', color: 'var(--text-main)' }
         : giftChecked
-          ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
-          : undefined,
+        ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
+        : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
@@ -256,6 +310,7 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
   tableRows.push({
     id: '__sales_total__',
     clickable: false,
+    no: '',
     soldAtDate: 'TOTAL',
     soldAtTime: '',
     code: '',
@@ -274,8 +329,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
       <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
         <DataTable
           columns={[
+            { key: 'no', header: 'no', className: 'text-right', tdClassName: 'text-right' },
             { key: 'soldAtDate', header: 'date' },
-            { key: 'soldAtTime', header: 'time', className: 'text-center', tdClassName: 'text-center' },
+            {
+              key: 'soldAtTime',
+              header: 'time',
+              className: 'text-center',
+              tdClassName: 'text-center',
+            },
             { key: 'code', header: 'code' },
             {
               key: 'sizeDisplay',
@@ -298,7 +359,12 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
               className: 'text-right text-xs',
               tdClassName: 'text-right text-xs text-muted',
             },
-            { key: 'action', header: 'actions', className: 'text-center', tdClassName: 'text-center' },
+            {
+              key: 'action',
+              header: 'actions',
+              className: 'text-center',
+              tdClassName: 'text-center',
+            },
           ]}
           rows={tableRows}
           emptyMessage="No results found."
@@ -339,7 +405,14 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
         size="content"
         footer={
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
-            <Button variant="outline" onClick={() => { setGuideOpen(false); setGuideTargetGroup(null); setSelectedGuide(''); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setGuideOpen(false);
+                setGuideTargetGroup(null);
+                setSelectedGuide('');
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -352,7 +425,11 @@ export default function SalesTable({ rows = [], pagination, isLoading = false, i
                   return;
                 }
                 try {
-                  await setGroupGuide({ saleGroupId: guideTargetGroup, guideId: selectedGuide || null, guideRate: 0.1 });
+                  await setGroupGuide({
+                    saleGroupId: guideTargetGroup,
+                    guideId: selectedGuide || null,
+                    guideRate: 0.1,
+                  });
                   setGuideOpen(false);
                   setGuideTargetGroup(null);
                   setSelectedGuide('');
