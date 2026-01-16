@@ -82,3 +82,10 @@ export function setSaleFreeGift(payload) {
 export function setSaleGroupGuide(payload) {
   return supabase.setSaleGroupGuide(payload);
 }
+
+export function setSaleTime(payload) {
+  return withOfflineFallback(
+    () => supabase.setSaleTime(payload),
+    () => local.setSaleTime(payload)
+  );
+}

@@ -10,7 +10,7 @@ import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
 import { getGuides } from '../../guides/guideApi';
-import { useSetSaleGroupGuideMutation } from '../salesHooks';
+import { useSetSaleGroupGuideMutation, useSetSaleTimeMutation } from '../salesHooks';
 
 export default function SalesTable({
   rows = [],
@@ -29,8 +29,14 @@ export default function SalesTable({
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideTargetGroup, setGuideTargetGroup] = useState(null);
   const [selectedGuide, setSelectedGuide] = useState('');
+  const [timeOpen, setTimeOpen] = useState(false);
+  const [timeTarget, setTimeTarget] = useState(null);
+  const [timeDate, setTimeDate] = useState('');
+  const [timeClock, setTimeClock] = useState('');
+  const [timeError, setTimeError] = useState('');
   const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
+  const { mutateAsync: setSaleTime, isPending: savingTime } = useSetSaleTimeMutation();
 
   async function copyTextToClipboard(text) {
     const v = String(text || '').trim();
@@ -125,6 +131,39 @@ export default function SalesTable({
     },
     { totalQty: 0, totalPrice: 0, totalCommission: 0 }
   );
+
+  async function handleTimeSubmit() {
+    if (!timeTarget) return;
+    const d = String(timeDate || '').trim();
+    const t = String(timeClock || '').trim();
+    if (!d || !t) {
+      setTimeError('날짜와 시간을 모두 입력하세요.');
+      return;
+    }
+    setTimeError('');
+    const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const timeOk = /^\d{2}:\d{2}$/.test(t);
+    if (!dateOk || !timeOk) {
+      setTimeError('유효한 날짜/시간을 입력하세요.');
+      return;
+    }
+    const iso = `${d}T${t}:00`;
+    try {
+      await setSaleTime({
+        saleGroupId: timeTarget.saleGroupId || null,
+        saleId: timeTarget.saleId,
+        soldAt: iso,
+      });
+      setTimeOpen(false);
+      setTimeTarget(null);
+      setTimeDate('');
+      setTimeClock('');
+      showToast('판매 시간이 수정되었습니다.');
+    } catch (e) {
+      console.error(e);
+      setTimeError('시간 수정에 실패했습니다.');
+    }
+  }
 
   const tableRows = visibleRows.map((row, index) => {
     const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
@@ -257,6 +296,31 @@ export default function SalesTable({
               if (isRefunded) return;
               setRefundTarget(row);
               setRefundOpen(true);
+            }}
+          />
+          <Button
+            variant="outline"
+            icon="clock"
+            title="Edit time"
+            disabled={isRefunded}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const s = String(row.soldAt || '').trim();
+              const dateHit = s.match(/\d{4}-\d{2}-\d{2}/);
+              const timeHit = s.match(/(\d{2}):(\d{2})/);
+              setTimeDate(dateHit ? dateHit[0] : '');
+              setTimeClock(timeHit ? timeHit[0] : '');
+              setTimeTarget(row);
+              setTimeError('');
+              setTimeOpen(true);
             }}
           />
           <Button
@@ -394,6 +458,75 @@ export default function SalesTable({
           setReceiptData(null);
         }}
       />
+      <Modal
+        open={timeOpen}
+        onClose={() => {
+          setTimeOpen(false);
+          setTimeTarget(null);
+          setTimeDate('');
+          setTimeClock('');
+          setTimeError('');
+        }}
+        title="Edit Sold Time"
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTimeOpen(false);
+                setTimeTarget(null);
+                setTimeDate('');
+                setTimeClock('');
+                setTimeError('');
+              }}
+              style={{ width: 100 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleTimeSubmit}
+              disabled={savingTime}
+              style={{ width: 120 }}
+            >
+              {savingTime ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        }
+      >
+        {timeTarget && (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ fontSize: 13 }}>
+              Code {timeTarget.code} · Size {timeTarget.sizeDisplay} · Qty {timeTarget.qty}
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+              <div>
+                <div style={{ fontSize: 12, marginBottom: 4 }}>Date</div>
+                <input
+                  type="date"
+                  className="input-field date-control-input"
+                  value={timeDate}
+                  readOnly
+                  disabled
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, marginBottom: 4 }}>Time</div>
+                <input
+                  type="time"
+                  className="input-field date-control-input"
+                  value={timeClock}
+                  onChange={(e) => setTimeClock(e.target.value)}
+                />
+              </div>
+            </div>
+            {timeError ? (
+              <div style={{ color: 'var(--error-main)', fontSize: 12 }}>{timeError}</div>
+            ) : null}
+          </div>
+        )}
+      </Modal>
       <Modal
         open={guideOpen}
         onClose={() => {

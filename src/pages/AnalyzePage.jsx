@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import Card from '../components/common/Card';
 import Button from '../components/common/Button';
+import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
-import { getAnalytics } from '../features/sales/salesApiClient';
 import ExportActions from '../components/common/ExportActions';
-import BarChart from '../components/common/BarChart';
+import { getAnalytics } from '../features/sales/salesApiClient';
 
 function toInputDate(d) {
   const yyyy = d.getFullYear();
@@ -55,7 +54,9 @@ export default function AnalyzePage() {
       <div className="page-header">
         <div>
           <div className="page-title">Analyze</div>
-          <div className="page-subtitle">Sales summary and analysis by category/brand/size/color</div>
+          <div className="page-subtitle">
+            Sales summary and analysis by category/brand/size/color
+          </div>
         </div>
         <div className="page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div className="date-control">
@@ -80,7 +81,14 @@ export default function AnalyzePage() {
               />
             </div>
           </div>
-          <Button variant="outline" size="sm" className="icon" title="Today" onClick={setToday} icon="today" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="icon"
+            title="Today"
+            onClick={setToday}
+            icon="today"
+          />
           <Button variant="outline" size="sm" onClick={setWeek}>
             7D
           </Button>
@@ -95,7 +103,9 @@ export default function AnalyzePage() {
 
       <Card title="Sales Summary">
         {!data ? (
-          <div className="text-sm text-[var(--text-muted)]">Please select a period and click Analyze.</div>
+          <div className="text-sm text-[var(--text-muted)]">
+            Please select a period and click Analyze.
+          </div>
         ) : (
           <div
             style={{
@@ -108,6 +118,15 @@ export default function AnalyzePage() {
               <div>Total Sales</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(data.summary.grossAmount).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Total Sales - Guide Comm</div>
+              <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
+                {Math.round(
+                  data.summary.grossAmount - (data.summary.totalCommission || 0)
+                ).toLocaleString('en-PH')}{' '}
+                PHP
               </div>
             </div>
             <div className="page-card">
@@ -164,9 +183,7 @@ export default function AnalyzePage() {
             </div>
             <div className="page-card">
               <div>Discount Rate</div>
-              <div style={{ fontWeight: 700 }}>
-                {(data.summary.discountRate * 100).toFixed(1)}%
-              </div>
+              <div style={{ fontWeight: 700 }}>{(data.summary.discountRate * 100).toFixed(1)}%</div>
             </div>
             <div className="page-card">
               <div>Refund Count</div>
@@ -220,7 +237,11 @@ export default function AnalyzePage() {
         ) : (
           (() => {
             const pivotCols = (data.colorTypePivotColumns || []).filter((t) => {
-              const allow = new Set(['top','bottom','bag','hat','golfbag','pouch','belt'].map((s) => s.toLowerCase()));
+              const allow = new Set(
+                ['top', 'bottom', 'bag', 'hat', 'golfbag', 'pouch', 'belt'].map((s) =>
+                  s.toLowerCase()
+                )
+              );
               return allow.has(String(t || '').toLowerCase());
             });
             const pivotRows = data.colorTypePivotRows || [];
@@ -273,28 +294,30 @@ export default function AnalyzePage() {
       <Card
         title="Sales by Guide"
         actions={
-          data && data.byGuide.length > 0 ? [
-            <ExportActions
-              key="by-guide"
-              label="Guide"
-              columns={[
-                { key: 'label', header: 'Guide' },
-                { key: 'qty', header: 'Qty' },
-                { key: 'revenue', header: 'Revenue (PHP)' },
-                { key: 'commission', header: 'Commission (PHP)' },
-              ]}
-              rows={data.byGuide.map((r) => ({
-                label: r.label,
-                qty: r.qty,
-                revenue: Math.round(r.revenue).toLocaleString('en-PH'),
-                commission: Math.round(r.commission).toLocaleString('en-PH'),
-              }))}
-              filename="sales-by-guide.csv"
-              gdriveName="sales-by-guide.csv"
-              csvLabel="Guide CSV"
-              driveLabel="Guide Drive"
-            />
-          ] : null
+          data && data.byGuide.length > 0
+            ? [
+                <ExportActions
+                  key="by-guide"
+                  label="Guide"
+                  columns={[
+                    { key: 'label', header: 'Guide' },
+                    { key: 'qty', header: 'Qty' },
+                    { key: 'revenue', header: 'Revenue (PHP)' },
+                    { key: 'commission', header: 'Commission (PHP)' },
+                  ]}
+                  rows={data.byGuide.map((r) => ({
+                    label: r.label,
+                    qty: r.qty,
+                    revenue: Math.round(r.revenue).toLocaleString('en-PH'),
+                    commission: Math.round(r.commission).toLocaleString('en-PH'),
+                  }))}
+                  filename="sales-by-guide.csv"
+                  gdriveName="sales-by-guide.csv"
+                  csvLabel="Guide CSV"
+                  driveLabel="Guide Drive"
+                />,
+              ]
+            : null
         }
       >
         {!data ? (
@@ -304,8 +327,18 @@ export default function AnalyzePage() {
             columns={[
               { key: 'label', header: 'Guide' },
               { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-              { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
-              { key: 'commission', header: 'Commission (PHP)', className: 'text-right', tdClassName: 'text-right' },
+              {
+                key: 'revenue',
+                header: 'Revenue (PHP)',
+                className: 'text-right',
+                tdClassName: 'text-right',
+              },
+              {
+                key: 'commission',
+                header: 'Commission (PHP)',
+                className: 'text-right',
+                tdClassName: 'text-right',
+              },
             ]}
             rows={data.byGuide.map((r) => ({
               id: r.key,
@@ -354,7 +387,12 @@ export default function AnalyzePage() {
               { key: 'category', header: 'Category' },
               { key: 'code', header: 'Code' },
               { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-              { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+              {
+                key: 'revenue',
+                header: 'Revenue (PHP)',
+                className: 'text-right',
+                tdClassName: 'text-right',
+              },
             ]}
             rows={(data.bestByCategory || []).map((r) => ({
               id: r.code,
@@ -481,7 +519,12 @@ export default function AnalyzePage() {
               columns={[
                 { key: 'key', header: 'Category' },
                 { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+                {
+                  key: 'revenue',
+                  header: 'Revenue (PHP)',
+                  className: 'text-right',
+                  tdClassName: 'text-right',
+                },
               ]}
               rows={data.byCategory.map((r) => ({
                 id: r.key,
@@ -493,7 +536,12 @@ export default function AnalyzePage() {
               columns={[
                 { key: 'key', header: 'Brand' },
                 { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+                {
+                  key: 'revenue',
+                  header: 'Revenue (PHP)',
+                  className: 'text-right',
+                  tdClassName: 'text-right',
+                },
               ]}
               rows={data.byBrand.map((r) => ({
                 id: r.key,
@@ -505,7 +553,12 @@ export default function AnalyzePage() {
               columns={[
                 { key: 'key', header: 'Gender' },
                 { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+                {
+                  key: 'revenue',
+                  header: 'Revenue (PHP)',
+                  className: 'text-right',
+                  tdClassName: 'text-right',
+                },
               ]}
               rows={data.byGender.map((r) => ({
                 id: r.key,
@@ -517,7 +570,12 @@ export default function AnalyzePage() {
               columns={[
                 { key: 'key', header: 'Size' },
                 { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+                {
+                  key: 'revenue',
+                  header: 'Revenue (PHP)',
+                  className: 'text-right',
+                  tdClassName: 'text-right',
+                },
               ]}
               rows={data.bySize.map((r) => ({
                 id: r.key,
@@ -529,7 +587,12 @@ export default function AnalyzePage() {
               columns={[
                 { key: 'key', header: 'Type' },
                 { key: 'qty', header: 'Qty', className: 'text-right', tdClassName: 'text-right' },
-                { key: 'revenue', header: 'Revenue (PHP)', className: 'text-right', tdClassName: 'text-right' },
+                {
+                  key: 'revenue',
+                  header: 'Revenue (PHP)',
+                  className: 'text-right',
+                  tdClassName: 'text-right',
+                },
               ]}
               rows={(data.byType || []).map((r) => ({
                 id: r.key,
@@ -585,11 +648,17 @@ export default function AnalyzePage() {
         {!data ? (
           <div className="text-sm text-[var(--text-muted)]">Please run Analyze first.</div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
             <div className="page-card">
               <div>Best Weekday</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
-                {(data.bestWeekday?.key || '')} / {Number(data.bestWeekday?.qty || 0)}
+                {data.bestWeekday?.key || ''} / {Number(data.bestWeekday?.qty || 0)}
               </div>
             </div>
             <div className="page-card">
@@ -600,7 +669,8 @@ export default function AnalyzePage() {
                   const hh = h % 12 || 12;
                   const suf = h >= 12 ? 'PM' : 'AM';
                   return `${hh}${suf}`;
-                })()} / {Number(data.bestHour?.qty || 0)}
+                })()}{' '}
+                / {Number(data.bestHour?.qty || 0)}
               </div>
             </div>
             <div className="page-card" style={{ gridColumn: '1 / -1' }}>

@@ -1,5 +1,5 @@
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
-import { sbInsert, sbSelect, sbUpdate, sbRpc } from '../../db/supabaseRest';
+import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
@@ -56,7 +56,9 @@ function toMsFromIso(iso) {
 }
 
 function includesIgnoreCase(hay, needle) {
-  return String(hay || '').toLowerCase().includes(String(needle || '').toLowerCase());
+  return String(hay || '')
+    .toLowerCase()
+    .includes(String(needle || '').toLowerCase());
 }
 
 function findLabel(group, c) {
@@ -140,7 +142,8 @@ async function attachLocalProductMeta(items) {
     const product = productMap.get(i.code);
     return {
       ...i,
-      nameKo: (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
+      nameKo:
+        (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: i.sizeDisplay ?? i.size,
       lineTotalPhp: Number(i.unitPricePhp || 0) * Number(i.qty || 0),
     };
@@ -215,22 +218,28 @@ export async function checkoutCart(payload) {
   let totalQty = 0;
   const soldAt = nowLocalIsoLikeUtc();
   const salesToInsert = [];
-  
+
   // 1. Create a sale group for this transaction
   const saleGroupId = crypto.randomUUID();
   const guideRate = guideId ? 0.1 : 0; // 10% commission if guide present
 
   // Create the group first (parent record)
   // We initialize totals to 0; finalize_sale_group will calculate them
-  await sbInsert('sale_groups', [{
-    id: saleGroupId,
-    guide_id: guideId || null,
-    guide_rate: guideRate,
-    sold_at: soldAt,
-    subtotal: 0,
-    total: 0,
-    guide_commission: 0
-  }], { returning: 'minimal' });
+  await sbInsert(
+    'sale_groups',
+    [
+      {
+        id: saleGroupId,
+        guide_id: guideId || null,
+        guide_rate: guideRate,
+        sold_at: soldAt,
+        subtotal: 0,
+        total: 0,
+        guide_commission: 0,
+      },
+    ],
+    { returning: 'minimal' }
+  );
 
   for (const item of items) {
     const { code, size, qty } = item;
@@ -272,7 +281,7 @@ export async function checkoutCart(payload) {
 
   // Inventory updates are handled by DB trigger `trg_sales_apply_stock_on_insert`
   // We just insert the sales rows.
-  
+
   let inserted;
   const removed = new Set();
   let rowsToInsert = salesToInsert;
@@ -316,34 +325,34 @@ export async function getSalesList() {
     select: 'id,sold_at,qty,price,refunded_at,sale_group_id',
     order: { column: 'sold_at', ascending: false },
   });
-  
+
   // Manual join to get guide_id from sale_groups
   const groupIds = [...new Set((rows || []).map((r) => r.sale_group_id).filter(Boolean))];
   const groupMap = new Map();
   if (groupIds.length > 0) {
-    // We fetch all relevant sale_groups. Since getSalesList defaults to 1000 rows, 
+    // We fetch all relevant sale_groups. Since getSalesList defaults to 1000 rows,
     // we can use IN clause if list is small, or just fetch needed ones.
     // For simplicity and safety with URL length, we'll fetch in chunks or just fetch matching by ID if possible.
-    // Given the constraints and typical page size, we'll try fetching with IN clause for now, 
+    // Given the constraints and typical page size, we'll try fetching with IN clause for now,
     // but if it's too large, we might need another strategy.
     // However, for "Sales History" page which uses getSalesHistoryFilteredResult, we handle it there separately.
     // This function is likely for "Recent Sales" or similar.
-    
-    // To be safe against URL length limits with many IDs, we will just fetch the sale_groups 
-    // that match the time range of the fetched sales? 
-    // Or just use the IDs if < 100. 
+
+    // To be safe against URL length limits with many IDs, we will just fetch the sale_groups
+    // that match the time range of the fetched sales?
+    // Or just use the IDs if < 100.
     // Let's implement a safe chunked fetch or just fetch all if needed?
     // For now, let's assume specific IDs are needed.
-    
+
     // Actually, simpler: just fetch the sale_groups for these IDs.
     // If there are many, we might split. But let's try the simple approach first.
     const inList = buildInList(groupIds);
     if (inList !== '()') {
       const groups = await sbSelectAll('sale_groups', {
         select: 'id,guide_id',
-        filters: [{ column: 'id', op: 'in', value: inList }]
+        filters: [{ column: 'id', op: 'in', value: inList }],
       });
-      groups.forEach(g => groupMap.set(g.id, g.guide_id));
+      groups.forEach((g) => groupMap.set(g.id, g.guide_id));
     }
   }
 
@@ -359,7 +368,7 @@ export async function getSalesList() {
         totalAmount: 0,
         itemCount: 0,
         guideId: groupMap.get(r.sale_group_id) || null,
-        saleGroupId: r.sale_group_id
+        saleGroupId: r.sale_group_id,
       });
     }
     const entry = map.get(key);
@@ -402,7 +411,8 @@ export async function getSaleItemsBySaleId(saleId) {
     saleId: r.id,
     soldAt: r.sold_at,
     code: r.code,
-    color: String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || ''),
+    color:
+      String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || ''),
     size: r.size_std ?? 'Free',
     sizeDisplay: r.size_std ?? 'Free',
     qty: Number(r.qty ?? 0) || 0,
@@ -421,21 +431,52 @@ export async function processRefund({ saleId, reason, qty: _qty, code: _code, si
   if (!sid) throw new Error('INVALID_SALE_ID');
 
   const reasonStr = String(reason || '').trim();
+  if (!reasonStr) throw new Error('INVALID_REFUND_REASON');
   const refundedAt = nowLocalIsoLikeUtc();
 
-  // Use DB RPC to handle refund (locking, inventory restoration, refunds record)
-  // The DB function `refund_item` handles:
-  // 1. Locking sale and inventory rows
-  // 2. Checking if already refunded
-  // 3. Restoring inventory (full qty of the sale row)
-  // 4. Inserting into refunds table
-  // 5. Updating sales table (refunded_at, reason)
-  
-  await sbRpc('refund_item', {
-    p_sale_id: sid,
-    p_reason: reasonStr,
-    p_refunded_at: refundedAt,
+  const saleRows = await sbSelect('sales', {
+    select: 'id,code,size_std,qty,refunded_at',
+    filters: [{ column: 'id', op: 'eq', value: sid }],
+    limit: 1,
   });
+  const sale = saleRows?.[0];
+  if (!sale) throw new Error('SALE_NOT_FOUND');
+  if (sale.refunded_at) throw new Error('SALE_ALREADY_REFUNDED');
+
+  const code = String(_code || sale.code || '').trim();
+  const qty = Number(sale.qty ?? _qty ?? 0) || 0;
+  if (!code || qty <= 0) throw new Error('INVALID_REFUND_PAYLOAD');
+
+  const sizeKey = normalizeSizeKey(sale.size_std);
+  const col = SIZE_TO_COLUMN[sizeKey];
+  if (!col) throw new Error('UNSUPPORTED_SIZE_STD');
+
+  const invRows = await sbSelect('inventories', {
+    select: `code,${col}`,
+    filters: [{ column: 'code', op: 'eq', value: code }],
+    limit: 1,
+  });
+  const inv = invRows?.[0];
+  if (!inv) throw new Error('INVENTORY_NOT_FOUND');
+
+  const currentStock = Number(inv[col] ?? 0) || 0;
+  const newStock = currentStock + qty;
+
+  await sbUpdate(
+    'inventories',
+    { [col]: newStock },
+    { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
+  );
+
+  await sbInsert('refunds', [{ sale_id: sid, refunded_at: refundedAt, reason: reasonStr }], {
+    returning: 'minimal',
+  });
+
+  await sbUpdate(
+    'sales',
+    { refunded_at: refundedAt, refund_reason: reasonStr },
+    { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
+  );
 
   return { ok: true };
 }
@@ -470,6 +511,39 @@ export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 
   return { ok: true };
 }
 
+export async function setSaleTime({ saleGroupId, saleId, soldAt } = {}) {
+  const iso = String(soldAt || '').trim();
+  if (!iso) throw new Error('INVALID_SOLD_AT');
+
+  const filters = [];
+  const gid = String(saleGroupId || '').trim();
+  const sid = Number(saleId || 0);
+
+  if (gid) {
+    filters.push({ column: 'sale_group_id', op: 'eq', value: gid });
+  } else if (sid) {
+    filters.push({ column: 'id', op: 'eq', value: sid });
+  } else {
+    throw new Error('INVALID_SALE_KEY');
+  }
+
+  await sbUpdate('sales', { sold_at: iso }, { filters, returning: 'minimal' });
+
+  if (gid) {
+    try {
+      await sbUpdate(
+        'sale_groups',
+        { sold_at: iso },
+        { filters: [{ column: 'id', op: 'eq', value: gid }], returning: 'minimal' }
+      );
+    } catch (e) {
+      void e;
+    }
+  }
+
+  return { ok: true };
+}
+
 async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query = '' } = {}) {
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
@@ -479,7 +553,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   let sales;
   try {
     sales = await sbSelectAll('sales', {
-      select: 'id,sold_at,code,color,size_std,qty,price,free_gift,refunded_at,refund_reason,sale_group_id',
+      select:
+        'id,sold_at,code,color,size_std,qty,price,free_gift,refunded_at,refund_reason,sale_group_id',
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
@@ -517,37 +592,37 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     // Or just fetch all if count > 500?
     // If we fetch all sale_groups (id, guide_id), it might be heavy but safe.
     // Given current usage, let's try fetching with IN list first.
-    
+
     // Note: buildInList handles quotes.
     const inList = buildInList(groupIds);
     if (inList !== '()') {
       try {
         const groups = await sbSelectAll('sale_groups', {
           select: 'id,guide_id',
-          filters: [{ column: 'id', op: 'in', value: inList }]
+          filters: [{ column: 'id', op: 'in', value: inList }],
         });
-        groups.forEach(g => groupMap.set(g.id, g.guide_id));
+        groups.forEach((g) => groupMap.set(g.id, g.guide_id));
       } catch {
-         // If IN list is too long, fallback to fetching all sale_groups (lightweight select)
-         // filtering by date if possible would be better, but we lack easy access to date range here if we used 'all'.
-         // If hasFrom/hasTo, we can filter sale_groups by date.
-         if (hasFrom || hasTo) {
-             const filters = [];
-             // rough filter: string comparison on sold_at
-             if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey }); 
-             // Note: fromKey is YYYY-MM-DD, sold_at is ISO. This string compare works for >=.
-             if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: toKey + 'T23:59:59' });
-             
-             const groups = await sbSelectAll('sale_groups', {
-                select: 'id,guide_id',
-                filters
-             });
-             groups.forEach(g => groupMap.set(g.id, g.guide_id));
-         } else {
-             // Fallback: fetch all.
-             const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
-             groups.forEach(g => groupMap.set(g.id, g.guide_id));
-         }
+        // If IN list is too long, fallback to fetching all sale_groups (lightweight select)
+        // filtering by date if possible would be better, but we lack easy access to date range here if we used 'all'.
+        // If hasFrom/hasTo, we can filter sale_groups by date.
+        if (hasFrom || hasTo) {
+          const filters = [];
+          // rough filter: string comparison on sold_at
+          if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey });
+          // Note: fromKey is YYYY-MM-DD, sold_at is ISO. This string compare works for >=.
+          if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: toKey + 'T23:59:59' });
+
+          const groups = await sbSelectAll('sale_groups', {
+            select: 'id,guide_id',
+            filters,
+          });
+          groups.forEach((g) => groupMap.set(g.id, g.guide_id));
+        } else {
+          // Fallback: fetch all.
+          const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
+          groups.forEach((g) => groupMap.set(g.id, g.guide_id));
+        }
       }
     }
   }
@@ -564,7 +639,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         saleId: r.id,
         soldAt: r.sold_at,
         code: r.code,
-        color: String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || ''),
+        color:
+          String(r.color || '').trim() ||
+          findLabel('color', String(r.code || '').split('-')[3] || ''),
         size: sizeKey,
         sizeDisplay: sizeKey,
         qty: qtyN,
@@ -603,7 +680,11 @@ function withNormalizedNameFallback(rows) {
   }));
 }
 
-export async function getSalesHistoryFilteredResult({ fromDate = '', toDate = '', query = '' } = {}) {
+export async function getSalesHistoryFilteredResult({
+  fromDate = '',
+  toDate = '',
+  query = '',
+} = {}) {
   const head = await sbSelect('sales', { select: 'id', limit: 1 });
   const hasAnySales = Array.isArray(head) && head.length > 0;
   const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query });
@@ -654,13 +735,13 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       try {
         const groups = await sbSelectAll('sale_groups', {
           select: 'id,guide_id',
-          filters: [{ column: 'id', op: 'in', value: inList }]
+          filters: [{ column: 'id', op: 'in', value: inList }],
         });
-        groups.forEach(g => groupMap.set(g.id, g.guide_id));
+        groups.forEach((g) => groupMap.set(g.id, g.guide_id));
       } catch {
-         // Fallback: fetch all if IN list fails
-         const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
-         groups.forEach(g => groupMap.set(g.id, g.guide_id));
+        // Fallback: fetch all if IN list fails
+        const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
+        groups.forEach((g) => groupMap.set(g.id, g.guide_id));
       }
     }
   }
@@ -735,18 +816,21 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   // Fetch guide names for mapping
   let guideMap = new Map();
-  const guideIds = [...new Set(analyzedRows.map(r => r.guideId).filter(Boolean))];
+  const guideIds = [...new Set(analyzedRows.map((r) => r.guideId).filter(Boolean))];
   if (guideIds.length > 0) {
     try {
       const allGuides = await sbSelect('guides', { select: 'id,name' });
-      guideMap = new Map((allGuides || []).map(g => [g.id, g.name]));
+      guideMap = new Map((allGuides || []).map((g) => [g.id, g.name]));
     } catch (e) {
       console.error(e);
     }
   }
 
   const totalRevenue = analyzedRows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
-  const totalCommission = analyzedRows.reduce((sum, r) => sum + (Number(r.commission || 0) || 0), 0);
+  const totalCommission = analyzedRows.reduce(
+    (sum, r) => sum + (Number(r.commission || 0) || 0),
+    0
+  );
   let mrMoonCommission = 0;
   let mrMoonRevenue = 0;
   try {
@@ -754,8 +838,8 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       const name = r.guideId ? String(guideMap.get(r.guideId) || '').toLowerCase() : '';
       const isMrMoon = name === 'mr.moon';
       if (isMrMoon) {
-        mrMoonCommission += (Number(r.commission || 0) || 0);
-        mrMoonRevenue += (Number(r.lineTotalPhp || 0) || 0);
+        mrMoonCommission += Number(r.commission || 0) || 0;
+        mrMoonRevenue += Number(r.lineTotalPhp || 0) || 0;
       }
     });
   } catch {
@@ -770,19 +854,19 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
     0
   );
-  
-  // New Total Sales definition: Revenue - All Commissions (Mr.Moon + Guides)
-  // This represents the "Net Revenue" after deducting discounts/commissions.
+
   const realTotalSales = totalRevenue - totalCommission;
-  
-  const grossAmount = realTotalSales; 
-  const netAmount = realTotalSales; // Already net of refunds and commissions
+
+  const grossAmount = totalRevenue - mrMoonCommission;
+  const netAmount = realTotalSales;
 
   const aov = transactionCount ? grossAmount / transactionCount : 0;
 
   const discountRate = 0.1;
 
-  const codesForCost = [...new Set(analyzedRows.map((r) => String(r.code || '').trim()))].filter(Boolean);
+  const codesForCost = [...new Set(analyzedRows.map((r) => String(r.code || '').trim()))].filter(
+    Boolean
+  );
   let kpriceByCode = new Map();
   if (codesForCost.length) {
     const inList = buildInList(codesForCost);
@@ -792,7 +876,10 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
         filters: [{ column: 'code', op: 'in', value: inList }],
       });
       kpriceByCode = new Map(
-        (productsForCost || []).map((p) => [String(p.code || '').trim(), Number(p.kprice ?? 0) || 0])
+        (productsForCost || []).map((p) => [
+          String(p.code || '').trim(),
+          Number(p.kprice ?? 0) || 0,
+        ])
       );
     } catch (_e) {
       void _e;
@@ -806,19 +893,19 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     const costUnitPhp = (Number(kprice || 0) || 0) / 25;
     return sum + costUnitPhp * (Number(r.qty || 0) || 0);
   }, 0);
-  
+
   // Gross Profit is now based on Real Total Sales
   const grossProfit = realTotalSales - costAmount;
-  
+
   // Rent calculation based on Net Sales (after commission)
   const netMrMoonSales = mrMoonRevenue - mrMoonCommission;
   // realTotalSales includes everything, so subtract netMrMoonSales to get "Others"
   const netOtherSales = realTotalSales - netMrMoonSales;
-  
-  const normalRent = netOtherSales * 0.10;
+
+  const normalRent = netOtherSales * 0.1;
   const mrMoonRent = netMrMoonSales * 0.05;
   const totalRent = normalRent + mrMoonRent;
-  
+
   const ownerProfit = realTotalSales - totalRent - costAmount;
 
   function accumulate(list, keyFn, labelFn) {
@@ -836,15 +923,23 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     return [...map.values()].sort((a, b) => b.revenue - a.revenue);
   }
 
-  const revenueRows = analyzedRows.filter((r) => !r.freeGift && (Number(r.unitPricePhp || 0) > 0) && (Number(r.lineTotalPhp || 0) > 0));
-  const byCategory = accumulate(revenueRows, (r) => String(r.code || '').split('-')[0]?.[0] || '', (k) =>
-    findLabel('category', k)
+  const revenueRows = analyzedRows.filter(
+    (r) => !r.freeGift && Number(r.unitPricePhp || 0) > 0 && Number(r.lineTotalPhp || 0) > 0
   );
-  const byBrand = accumulate(revenueRows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
-    findLabel('brand', k)
+  const byCategory = accumulate(
+    revenueRows,
+    (r) => String(r.code || '').split('-')[0]?.[0] || '',
+    (k) => findLabel('category', k)
   );
-  const byType = accumulate(revenueRows, (r) => String(r.code || '').split('-')[1] || '', (k) =>
-    findLabel('type', k)
+  const byBrand = accumulate(
+    revenueRows,
+    (r) => String(r.code || '').split('-')[2] || '',
+    (k) => findLabel('brand', k)
+  );
+  const byType = accumulate(
+    revenueRows,
+    (r) => String(r.code || '').split('-')[1] || '',
+    (k) => findLabel('type', k)
   );
   const byColor = accumulate(
     analyzedRows,
@@ -861,16 +956,20 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       return '';
     }
   );
-  const bySize = accumulate(revenueRows, (r) => r.sizeDisplay || r.size || '', (k) => k);
+  const bySize = accumulate(
+    revenueRows,
+    (r) => r.sizeDisplay || r.size || '',
+    (k) => k
+  );
   const byGender = accumulate(
     revenueRows,
     (r) => String(r.code || '').split('-')[0]?.[1] || '',
     (k) => findLabel('gender', k)
   );
-  
+
   // Fetch guide names for mapping
   const byGuide = accumulate(
-    analyzedRows.filter(r => r.guideId),
+    analyzedRows.filter((r) => r.guideId),
     (r) => r.guideId,
     (k) => guideMap.get(k) || 'Unknown Guide'
   );
@@ -943,10 +1042,16 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     const typeCode = String(r.code || '').split('-')[1] || '';
     if (!typeCode) continue;
     const typeLabel = findLabel('type', typeCode);
-    const colorLabel = String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
+    const colorLabel =
+      String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
     if (!colorLabel) continue;
     const typeMap = colorByTypeAgg.get(typeLabel) || new Map();
-    const prev = typeMap.get(colorLabel) || { type: typeLabel, color: colorLabel, qty: 0, revenue: 0 };
+    const prev = typeMap.get(colorLabel) || {
+      type: typeLabel,
+      color: colorLabel,
+      qty: 0,
+      revenue: 0,
+    };
     prev.qty += Number(r.qty || 0) || 0;
     prev.revenue += Number(r.lineTotalPhp || 0) || 0;
     typeMap.set(colorLabel, prev);
@@ -961,7 +1066,11 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   colorByType.sort((a, b) => b.revenue - a.revenue);
 
   // Pivot (Qty) for Color x Type
-  const typeAllow = new Set(['top','bottom','bag','hat','golfbag','golfBag','pouch','belt'].map((s) => s.toLowerCase()));
+  const typeAllow = new Set(
+    ['top', 'bottom', 'bag', 'hat', 'golfbag', 'golfBag', 'pouch', 'belt'].map((s) =>
+      s.toLowerCase()
+    )
+  );
   const pivotTypes = [...new Set(colorByType.map((v) => v.type))].filter((t) =>
     typeAllow.has(String(t || '').toLowerCase())
   );
@@ -970,15 +1079,17 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     const row = { color: c };
     for (const t of pivotTypes) {
       const hit = colorByType.find((v) => v.type === t && v.color === c);
-      row[t] = hit ? (Number(hit.qty || 0) || 0) : 0;
+      row[t] = hit ? Number(hit.qty || 0) || 0 : 0;
     }
     return row;
   });
   const colorTypePivotColumns = pivotTypes;
 
-  const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const byWeekdayQtyMap = new Map(weekdayNames.map((n, i) => [i, { key: n, qty: 0 }]));
-  const byHourQtyMap = new Map(Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }]));
+  const byHourQtyMap = new Map(
+    Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }])
+  );
   for (const r of analyzedRows) {
     const dt = new Date(r.soldAt);
     const day = dt.getUTCDay();

@@ -244,6 +244,14 @@ export async function setSaleFreeGift({ saleId, code, size, freeGift } = {}) {
   return { ok: true, saleId: sid, code, size: sizeKey, freeGift: Boolean(freeGift) };
 }
 
+export async function setSaleTime({ saleId, soldAt } = {}) {
+  const sid = Number(saleId || 0);
+  const iso = String(soldAt || '').trim();
+  if (!sid || !iso) throw new Error('INVALID_SALE_TIME');
+  await db.sales.update(sid, { soldAt: iso });
+  return { ok: true };
+}
+
 export async function getSaleItemsBySaleId(saleId) {
   const items = await db.saleItems.where('saleId').equals(saleId).toArray();
 

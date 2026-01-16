@@ -9,6 +9,7 @@ import {
   processRefund,
   setSaleFreeGift,
   setSaleGroupGuide,
+  setSaleTime,
 } from './salesApiClient';
 
 /**
@@ -120,6 +121,19 @@ export function useSetSaleGroupGuideMutation() {
   return useMutation({
     mutationKey: ['sales', 'setSaleGroupGuide'],
     mutationFn: (payload) => setSaleGroupGuide(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+    },
+  });
+}
+
+export function useSetSaleTimeMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['sales', 'setSaleTime'],
+    mutationFn: (payload) => setSaleTime(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
