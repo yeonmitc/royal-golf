@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import Button from '../components/common/Button';
-import { exportToCsv } from '../utils/csvExport';
 import { useToast } from '../context/ToastContext';
-import { getProductInventoryList } from '../features/products/productApi';
 import { getSupabaseConfigSummary, sbSelect } from '../db/supabaseRest';
+import { getProductInventoryList } from '../features/products/productApi';
+import { exportToTsv } from '../utils/csvExport';
 
 export default function SettingsPage() {
   const { showToast } = useToast();
@@ -16,7 +16,7 @@ export default function SettingsPage() {
     const csvRows = [header].concat(
       rows.map((p) => [p.code, p.nameKo, p.salePricePhp, p.totalStock])
     );
-    exportToCsv('products.csv', csvRows);
+    exportToTsv('products.tsv', csvRows);
   };
 
   const exportToJson = (filename, data) => {
@@ -61,7 +61,9 @@ export default function SettingsPage() {
     } catch (e) {
       const msg = String(e?.message || '').trim();
       if (msg === 'SUPABASE_CONFIG_MISSING') {
-        showToast('Supabase 설정이 없습니다. .env에 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY를 넣어주세요.');
+        showToast(
+          'Supabase 설정이 없습니다. .env에 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY를 넣어주세요.'
+        );
       } else {
         showToast(msg || 'Supabase request failed.');
       }
@@ -94,7 +96,7 @@ export default function SettingsPage() {
         <section className="page-card space-y-3">
           <div className="font-semibold text-sm text-[var(--gold-soft)]">Export</div>
           <Button variant="outline" size="sm" onClick={handleExportProducts} disabled={busy}>
-            Download product list CSV
+            Download product list TSV
           </Button>
         </section>
 

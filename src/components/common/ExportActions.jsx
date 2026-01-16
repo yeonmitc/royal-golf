@@ -1,5 +1,5 @@
 import Button from './Button';
-import { exportToCsv } from '../../utils/csvExport';
+import { exportToTsv } from '../../utils/csvExport';
 import { useToast } from '../../context/ToastContext';
 
 async function ensureGapiLoaded() {
@@ -38,11 +38,13 @@ async function initGapi() {
   });
 }
 
-function rowsToCsvString(columns, rows) {
+function rowsToTsvString(columns, rows) {
   const headers = columns.map((c) => c.header ?? c.key);
   const data = rows.map((r) => columns.map((c) => r[c.key]));
   const all = [headers, ...data];
-  return all.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  return all
+    .map((row) => row.map((cell) => String(cell ?? '').replace(/[\t\r\n]/g, ' ')).join('\t'))
+    .join('\n');
 }
 
 export default function ExportActions({
@@ -58,6 +60,15 @@ export default function ExportActions({
   const hasRows = Array.isArray(rows) && rows.length > 0;
   const canDrive = !!(import.meta.env.VITE_GOOGLE_API_KEY && import.meta.env.VITE_GOOGLE_CLIENT_ID);
   const { showToast } = useToast();
+
+  const finalFilename =
+    typeof filename === 'string' && filename.toLowerCase().endsWith('.csv')
+      ? filename.slice(0, -4) + '.tsv'
+      : filename || 'data.tsv';
+  const finalDriveName =
+    typeof gdriveName === 'string' && gdriveName.toLowerCase().endsWith('.csv')
+      ? gdriveName.slice(0, -4) + '.tsv'
+      : gdriveName || finalFilename;
 
   const btnCsvStyle = {
     background: '#10B981', // Green
@@ -77,7 +88,7 @@ export default function ExportActions({
     if (!hasRows) return;
     const headers = columns.map((c) => c.header ?? c.key);
     const data = rows.map((r) => columns.map((c) => r[c.key]));
-    exportToCsv(filename, [headers, ...data]);
+    exportToTsv(finalFilename, [headers, ...data]);
   }
 
   async function handleDriveUpload() {
@@ -90,10 +101,10 @@ export default function ExportActions({
       if (!auth.isSignedIn.get()) {
         await auth.signIn();
       }
-      const csvStr = rowsToCsvString(columns, rows);
+      const csvStr = rowsToTsvString(columns, rows);
       const metadata = {
-        name: gdriveName || filename,
-        mimeType: 'text/csv',
+        name: finalDriveName,
+        mimeType: 'text/tab-separated-values',
       };
       const boundary = '-------3141592653589793';
       const delimiter = '\r\n--' + boundary + '\r\n';
@@ -103,7 +114,7 @@ export default function ExportActions({
         'Content-Type: application/json\r\n\r\n' +
         JSON.stringify(metadata) +
         delimiter +
-        'Content-Type: text/csv\r\n\r\n' +
+        'Content-Type: text/tab-separated-values\r\n\r\n' +
         csvStr +
         closeDelimiter;
       await window.gapi.client.request({
@@ -125,8 +136,8 @@ export default function ExportActions({
         variant="custom"
         size="sm"
         onClick={handleCsv}
-        aria-label={label || csvLabel || 'Download CSV'}
-        title={label || csvLabel || 'Download CSV'}
+        aria-label={label || csvLabel || 'Download TSV'}
+        title={label || csvLabel || 'Download TSV'}
         disabled={!hasRows}
         icon="download"
         style={btnCsvStyle}
