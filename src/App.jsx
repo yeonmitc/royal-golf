@@ -4,13 +4,14 @@ import { Route, Routes } from 'react-router-dom';
 import AdminRoute from './components/admin/AdminRoute';
 import Layout from './components/common/Layout';
 import AddProductPage from './pages/AddProductPage';
+import AnalyzePage from './pages/AnalyzePage';
+import CheckStockPage from './pages/CheckStockPage';
+import GuidesPage from './pages/GuidesPage';
 import HomePage from './pages/HomePage';
 import InventoryPage from './pages/InventoryPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import SellPage from './pages/SellPage';
 import SettingsPage from './pages/SettingsPage';
-import AnalyzePage from './pages/AnalyzePage';
-import GuidesPage from './pages/GuidesPage';
 
 const LogsPageDev = import.meta.env.DEV ? lazy(() => import('./pages/LogsPage')) : null;
 
@@ -66,6 +67,7 @@ export default function App() {
             </AdminRoute>
           }
         />
+        <Route path="/check-stock" element={<CheckStockPage />} />
         {/* 404 */}
         <Route path="*" element={<div className="page-card">Page Not Found</div>} />
       </Routes>

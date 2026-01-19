@@ -94,6 +94,7 @@ export default function Header() {
           {[
             { to: '/logs', label: 'log' },
             { to: '/inventory', label: 'product list' },
+            { to: '/check-stock', label: 'check stock' },
             { to: '/sell', label: 'sell product' },
             { to: '/sales', label: 'sell list' },
             { to: '/analyze', label: 'analyze' },
@@ -165,10 +166,13 @@ export default function Header() {
       </div>
       {menuOpen && (
         <Modal open={menuOpen} title="Menu" onClose={() => setMenuOpen(false)} size="content">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'min(360px, 90vw)' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'min(360px, 90vw)' }}
+          >
             {[
               { to: '/logs', label: 'log' },
               { to: '/inventory', label: 'product list' },
+              { to: '/check-stock', label: 'check stock' },
               { to: '/sell', label: 'sell product' },
               { to: '/sales', label: 'sell list' },
               { to: '/analyze', label: 'analyze' },

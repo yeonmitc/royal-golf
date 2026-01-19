@@ -20,16 +20,18 @@ function toInputDate(d) {
 
 export default function SalesHistoryPage() {
   // UI 입력값
-  const [fromInput, setFromInput] = useState('');
-  const [toInput, setToInput] = useState('');
+  const today = toInputDate(new Date());
+  const [fromInput, setFromInput] = useState(today);
+  const [toInput, setToInput] = useState(today);
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
   const [noGuideOnly, setNoGuideOnly] = useState(false);
+  const [refundOnly, setRefundOnly] = useState(false);
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
   const [filters, setFilters] = useState({
-    fromDate: '',
-    toDate: '',
+    fromDate: today,
+    toDate: today,
     query: '',
   });
 
@@ -96,7 +98,11 @@ export default function SalesHistoryPage() {
 
   const allRows = salesData?.rows ?? EMPTY_ROWS;
   const visibleRows = useMemo(() => {
-    const base = (allRows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
+    const base = (allRows || []).filter((r) => {
+      const isRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
+      if (!refundOnly && isRefunded) return false;
+      return true;
+    });
 
     const mrMoonGuideIds = new Set(
       (guides || [])
@@ -118,7 +124,7 @@ export default function SalesHistoryPage() {
       const bt = new Date(b.soldAt || 0).getTime();
       return at - bt;
     });
-  }, [allRows, sortAscending, noGuideOnly, guides]);
+  }, [allRows, sortAscending, noGuideOnly, guides, refundOnly]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -225,87 +231,108 @@ export default function SalesHistoryPage() {
       >
         NoGuide
       </Button>,
+      <Button
+        key="refund-toggle"
+        type="button"
+        onClick={() => setRefundOnly((prev) => !prev)}
+        size="sm"
+        variant={refundOnly ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        Refund
+      </Button>,
     ];
     if (exportActions) {
       actions.push(exportActions);
     }
     return actions;
-  }, [sortAscending, noGuideOnly, exportActions]);
+  }, [sortAscending, noGuideOnly, refundOnly, exportActions]);
 
   return (
     <div style={{ padding: 16 }}>
       <h2 style={{ marginBottom: 12 }}>Sales History</h2>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div className="date-control">
-          <span className="date-control-label">From</span>
-          <div className="date-control-box">
-            <input
-              type="date"
-              className="input-field date-control-input"
-              value={fromInput}
-              onChange={(e) => {
-                const v = e.target.value;
-                setFromInput(v);
-                setFilters((prev) => ({ ...prev, fromDate: v || '' }));
-              }}
-            />
+      <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 8,
+            alignItems: 'center',
+          }}
+        >
+          <div className="date-controls">
+            <div className="date-control">
+              <span className="date-control-label">From</span>
+              <div className="date-control-box">
+                <input
+                  type="date"
+                  className="input-field date-control-input"
+                  value={fromInput}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setFromInput(v);
+                    setFilters((prev) => ({ ...prev, fromDate: v || '' }));
+                  }}
+                />
+              </div>
+            </div>
+            <div className="date-control">
+              <span className="date-control-label">To</span>
+              <div className="date-control-box">
+                <input
+                  type="date"
+                  className="input-field date-control-input"
+                  value={toInput}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setToInput(v);
+                    setFilters((prev) => ({ ...prev, toDate: v || '' }));
+                  }}
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="date-control">
-          <span className="date-control-label">To</span>
-          <div className="date-control-box">
-            <input
-              type="date"
-              className="input-field date-control-input"
-              value={toInput}
-              onChange={(e) => {
-                const v = e.target.value;
-                setToInput(v);
-                setFilters((prev) => ({ ...prev, toDate: v || '' }));
-              }}
-            />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <Button
+              type="button"
+              onClick={setAllRange}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
+              All
+            </Button>
+            <Button
+              type="button"
+              onClick={setTodayRange}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
+              Today
+            </Button>
+            <Button
+              type="button"
+              onClick={setWeekRange}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
+              Week
+            </Button>
+            <Button
+              type="button"
+              onClick={setMonthRange}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
+              Month
+            </Button>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <Button
-            type="button"
-            onClick={setAllRange}
-            size="sm"
-            variant="outline"
-            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-          >
-            All
-          </Button>
-          <Button
-            type="button"
-            onClick={setTodayRange}
-            size="sm"
-            variant="outline"
-            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-          >
-            Today
-          </Button>
-          <Button
-            type="button"
-            onClick={setWeekRange}
-            size="sm"
-            variant="outline"
-            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-          >
-            Week
-          </Button>
-          <Button
-            type="button"
-            onClick={setMonthRange}
-            size="sm"
-            variant="outline"
-            style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-          >
-            Month
-          </Button>
         </div>
 
         <div
@@ -313,9 +340,8 @@ export default function SalesHistoryPage() {
             display: 'flex',
             gap: 8,
             alignItems: 'center',
-            flex: 1,
             minWidth: 0,
-            flexWrap: 'wrap',
+            flexWrap: 'nowrap',
           }}
         >
           <input
@@ -326,7 +352,7 @@ export default function SalesHistoryPage() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') applySearch();
             }}
-            style={{ flex: '1 1 240px', minWidth: 180 }}
+            style={{ flex: '1 1 0', minWidth: 0 }}
           />
           <Button
             type="button"
@@ -347,7 +373,19 @@ export default function SalesHistoryPage() {
         </div>
       </div>
 
-      <Card title="Sales Records" actions={cardActions}>
+      <Card title="Sales Records">
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            justifyContent: 'flex-end',
+            marginBottom: 12,
+            flexWrap: 'nowrap',
+            overflowX: 'auto',
+          }}
+        >
+          {cardActions}
+        </div>
         <SalesTable rows={visibleRows} isLoading={isLoading} isError={isError} error={error} />
       </Card>
     </div>

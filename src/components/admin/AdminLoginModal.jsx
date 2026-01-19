@@ -13,6 +13,7 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [pending, setPending] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const expectedHash = useMemo(() => {
     const envHash = String(import.meta.env.VITE_ADMIN_PASSWORD_HASH || '').trim().toLowerCase();
@@ -27,6 +28,16 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
       setPending(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    const update = () => {
+      if (typeof window === 'undefined') return;
+      setIsMobile(window.innerWidth <= 640);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   async function handleLogin() {
     setErr('');
@@ -57,17 +68,27 @@ export default function AdminLoginModal({ open, onClose, onSuccess }) {
       open={open}
       onClose={onClose}
       title="Admin Authentication"
-      size="content"
-      containerStyle={{ width: '30vw', maxWidth: '30vw' }}
-      align="top"
-      topOffset={10}
+      size={isMobile ? 'lg' : 'content'}
+      containerStyle={
+        isMobile
+          ? {
+              width: '100vw',
+              maxWidth: '100vw',
+              height: '100vh',
+              maxHeight: '100vh',
+              borderRadius: 0,
+            }
+          : { width: '30vw', maxWidth: '30vw' }
+      }
+      align={isMobile ? 'center' : 'top'}
+      topOffset={isMobile ? 0 : 10}
       footer={
         <div
           style={{
             display: 'flex',
             justifyContent: 'center',
             gap: 8,
-            width: '40%',
+            width: '100%',
             margin: '0 auto',
           }}
         >

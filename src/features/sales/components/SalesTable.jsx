@@ -94,7 +94,7 @@ export default function SalesTable({
     );
   }
 
-  const visibleRows = (rows || []).filter((r) => !r?.isRefunded && !r?.refundedAt);
+  const visibleRows = rows || [];
 
   if (visibleRows.length === 0) {
     return <div className="p-4 text-sm text-gray-500">No results found.</div>;
@@ -352,7 +352,7 @@ export default function SalesTable({
         </div>
       ),
       style: isRefunded
-        ? { backgroundColor: 'rgba(148, 163, 184, 0.18)', color: 'var(--text-main)' }
+        ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
         : giftChecked
         ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
         : undefined,
@@ -394,40 +394,50 @@ export default function SalesTable({
         <DataTable
           columns={[
             { key: 'no', header: 'no', className: 'text-right', tdClassName: 'text-right' },
-            { key: 'soldAtDate', header: 'date' },
+            { key: 'soldAtDate', header: 'date', className: 'sales-col-date' },
             {
               key: 'soldAtTime',
               header: 'time',
-              className: 'text-center',
-              tdClassName: 'text-center',
+              className: 'text-center sales-col-time',
+              tdClassName: 'text-center sales-col-time',
             },
             { key: 'code', header: 'code' },
             {
               key: 'sizeDisplay',
               header: 'size',
-              className: 'text-center',
-              tdClassName: 'text-center',
+              className: 'text-center sales-col-size',
+              tdClassName: 'text-center sales-col-size',
             },
-            { key: 'color', header: 'color' },
+            {
+              key: 'color',
+              header: 'color',
+              className: 'sales-col-color',
+              tdClassName: 'sales-col-color',
+            },
             { key: 'qty', header: 'qty', className: 'text-right', tdClassName: 'text-right' },
-            { key: 'brand', header: 'brand' },
+            {
+              key: 'brand',
+              header: 'brand',
+              className: 'sales-col-brand',
+              tdClassName: 'sales-col-brand',
+            },
             {
               key: 'unitPricePhp',
               header: 'price',
-              className: 'text-left',
-              tdClassName: 'text-left',
+              className: 'text-left sales-col-price',
+              tdClassName: 'text-left sales-col-price',
             },
             {
               key: 'commission',
               header: 'comm.',
-              className: 'text-right text-xs',
-              tdClassName: 'text-right text-xs text-muted',
+              className: 'text-right text-xs sales-col-commission',
+              tdClassName: 'text-right text-xs text-muted sales-col-commission',
             },
             {
               key: 'action',
               header: 'actions',
-              className: 'text-center',
-              tdClassName: 'text-center',
+              className: 'text-center sales-col-actions',
+              tdClassName: 'text-center sales-col-actions',
             },
           ]}
           rows={tableRows}

@@ -84,6 +84,23 @@
   transform: scale(1.1);
 }
 
+/* --- Variant: danger --- */
+.btn.danger {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+.btn.danger:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+  transform: scale(1.1);
+}
+.btn.danger:active {
+  background: #b91c1c;
+  transform: scale(0.96);
+}
+
 /* --- Size options --- */
 .btn.sm {
   padding: 8px 14px;
@@ -103,6 +120,13 @@
   height: 44px;
 }
 
+.btn.compact {
+  padding: 8px 6px;
+  font-size: 11px;
+  height: 32px;
+  line-height: 1.1;
+}
+
 .btn.xl {
   padding: 14px 24px;
   font-size: 16px;
@@ -112,7 +136,9 @@
 /* --- Icon Only --- */
 .btn.icon-only {
   padding: 0;
-  width: var(--btn-height); /* Fallback or variable usage if needed, but we can just use explicit sizes below */
+  width: var(
+    --btn-height
+  ); /* Fallback or variable usage if needed, but we can just use explicit sizes below */
   border-radius: 50%;
 }
 

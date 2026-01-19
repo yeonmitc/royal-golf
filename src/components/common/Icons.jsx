@@ -86,7 +86,12 @@ export function CalendarIcon({ className, size = 16, strokeWidth = 1.5, color = 
   );
 }
 
-export function CloudUploadIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+export function CloudUploadIcon({
+  className,
+  size = 16,
+  strokeWidth = 1.5,
+  color = 'currentColor',
+}) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -127,7 +132,12 @@ export function ClockIcon({ className, size = 16, strokeWidth = 1.5, color = 'cu
   );
 }
 
-export function ReceiptIcon({ className, size = 16, strokeWidth: _strokeWidth = 1.5, color: _color = 'currentColor' }) {
+export function ReceiptIcon({
+  className,
+  size = 16,
+  strokeWidth: _strokeWidth = 1.5,
+  color: _color = 'currentColor',
+}) {
   return (
     <img
       src={receiptImg}
@@ -142,7 +152,12 @@ export function ReceiptIcon({ className, size = 16, strokeWidth: _strokeWidth = 
   );
 }
 
-export function RefundIcon({ className, size = 16, strokeWidth: _strokeWidth = 1.5, color: _color = 'currentColor' }) {
+export function RefundIcon({
+  className,
+  size = 16,
+  strokeWidth: _strokeWidth = 1.5,
+  color: _color = 'currentColor',
+}) {
   return (
     <img
       src={refundImg}
@@ -173,6 +188,68 @@ export function PersonIcon({ className, size = 16, color = 'currentColor' }) {
   );
 }
 
+export function CheckIcon({ className, size = 16, strokeWidth = 2, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polyline points="4 12 10 18 20 6" />
+    </svg>
+  );
+}
+
+export function XIcon({ className, size = 16, strokeWidth = 2, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+export function TrashIcon({ className, size = 16, strokeWidth = 2, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
+    </svg>
+  );
+}
+
 const ICON_MAP = {
   search: SearchIcon,
   refresh: RefreshIcon,
@@ -185,7 +262,10 @@ const ICON_MAP = {
   receipt: ReceiptIcon,
   refund: RefundIcon,
   person: PersonIcon,
-   clock: ClockIcon,
+  clock: ClockIcon,
+  check: CheckIcon,
+  x: XIcon,
+  trash: TrashIcon,
 };
 
 export default function Icon({ name, ...props }) {

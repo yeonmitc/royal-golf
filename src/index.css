@@ -142,6 +142,18 @@ body {
   .stack-mobile > .page-card {
     width: 100%;
   }
+
+  .productlist-col-name {
+    display: none;
+  }
+
+  .productlist-col-manage {
+    display: none;
+  }
+
+  .productlist-col-code {
+    width: 32%;
+  }
 }
 
 @media (min-width: 641px) {
@@ -165,7 +177,7 @@ body {
 }
 
 /* 테이블 내 버튼은 가독성을 위해 고정 폭 */
-.table .btn {
+.table .btn:not(.icon-only) {
   width: 96px !important;
   min-width: 96px;
   justify-content: center;
@@ -244,6 +256,24 @@ input {
 .date-control-input::-webkit-inner-spin-button,
 .date-control-input::-webkit-clear-button {
   display: none;
+}
+
+.date-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .date-controls {
+    width: 100%;
+  }
+  .date-controls .date-control {
+    flex: 1;
+  }
+  .date-controls .date-control-box {
+    width: 100%;
+  }
 }
 
 /* 인터랙티브 요소 커서 포인터 */
@@ -344,4 +374,14 @@ select:focus {
 main[data-scroll-root='main'] {
   overflow: auto;
   scrollbar-gutter: stable both-edges;
+}
+
+@media (max-width: 640px) {
+  .sales-col-time,
+  .sales-col-size,
+  .sales-col-color,
+  .sales-col-brand,
+  .sales-col-commission {
+    display: none;
+  }
 }

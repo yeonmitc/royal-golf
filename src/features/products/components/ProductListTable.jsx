@@ -3,10 +3,10 @@ import { useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
+import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
 import { useDeleteProductMutation } from '../productHooks';
-import { useToast } from '../../../context/ToastContext';
 
 /**
  * 전체 상품 + 재고 리스트 테이블
@@ -110,7 +110,9 @@ export default function ProductListTable({
       style: isOutOfStock ? { color: '#ef4444' } : undefined,
       code: (
         <span
-          className={`underline decoration-dotted underline-offset-2 ${isOutOfStock ? 'text-[#ef4444]' : 'text-[var(--gold-soft)]'}`}
+          className={`underline decoration-dotted underline-offset-2 ${
+            isOutOfStock ? 'text-[#ef4444]' : 'text-[var(--gold-soft)]'
+          }`}
         >
           {p.code}
         </span>
@@ -126,16 +128,18 @@ export default function ProductListTable({
           : '-',
       manage: (
         <Button
-          variant="outline"
+          variant="danger"
           size="sm"
+          icon="trash"
+          iconSize={14}
           disabled={isDeleting}
           onClick={(e) => {
             e.stopPropagation();
             handleDelete(p.code);
           }}
-        >
-          Delete
-        </Button>
+          className="icon-only"
+          style={{ width: 28, height: 28, padding: 0 }}
+        />
       ),
     };
   });
@@ -156,8 +160,18 @@ export default function ProductListTable({
     <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
       <DataTable
         columns={[
-          { key: 'code', header: 'Code' },
-          { key: 'name', header: 'Name' },
+          {
+            key: 'code',
+            header: 'Code',
+            className: 'productlist-col-code',
+            tdClassName: 'productlist-col-code',
+          },
+          {
+            key: 'name',
+            header: 'Name',
+            className: 'productlist-col-name',
+            tdClassName: 'productlist-col-name',
+          },
           {
             key: 'totalStock',
             header: 'Total Stock',
@@ -171,7 +185,12 @@ export default function ProductListTable({
             tdClassName: 'text-right',
           },
           { key: 'sizes', header: 'Size Stock' },
-          { key: 'manage', header: 'Manage', className: 'text-center' },
+          {
+            key: 'manage',
+            header: 'Manage',
+            className: 'text-center productlist-col-manage',
+            tdClassName: 'productlist-col-manage',
+          },
         ]}
         rows={tableRows}
         onRowClick={(row) => {
@@ -190,13 +209,21 @@ export default function ProductListTable({
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={confirmDelete} disabled={isDeleting}>
+            <Button
+              variant="danger"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              icon="trash"
+              iconSize={14}
+            >
               {isDeleting ? 'Deleting...' : 'Delete'}
             </Button>
           </div>
         }
       >
-        <p>Are you sure you want to delete product <strong>{deleteTarget}</strong>?</p>
+        <p>
+          Are you sure you want to delete product <strong>{deleteTarget}</strong>?
+        </p>
       </Modal>
     </div>
   );

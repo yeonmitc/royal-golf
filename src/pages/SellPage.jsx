@@ -203,15 +203,17 @@ export default function SellPage() {
                       amount: (item.qty * item.unitPricePhp).toLocaleString('en-PH'),
                       action: (
                         <Button
-                          variant="outline"
+                          variant="danger"
                           size="sm"
+                          icon="trash"
+                          iconSize={14}
                           onClick={(e) => {
                             e.stopPropagation();
                             removeItem(item.code, item.size);
                           }}
-                        >
-                          Delete
-                        </Button>
+                          className="icon-only"
+                          style={{ width: 28, height: 28, padding: 0 }}
+                        />
                       ),
                     };
                   })}
