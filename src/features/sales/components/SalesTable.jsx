@@ -118,10 +118,8 @@ export default function SalesTable({
       const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
       const commissionForTotal = isRefunded ? 0 : commission;
-      const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
-      const lineTotalForTotal = isMrMoon
-        ? finalUnit * qtyForTotal - commissionForTotal
-        : finalUnit * qtyForTotal;
+      // const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+      const lineTotalForTotal = finalUnit * qtyForTotal;
 
       return {
         totalQty: acc.totalQty + qtyForTotal,
@@ -173,6 +171,7 @@ export default function SalesTable({
     const finalUnitRaw = isDiscounted ? discounted : original;
     const finalUnit = isRefunded ? 0 : finalUnitRaw;
     const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
+    const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
     const qtyForTotal = isRefunded ? 0 : qty;
@@ -197,7 +196,8 @@ export default function SalesTable({
       sizeDisplay: row.sizeDisplay,
       qty: qty,
       brand,
-      commission: commissionForTotal > 0 ? commissionForTotal.toLocaleString('en-US') : '-',
+      commission:
+        !isMrMoon && commissionForTotal > 0 ? commissionForTotal.toLocaleString('en-US') : '-',
       unitPricePhp: (
         <div
           style={{
@@ -355,6 +355,8 @@ export default function SalesTable({
         ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
         : giftChecked
         ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
+        : isMrMoon
+        ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
         : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',

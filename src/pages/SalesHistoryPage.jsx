@@ -129,11 +129,13 @@ export default function SalesHistoryPage() {
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
     if (!rows.length) return null;
+    /*
     const mrMoonGuideIds = new Set(
       (guides || [])
         .filter((g) => String(g.name || '').toLowerCase() === 'mr.moon')
         .map((g) => String(g.id))
     );
+    */
     const brandFromCode = (code) => {
       const parts = String(code || '').split('-');
       const brandCode = String(parts[2] || '').trim();
@@ -166,10 +168,8 @@ export default function SalesHistoryPage() {
       const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
       const commissionForTotal = isRefunded ? 0 : commission;
-      const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
-      const lineTotalForTotal = isMrMoon
-        ? finalUnit * qtyForTotal - commissionForTotal
-        : finalUnit * qtyForTotal;
+      // const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+      const lineTotalForTotal = finalUnit * qtyForTotal;
       const s = String(row.soldAt || '').trim();
       const dateHit = s.match(/\d{4}-\d{2}-\d{2}/);
       const timeHit = s.match(/(\d{2}:\d{2})/);
@@ -207,7 +207,7 @@ export default function SalesHistoryPage() {
         gdriveName="sales-history.csv"
       />
     );
-  }, [visibleRows, guides]);
+  }, [visibleRows]);
 
   const cardActions = useMemo(() => {
     const actions = [

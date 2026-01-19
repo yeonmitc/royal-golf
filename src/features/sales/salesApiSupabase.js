@@ -142,6 +142,9 @@ async function attachLocalProductMeta(items) {
 
   return items.map((i) => {
     const product = productMap.get(i.code);
+    const qtyN = Number(i.qty || 0) || 0;
+    const listUnit = Number((product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
+    const commission = i.guideId ? listUnit * qtyN * 0.1 : 0;
     return {
       ...i,
       productNo: product?.no ?? i.productNo ?? 0,
@@ -149,6 +152,8 @@ async function attachLocalProductMeta(items) {
       nameKo:
         (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: i.sizeDisplay ?? i.size,
+      commission,
+      listPrice: listUnit,
       lineTotalPhp: Number(i.unitPricePhp || 0) * Number(i.qty || 0),
     };
   });
@@ -837,6 +842,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   );
   let mrMoonCommission = 0;
   let mrMoonRevenue = 0;
+  let mrMoonListRevenue = 0;
   try {
     analyzedRows.forEach((r) => {
       const name = r.guideId ? String(guideMap.get(r.guideId) || '').toLowerCase() : '';
@@ -844,11 +850,13 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       if (isMrMoon) {
         mrMoonCommission += Number(r.commission || 0) || 0;
         mrMoonRevenue += Number(r.lineTotalPhp || 0) || 0;
+        mrMoonListRevenue += (Number(r.listPrice || 0) || 0) * (Number(r.qty || 0) || 0);
       }
     });
   } catch {
     mrMoonCommission = 0;
     mrMoonRevenue = 0;
+    mrMoonListRevenue = 0;
   }
 
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
@@ -859,10 +867,10 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     0
   );
 
-  const realTotalSales = totalRevenue - totalCommission;
+  const realTotalSales = totalRevenue;
 
-  const grossAmount = totalRevenue - mrMoonCommission;
-  const netAmount = realTotalSales;
+  const grossAmount = nonRefundedRows.reduce((sum, r) => sum + (Number(r.price ?? 0) || 0), 0);
+  const netAmount = realTotalSales - totalCommission;
 
   const aov = transactionCount ? grossAmount / transactionCount : 0;
 
@@ -902,15 +910,23 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const grossProfit = realTotalSales - costAmount;
 
   // Rent calculation based on Net Sales (after commission)
+  // Mr.Moon Rent is calculated on his Net Sales (Revenue - Commission)
   const netMrMoonSales = mrMoonRevenue - mrMoonCommission;
-  // realTotalSales includes everything, so subtract netMrMoonSales to get "Others"
-  const netOtherSales = realTotalSales - netMrMoonSales;
+  // realTotalSales (Revenue) includes everything.
+  // We need to subtract Mr.Moon Revenue to get "Others Revenue", then subtract Others Commission to get "Others Net Sales".
+  // BUT previous logic: normalRent = netOtherSales * 0.1
+  // netOtherSales was defined as: realTotalSales (Revenue - TotalComm) - netMrMoonSales (Revenue - MoonComm)
+  // which equals: (TotalRev - TotalComm) - (MoonRev - MoonComm) = (TotalRev - MoonRev) - (TotalComm - MoonComm) = OthersRev - OthersComm
+  // So the Rent base remains "Net Sales" (Revenue - Commission).
+
+  const netTotalSales = totalRevenue - totalCommission;
+  const netOtherSales = netTotalSales - netMrMoonSales;
 
   const normalRent = netOtherSales * 0.1;
   const mrMoonRent = netMrMoonSales * 0.05;
   const totalRent = normalRent + mrMoonRent;
 
-  const ownerProfit = realTotalSales - totalRent - costAmount;
+  const ownerProfit = netTotalSales - totalRent - costAmount;
 
   function accumulate(list, keyFn, labelFn) {
     const map = new Map();
@@ -1123,7 +1139,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       transactionCount,
       aov,
       discountAmount: mrMoonCommission,
-      mrMoonRevenue,
+      mrMoonRevenue: mrMoonListRevenue,
       mrMoonRent,
       discountRate,
       refundCount: refundedRows.length,

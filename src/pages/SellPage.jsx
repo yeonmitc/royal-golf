@@ -34,9 +34,21 @@ export default function SellPage() {
 
   const mrMoonGuide = (guides || []).find((g) => String(g.name || '').toLowerCase() === 'mr.moon');
   const isMrMoonSelected = guideId && mrMoonGuide && String(guideId) === String(mrMoonGuide.id);
-  const baseTotal = Number(totalPrice || 0);
-  const discountedTotal = isMrMoonSelected ? Math.round(baseTotal * 0.9) : baseTotal;
-  const displayTotalPrice = discountedTotal > 0 ? Math.ceil(discountedTotal / 100) * 100 : 0;
+
+  // Calculate item price with Mr. Moon discount logic
+  const calculateItemPrice = (price) => {
+    const p = Number(price || 0);
+    if (isMrMoonSelected && p > 1000) {
+      // 10% discount, rounded to nearest 100
+      return Math.round((p * 0.9) / 100) * 100;
+    }
+    return p;
+  };
+
+  // Calculate total based on displayed prices
+  const displayTotalPrice = cartItems.reduce((sum, item) => {
+    return sum + calculateItemPrice(item.unitPricePhp) * item.qty;
+  }, 0);
 
   const { mutateAsync: checkoutCart, isPending: isCheckoutPending } = useCheckoutCartMutation();
 
@@ -44,26 +56,46 @@ export default function SellPage() {
   const [receiptData, setReceiptData] = useState(null);
 
   const handleCheckout = async () => {
-    // Get latest items from store directly to ensure we have the updated prices (e.g. after discount)
+    // Get latest items from store directly
     const currentItems = useCartStore.getState().items;
     const currentGuideId = useCartStore.getState().guideId;
     if (currentItems.length === 0) return;
+
+    // Check if Mr. Moon is selected at checkout time
+    const guideList = await getGuides(); // Fetch fresh or use cache? relying on query cache usually fine
+    // But we can use the 'guides' from scope if we trust it hasn't changed, or just use the ID if we know the logic.
+    // We already have 'guides' from useQuery.
+    const mrMoon = (guides || []).find((g) => String(g.name || '').toLowerCase() === 'mr.moon');
+    const isMrMoon = currentGuideId && mrMoon && String(currentGuideId) === String(mrMoon.id);
+
     try {
+      // We send original items; DB trigger handles the actual price modification.
       const result = await checkoutCart({ items: currentItems, guideId: currentGuideId });
 
-      // Prepare receipt data
-      setReceiptData({
-        id: result.saleId.toString(), // Assuming saleId is returned
-        soldAt: result.soldAt || new Date().toISOString(),
-        items: currentItems.map((item) => ({
+      // Prepare receipt data with LOCAL calculation to match DB trigger
+      const receiptItems = currentItems.map((item) => {
+        const original = Number(item.unitPricePhp || item.price || 0);
+        let finalPrice = original;
+        if (isMrMoon && original > 1000) {
+          finalPrice = Math.round((original * 0.9) / 100) * 100;
+        }
+        return {
           code: item.code,
           name: item.name || item.nameKo,
           color: item.color,
           size: item.sizeDisplay || item.size,
           qty: item.qty,
-          price: item.unitPricePhp || item.price,
-        })),
-        totalAmount: result.totalAmount,
+          price: finalPrice,
+        };
+      });
+
+      const receiptTotal = receiptItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+      setReceiptData({
+        id: result.saleId.toString(),
+        soldAt: result.soldAt || new Date().toISOString(),
+        items: receiptItems,
+        totalAmount: receiptTotal,
         totalQty: result.itemCount,
         guideId: currentGuideId,
       });
@@ -71,7 +103,6 @@ export default function SellPage() {
 
       clearCart();
       showToast('Sale completed successfully.');
-      // navigate('/sales'); // Stay on page to print receipt
     } catch (e) {
       console.error(e);
       showToast(e.message || 'Payment failed.');
@@ -215,7 +246,21 @@ export default function SellPage() {
                         </select>
                       ),
                       qty: item.qty,
-                      amount: (item.qty * item.unitPricePhp).toLocaleString('en-PH'),
+                      amount: (() => {
+                        const originalUnit = Number(item.unitPricePhp || 0);
+                        const finalUnit = calculateItemPrice(originalUnit);
+                        const isDiscounted = finalUnit !== originalUnit;
+                        const finalAmount = finalUnit * item.qty;
+
+                        if (isDiscounted) {
+                          return (
+                            <span style={{ color: '#ef4444', fontWeight: 'bold' }}>
+                              {finalAmount.toLocaleString('en-PH')}
+                            </span>
+                          );
+                        }
+                        return finalAmount.toLocaleString('en-PH');
+                      })(),
                       action: (
                         <Button
                           variant="danger"

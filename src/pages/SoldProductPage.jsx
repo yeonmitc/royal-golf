@@ -15,10 +15,11 @@ const toInputDate = (d) => {
 };
 
 export default function SoldProductPage() {
-  // Date State
+  // Date / Query State
   const [fromInput, setFromInput] = useState('');
   const [toInput, setToInput] = useState('');
-  const [filters, setFilters] = useState({ fromDate: '', toDate: '' });
+  const [codeQuery, setCodeQuery] = useState('');
+  const [filters, setFilters] = useState({ fromDate: '', toDate: '', code: '' });
 
   // Price Filter State: 'all', 'zero', 'nonzero'
   const [priceFilter, setPriceFilter] = useState('all');
@@ -27,7 +28,7 @@ export default function SoldProductPage() {
   const { data: salesData, isLoading: isSalesLoading } = useSalesHistoryFiltered({
     fromDate: filters.fromDate,
     toDate: filters.toDate,
-    query: '',
+    query: filters.code,
   });
 
   const { data: allProducts = [], isLoading: isProductsLoading } = useProductInventoryList();
@@ -84,20 +85,21 @@ export default function SoldProductPage() {
   }, [salesData, productMap, priceFilter]);
 
   const handleSearch = () => {
-    setFilters({ fromDate: fromInput, toDate: toInput });
+    setFilters({ fromDate: fromInput, toDate: toInput, code: codeQuery.trim() });
   };
 
   const handleResetDate = () => {
     setFromInput('');
     setToInput('');
-    setFilters({ fromDate: '', toDate: '' });
+    setCodeQuery('');
+    setFilters({ fromDate: '', toDate: '', code: '' });
   };
 
   const setTodayRange = () => {
     const t = toInputDate(new Date());
     setFromInput(t);
     setToInput(t);
-    setFilters({ fromDate: t, toDate: t });
+    setFilters((prev) => ({ ...prev, fromDate: t, toDate: t }));
   };
 
   const isLoading = isSalesLoading || isProductsLoading;
@@ -144,6 +146,13 @@ export default function SoldProductPage() {
               <Button onClick={setTodayRange} variant="outline" size="sm">
                 Today
               </Button>
+              <Input
+                type="text"
+                value={codeQuery}
+                onChange={(e) => setCodeQuery(e.target.value)}
+                placeholder="Search by product code"
+                className="date-control-input"
+              />
               <Button onClick={handleSearch} variant="primary" size="sm">
                 Apply Date
               </Button>
@@ -186,11 +195,9 @@ export default function SoldProductPage() {
                 { key: 'rowIndex', header: 'No.', className: 'w-16 text-center' },
                 { key: 'proNo', header: 'proNo', className: 'w-20 text-center' },
                 { key: 'code', header: 'Product Code' },
+                { key: 'salePricePhp', header: 'Sale Price', className: 'text-right' },
                 { key: 'totalQty', header: 'Total Sold Qty', className: 'text-right' },
                 { key: 'totalPrice', header: 'Total Sold Price', className: 'text-right' },
-                { key: 'salePricePhp', header: 'Sale Price', className: 'text-right' },
-                { key: 'kpriceDiv', header: 'Korean / 25.5', className: 'text-right' },
-                { key: 'kprice', header: 'Korean Price', className: 'text-right' },
               ]}
               rows={aggregatedRows.map((r, index) => ({
                 id: r.code,
@@ -200,8 +207,6 @@ export default function SoldProductPage() {
                 totalQty: r.totalQty,
                 totalPrice: Number(r.totalPrice).toLocaleString(),
                 salePricePhp: Number(r.salePricePhp).toLocaleString(),
-                kpriceDiv: Math.round(Number(r.kprice || 0) / 25.5).toLocaleString(),
-                kprice: Number(r.kprice).toLocaleString(),
               }))}
             />
           )}
