@@ -224,6 +224,19 @@ export default function CheckStockPage() {
             >
               {showErrorOnly ? 'Show All' : 'Err'}
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCheckedCodes(new Set());
+                setErrorCodes(new Set());
+                setShowCheckedOnly(false);
+                setShowErrorOnly(false);
+                setShowUncheckedOnly(false);
+              }}
+              size="compact"
+            >
+              All Reset
+            </Button>
           </div>
         </div>
         <hr className="border-t-2 border-[var(--gold)]" />
