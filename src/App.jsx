@@ -12,6 +12,7 @@ import InventoryPage from './pages/InventoryPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import SellPage from './pages/SellPage';
 import SettingsPage from './pages/SettingsPage';
+import SoldProductPage from './pages/SoldProductPage';
 
 const LogsPageDev = import.meta.env.DEV ? lazy(() => import('./pages/LogsPage')) : null;
 
@@ -23,6 +24,14 @@ export default function App() {
         <Route path="/sell" element={<SellPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/sales" element={<SalesHistoryPage />} />
+        <Route
+          path="/sold-products"
+          element={
+            <AdminRoute>
+              <SoldProductPage />
+            </AdminRoute>
+          }
+        />
         <Route
           path="/analyze"
           element={

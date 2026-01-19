@@ -66,6 +66,7 @@ function normalizeProductRow(r) {
   const parsed = parseCode(r.code);
   return {
     code: r.code,
+    no: Number(r.no ?? 0) || 0,
     nameKo: String(r.nameKo ?? r.name_ko ?? r.name ?? '').trim(),
     categoryCode: r.categoryCode ?? r.category_code ?? parsed.categoryCode,
     genderCode: r.genderCode ?? r.gender_code ?? parsed.genderCode,
@@ -239,7 +240,7 @@ export async function getProductInventoryList() {
   try {
     const [productsRaw, inventoriesRaw] = await Promise.all([
       sbSelect('products', {
-        select: 'code,name,sale_price,free_gift',
+        select: 'code,name,sale_price,free_gift,no,kprice',
         order: { column: 'code', ascending: true },
       }),
       sbSelect('inventories', {

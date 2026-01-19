@@ -122,7 +122,7 @@ async function attachLocalProductMeta(items) {
 
   const inList = buildInList(productCodes);
   const products = await sbSelect('products', {
-    select: 'code,name,sale_price,free_gift',
+    select: 'code,name,sale_price,free_gift,no,kprice',
     filters: [{ column: 'code', op: 'in', value: inList }],
   });
 
@@ -131,8 +131,10 @@ async function attachLocalProductMeta(items) {
       p.code,
       {
         code: p.code,
+        no: Number(p.no ?? 0) || 0,
         nameKo: String(p.name || '').trim(),
         salePricePhp: Number(p.sale_price ?? 0) || 0,
+        kprice: Number(p.kprice ?? 0) || 0,
         freeGift: Boolean(p.free_gift ?? false),
       },
     ])
@@ -142,6 +144,8 @@ async function attachLocalProductMeta(items) {
     const product = productMap.get(i.code);
     return {
       ...i,
+      productNo: product?.no ?? i.productNo ?? 0,
+      kprice: product?.kprice ?? i.kprice ?? 0,
       nameKo:
         (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: i.sizeDisplay ?? i.size,
@@ -173,7 +177,7 @@ export async function checkoutCart(payload) {
   const [products, inventories] = await Promise.all([
     productCodes.length
       ? sbSelect('products', {
-          select: 'code,name,sale_price,free_gift',
+          select: 'code,name,sale_price,free_gift,no,kprice',
           filters: [{ column: 'code', op: 'in', value: inList }],
         })
       : [],

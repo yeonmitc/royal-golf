@@ -1,13 +1,12 @@
 // src/components/common/Header.jsx
 import { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import logoUrl from '../../assets/logo.png';
+import { NavLink } from 'react-router-dom';
+import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
 import AdminLoginModal from '../admin/AdminLoginModal';
 import Modal from './Modal';
 
 export default function Header() {
-  const navigate = useNavigate();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const loginModalOpen = useAdminStore((s) => s.loginModalOpen);
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
@@ -50,15 +49,15 @@ export default function Header() {
           justifyContent: 'space-between',
         }}
       >
-        <button
-          type="button"
-          onClick={() => navigate('/')}
+        <NavLink
+          to="/sold-products"
           className="flex items-center gap-3 px-2 rounded-md transition-colors"
           style={{
             background: 'transparent',
             height: 'var(--header-height, 86px)',
             alignItems: 'center',
             cursor: 'pointer',
+            textDecoration: 'none',
           }}
         >
           <img
@@ -78,7 +77,7 @@ export default function Header() {
             onMouseEnter={() => setLogoHovered(true)}
             onMouseLeave={() => setLogoHovered(false)}
           />
-        </button>
+        </NavLink>
 
         <nav
           aria-label="Main Navigation"

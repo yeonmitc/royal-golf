@@ -3,7 +3,7 @@ import Button from '../components/common/Button';
 import { useToast } from '../context/ToastContext';
 import { getSupabaseConfigSummary, sbSelect } from '../db/supabaseRest';
 import { getProductInventoryList } from '../features/products/productApi';
-import { exportToTsv } from '../utils/csvExport';
+import * as csvExport from '../utils/csvExport';
 
 export default function SettingsPage() {
   const { showToast } = useToast();
@@ -16,7 +16,7 @@ export default function SettingsPage() {
     const csvRows = [header].concat(
       rows.map((p) => [p.code, p.nameKo, p.salePricePhp, p.totalStock])
     );
-    exportToTsv('products.tsv', csvRows);
+    csvExport.exportToTsv('products.tsv', csvRows);
   };
 
   const exportToJson = (filename, data) => {

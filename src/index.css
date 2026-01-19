@@ -170,6 +170,12 @@ body {
     flex: 1 1 30%;
   }
 
+  .price-filter-group .btn,
+  .sold-filter-row .btn {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
   .page-card .table,
   .page-card .form-grid {
     width: 100%;
@@ -181,6 +187,19 @@ body {
   width: 96px !important;
   min-width: 96px;
   justify-content: center;
+}
+
+/* Sold Product 페이지: 필터 버튼을 한 줄로 유지 */
+.sold-filter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.sold-filter-row .btn {
+  width: auto;
+  flex: 0 0 auto;
 }
 
 /* 인벤토리 페이지: 모바일에서도 버튼 가로 배치 유지 */

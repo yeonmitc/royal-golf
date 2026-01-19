@@ -1,20 +1,19 @@
 // src/pages/SellPage.jsx
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import BarcodeListener from '../components/common/BarcodeListener';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import Input from '../components/common/Input';
+import ReceiptModal from '../components/sales/ReceiptModal';
+import { useToast } from '../context/ToastContext';
+import codePartsSeed from '../db/seed/seed-code-parts.json';
+import { getGuides } from '../features/guides/guideApi';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
-import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { useCartStore } from '../store/cartStore';
-import { useToast } from '../context/ToastContext';
-import { getGuides } from '../features/guides/guideApi';
-import Select from '../components/common/Select';
-import ReceiptModal from '../components/sales/ReceiptModal';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -33,6 +32,12 @@ export default function SellPage() {
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
 
+  const mrMoonGuide = (guides || []).find((g) => String(g.name || '').toLowerCase() === 'mr.moon');
+  const isMrMoonSelected = guideId && mrMoonGuide && String(guideId) === String(mrMoonGuide.id);
+  const baseTotal = Number(totalPrice || 0);
+  const discountedTotal = isMrMoonSelected ? Math.round(baseTotal * 0.9) : baseTotal;
+  const displayTotalPrice = discountedTotal > 0 ? Math.ceil(discountedTotal / 100) * 100 : 0;
+
   const { mutateAsync: checkoutCart, isPending: isCheckoutPending } = useCheckoutCartMutation();
 
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -45,12 +50,12 @@ export default function SellPage() {
     if (currentItems.length === 0) return;
     try {
       const result = await checkoutCart({ items: currentItems, guideId: currentGuideId });
-      
+
       // Prepare receipt data
       setReceiptData({
         id: result.saleId.toString(), // Assuming saleId is returned
         soldAt: result.soldAt || new Date().toISOString(),
-        items: currentItems.map(item => ({
+        items: currentItems.map((item) => ({
           code: item.code,
           name: item.name || item.nameKo,
           color: item.color,
@@ -63,7 +68,7 @@ export default function SellPage() {
         guideId: currentGuideId,
       });
       setReceiptOpen(true);
-      
+
       clearCart();
       showToast('Sale completed successfully.');
       // navigate('/sales'); // Stay on page to print receipt
@@ -130,7 +135,12 @@ export default function SellPage() {
                       className: 'text-right',
                       tdClassName: 'text-right',
                     },
-                    { key: 'action', header: 'Action', className: 'text-center', tdClassName: 'text-center' },
+                    {
+                      key: 'action',
+                      header: 'Action',
+                      className: 'text-center',
+                      tdClassName: 'text-center',
+                    },
                   ]}
                   rows={cartItems.map((item, idx) => {
                     const isFree = item.unitPricePhp === 0;
@@ -157,7 +167,12 @@ export default function SellPage() {
                             }}
                             title="Toggle Free Gift"
                           >
-                            <span style={{ color: isFree ? 'var(--gold-soft)' : '#ef4444', lineHeight: 0 }}>
+                            <span
+                              style={{
+                                color: isFree ? 'var(--gold-soft)' : '#ef4444',
+                                lineHeight: 0,
+                              }}
+                            >
                               <svg
                                 width="16"
                                 height="16"
@@ -249,7 +264,11 @@ export default function SellPage() {
                           <option
                             key={g.id}
                             value={g.id}
-                            style={isMrMoon ? { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' } : {}}
+                            style={
+                              isMrMoon
+                                ? { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' }
+                                : {}
+                            }
                           >
                             {g.name}
                           </option>
@@ -261,57 +280,53 @@ export default function SellPage() {
                 <div
                   style={{
                     display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  marginTop: 8,
-                }}
-              >
-                <Button variant="outline" size="sm" onClick={clearCart}>
-                  Clear
-                </Button>
-                <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-                  <span
-                    className="text-sm"
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 999,
-                      background: '#141420',
-                      border: '1px solid var(--border-soft)',
-                      color: 'var(--text-main)',
-                      fontWeight: 600,
-                      fontSize: 15,
-                    }}
-                  >
-                    Total{' '}
-                    <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{totalQty}</span>{' '}
-                    items ·{' '}
-                    <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>
-                      {totalPrice.toLocaleString('en-PH')}
-                    </span>{' '}
-                    PHP
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  disabled={isCheckoutPending}
-                  onClick={handleCheckout}
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    marginTop: 8,
+                  }}
                 >
-                  {isCheckoutPending ? 'Processing payment...' : 'Payment'}
-                </Button>
-              </div>
+                  <Button variant="outline" size="sm" onClick={clearCart}>
+                    Clear
+                  </Button>
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                    <span
+                      className="text-sm"
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 999,
+                        background: '#141420',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-main)',
+                        fontWeight: 600,
+                        fontSize: 15,
+                      }}
+                    >
+                      Total{' '}
+                      <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{totalQty}</span>{' '}
+                      items ·{' '}
+                      <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>
+                        {displayTotalPrice.toLocaleString('en-PH')}
+                      </span>{' '}
+                      PHP
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={isCheckoutPending}
+                    onClick={handleCheckout}
+                  >
+                    {isCheckoutPending ? 'Processing payment...' : 'Payment'}
+                  </Button>
+                </div>
               </div>
             )}
           </Card>
         </div>
       </div>
-      <ReceiptModal
-        open={receiptOpen}
-        receiptData={receiptData}
-        onClose={handleReceiptClose}
-      />
+      <ReceiptModal open={receiptOpen} receiptData={receiptData} onClose={handleReceiptClose} />
     </div>
   );
 }
