@@ -341,6 +341,39 @@ a[href],
   cursor: pointer;
 }
 
+/* Stock Check 전용 테이블: 화면 가로 100% 사용 */
+.stock-check-table-wrapper {
+  width: 100%;
+}
+
+.stock-check-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 4px;
+}
+
+.stock-check-table th,
+.stock-check-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.stock-check-table th:first-child,
+.stock-check-table td:first-child {
+  width: 45%;
+}
+
+.stock-check-table th:nth-child(2),
+.stock-check-table td:nth-child(2) {
+  width: 35%;
+}
+
+.stock-check-table th:last-child,
+.stock-check-table td:last-child {
+  width: 20%;
+  white-space: nowrap;
+}
+
 /* 인풋/버튼 기본 (공통 컴포넌트가 감싸도 base 스타일용) */
 input,
 select,

@@ -23,6 +23,7 @@ export default function CheckStockPage() {
   const [selectedType, setSelectedType] = useState(null);
   const [showCheckedOnly, setShowCheckedOnly] = useState(false);
   const [showErrorOnly, setShowErrorOnly] = useState(false);
+  const [showUncheckedOnly, setShowUncheckedOnly] = useState(false);
 
   // Persist checked items
   useEffect(() => {
@@ -138,6 +139,8 @@ export default function CheckStockPage() {
       base = brandFilteredProducts.filter((p) => checkedCodes.has(p.code));
     } else if (showErrorOnly) {
       base = brandFilteredProducts.filter((p) => errorCodes.has(p.code));
+    } else if (showUncheckedOnly) {
+      base = brandFilteredProducts.filter((p) => !checkedCodes.has(p.code));
     } else {
       base = typeFilteredProducts;
     }
@@ -151,6 +154,7 @@ export default function CheckStockPage() {
     brandFilteredProducts,
     showCheckedOnly,
     showErrorOnly,
+    showUncheckedOnly,
     checkedCodes,
     errorCodes,
   ]);
@@ -185,17 +189,36 @@ export default function CheckStockPage() {
               variant={showCheckedOnly ? 'danger' : 'outline'}
               onClick={() => {
                 setShowCheckedOnly(!showCheckedOnly);
-                if (!showCheckedOnly) setShowErrorOnly(false);
+                if (!showCheckedOnly) {
+                  setShowErrorOnly(false);
+                  setShowUncheckedOnly(false);
+                }
               }}
               size="compact"
             >
               {showCheckedOnly ? 'Show All' : 'Checked'}
             </Button>
             <Button
+              variant={showUncheckedOnly ? 'danger' : 'outline'}
+              onClick={() => {
+                setShowUncheckedOnly(!showUncheckedOnly);
+                if (!showUncheckedOnly) {
+                  setShowCheckedOnly(false);
+                  setShowErrorOnly(false);
+                }
+              }}
+              size="compact"
+            >
+              {showUncheckedOnly ? 'Show All' : 'Unchecked'}
+            </Button>
+            <Button
               variant={showErrorOnly ? 'danger' : 'outline'}
               onClick={() => {
                 setShowErrorOnly(!showErrorOnly);
-                if (!showErrorOnly) setShowCheckedOnly(false);
+                if (!showErrorOnly) {
+                  setShowCheckedOnly(false);
+                  setShowUncheckedOnly(false);
+                }
               }}
               size="compact"
             >
@@ -248,6 +271,7 @@ export default function CheckStockPage() {
                     setFilterBrand(next);
                     setShowCheckedOnly(false);
                     setShowErrorOnly(false);
+                    setShowUncheckedOnly(false);
                   }}
                   variant={filterBrand === b ? 'primary' : 'outline'}
                   size="compact"
@@ -273,8 +297,13 @@ export default function CheckStockPage() {
                 setSelectedType(selectedType === t ? null : t); // Toggle functionality
                 setShowCheckedOnly(false);
                 setShowErrorOnly(false);
+                setShowUncheckedOnly(false);
               }}
-              variant={selectedType === t && !showCheckedOnly ? 'primary' : 'outline'}
+              variant={
+                selectedType === t && !showCheckedOnly && !showUncheckedOnly && !showErrorOnly
+                  ? 'primary'
+                  : 'outline'
+              }
               size="compact"
               className="whitespace-nowrap flex-shrink-0 text-[11px]"
             >
@@ -291,14 +320,14 @@ export default function CheckStockPage() {
           Select a type to begin checking stock.
         </div>
       ) : (
-        <div className="px-1 overflow-x-auto">
-          <table className="min-w-full text-xs border-separate border-spacing-y-1">
+        <div className="stock-check-table-wrapper">
+          <table className="stock-check-table text-xs">
             <thead>
               <tr className="text-[10px] text-gray-400 border-b border-[var(--gold)]">
                 <th className="text-left font-normal border-r border-white/20 pr-2 whitespace-nowrap">
                   Code
                 </th>
-                <th className="text-left font-normal pl-2">Size</th>
+                <th className="text-left font-normal pl-2 w-full">Size</th>
                 <th className="text-right font-normal w-16">Chk / Err</th>
               </tr>
             </thead>
