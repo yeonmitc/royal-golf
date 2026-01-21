@@ -117,8 +117,8 @@ export default function SalesTable({
       const qty = Number(row.qty || 0) || 0;
       const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
-      const commissionForTotal = isRefunded ? 0 : commission;
-      // const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+      const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+      const commissionForTotal = isRefunded || isMrMoon ? 0 : commission;
       const lineTotalForTotal = finalUnit * qtyForTotal;
 
       return {

@@ -117,7 +117,7 @@ export default function AnalyzePage() {
             <div className="page-card">
               <div>Total Sales</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
-                {Math.round(data.summary.grossAmount).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.realTotalSales || data.summary.grossAmount).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">

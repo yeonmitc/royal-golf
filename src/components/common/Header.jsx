@@ -16,6 +16,21 @@ export default function Header() {
   const [logoHovered, setLogoHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const navItems = [
+    { to: '/logs', label: 'log', adminOnly: true },
+    { to: '/inventory', label: 'product list', adminOnly: false },
+    { to: '/check-stock', label: 'check stock', adminOnly: false },
+    { to: '/sell', label: 'sell product', adminOnly: false },
+    { to: '/sales', label: 'sell list', adminOnly: false },
+    { to: '/expenses', label: 'expenses', adminOnly: true },
+    { to: '/analyze', label: 'analyze', adminOnly: true },
+    { to: '/guides', label: 'guides', adminOnly: true },
+    { to: '/add', label: 'add product', adminOnly: true },
+    { to: '/settings', label: 'setting', adminOnly: true },
+  ];
+
+  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
+
   useEffect(() => {
     const el = document.querySelector('main[data-scroll-root="main"]');
     const target = el || window;
@@ -90,17 +105,7 @@ export default function Header() {
             overflowX: 'auto',
           }}
         >
-          {[
-            { to: '/logs', label: 'log' },
-            { to: '/inventory', label: 'product list' },
-            { to: '/check-stock', label: 'check stock' },
-            { to: '/sell', label: 'sell product' },
-            { to: '/sales', label: 'sell list' },
-            { to: '/analyze', label: 'analyze' },
-            { to: '/guides', label: 'guides' },
-            { to: '/add', label: 'add product' },
-            { to: '/settings', label: 'setting' },
-          ].map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -109,7 +114,7 @@ export default function Header() {
                 fontSize: 16,
                 fontWeight: 500,
                 borderRadius: 999,
-                color: isActive ? 'var(--gold)' : 'var(--text-muted)',
+                color: isActive ? 'var(--gold)' : 'var(--text-main)',
                 background: isActive ? '#141420' : 'transparent',
                 textDecoration: 'none',
                 boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
@@ -168,16 +173,7 @@ export default function Header() {
           <div
             style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'min(360px, 90vw)' }}
           >
-            {[
-              { to: '/logs', label: 'log' },
-              { to: '/inventory', label: 'product list' },
-              { to: '/check-stock', label: 'check stock' },
-              { to: '/sell', label: 'sell product' },
-              { to: '/sales', label: 'sell list' },
-              { to: '/analyze', label: 'analyze' },
-              { to: '/add', label: 'add product' },
-              { to: '/settings', label: 'setting' },
-            ].map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

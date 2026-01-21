@@ -6,6 +6,7 @@ import Layout from './components/common/Layout';
 import AddProductPage from './pages/AddProductPage';
 import AnalyzePage from './pages/AnalyzePage';
 import CheckStockPage from './pages/CheckStockPage';
+import ExpensesPage from './pages/ExpensesPage';
 import GuidesPage from './pages/GuidesPage';
 import HomePage from './pages/HomePage';
 import InventoryPage from './pages/InventoryPage';
@@ -24,6 +25,14 @@ export default function App() {
         <Route path="/sell" element={<SellPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/sales" element={<SalesHistoryPage />} />
+        <Route
+          path="/expenses"
+          element={
+            <AdminRoute>
+              <ExpensesPage />
+            </AdminRoute>
+          }
+        />
         <Route
           path="/sold-products"
           element={

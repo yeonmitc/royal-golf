@@ -1,9 +1,9 @@
 // src/components/common/Input.jsx
 import './Input.css';
 
-export default function Input({ label, hint, error, className = '', ...props }) {
+export default function Input({ label, hint, error, className = '', containerStyle, ...props }) {
   return (
-    <div className={`input-wrapper ${className}`}>
+    <div className={`input-wrapper ${className}`} style={containerStyle}>
       {label && <label className="input-label">{label}</label>}
 
       <input className={`input-field ${error ? 'input-field-error' : ''}`} {...props} />

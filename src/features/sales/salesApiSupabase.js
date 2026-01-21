@@ -636,6 +636,19 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     }
   }
 
+  // Fetch guide names for mapping (to exclude Mr.Moon from commission)
+  let guideNameMap = new Map();
+  const allGuideIds = [...new Set([...groupMap.values()].filter(Boolean))];
+  if (allGuideIds.length > 0) {
+    try {
+      // Fetch all guides to map ID -> Name
+      const allGuides = await sbSelect('guides', { select: 'id,name' });
+      guideNameMap = new Map((allGuides || []).map((g) => [String(g.id), g.name]));
+    } catch (e) {
+      console.error('Failed to fetch guides for history:', e);
+    }
+  }
+
   const normalized = (filtered || [])
     .map((r) => {
       const qtyN = Number(r.qty ?? 0) || 0;
@@ -644,6 +657,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const refundedAt = r?.refunded_at || null;
       const isRefunded = Boolean(toMsFromIso(refundedAt));
       const guideId = groupMap.get(r.sale_group_id) || null;
+      const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
+      const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
+      const isMrMoon = nameLower === 'mrmoon';
+
       return {
         saleId: r.id,
         soldAt: r.sold_at,
@@ -664,7 +681,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         nameKo: '',
         guideId: guideId,
         saleGroupId: r.sale_group_id,
-        commission: guideId ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
+        // If Mr. Moon, commission is 0 (it's a discount). Otherwise 10%.
+        commission: (guideId && !isMrMoon) ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
       };
     })
     .filter((r) => r.qty > 0);
@@ -829,7 +847,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   if (guideIds.length > 0) {
     try {
       const allGuides = await sbSelect('guides', { select: 'id,name' });
-      guideMap = new Map((allGuides || []).map((g) => [g.id, g.name]));
+      guideMap = new Map((allGuides || []).map((g) => [String(g.id), g.name]));
     } catch (e) {
       console.error(e);
     }
@@ -843,20 +861,30 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   let mrMoonCommission = 0;
   let mrMoonRevenue = 0;
   let mrMoonListRevenue = 0;
+  let ellaCommission = 0;
+  let ellaRevenue = 0;
   try {
     analyzedRows.forEach((r) => {
-      const name = r.guideId ? String(guideMap.get(r.guideId) || '').toLowerCase() : '';
-      const isMrMoon = name === 'mr.moon';
+      const name = r.guideId ? String(guideMap.get(String(r.guideId)) || '').toLowerCase() : '';
+      const nameLower = name.replace(/[\s.]/g, '');
+      const isMrMoon = nameLower.includes('mrmoon');
+      const isElla = nameLower.includes('ella');
       if (isMrMoon) {
         mrMoonCommission += Number(r.commission || 0) || 0;
         mrMoonRevenue += Number(r.lineTotalPhp || 0) || 0;
         mrMoonListRevenue += (Number(r.listPrice || 0) || 0) * (Number(r.qty || 0) || 0);
+      }
+      if (isElla) {
+        ellaCommission += Number(r.commission || 0) || 0;
+        ellaRevenue += Number(r.lineTotalPhp || 0) || 0;
       }
     });
   } catch {
     mrMoonCommission = 0;
     mrMoonRevenue = 0;
     mrMoonListRevenue = 0;
+    ellaCommission = 0;
+    ellaRevenue = 0;
   }
 
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
@@ -867,10 +895,17 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     0
   );
 
-  const realTotalSales = totalRevenue;
+  const realTotalSales = totalRevenue - ellaCommission;
 
-  const grossAmount = nonRefundedRows.reduce((sum, r) => sum + (Number(r.price ?? 0) || 0), 0);
-  const netAmount = realTotalSales - totalCommission;
+  const grossAmount = nonRefundedRows.reduce(
+    (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
+    0
+  ) - ellaCommission;
+
+  // Mr. Moon commission is actually the discount amount (already deducted from price),
+  // so we should NOT deduct it again from Net Sales.
+  const realTotalCommission = totalCommission - mrMoonCommission - ellaCommission;
+  const netAmount = realTotalSales - realTotalCommission;
 
   const aov = transactionCount ? grossAmount / transactionCount : 0;
 
@@ -910,21 +945,16 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const grossProfit = realTotalSales - costAmount;
 
   // Rent calculation based on Net Sales (after commission)
-  // Mr.Moon Rent is calculated on his Net Sales (Revenue - Commission)
-  const netMrMoonSales = mrMoonRevenue - mrMoonCommission;
-  // realTotalSales (Revenue) includes everything.
-  // We need to subtract Mr.Moon Revenue to get "Others Revenue", then subtract Others Commission to get "Others Net Sales".
-  // BUT previous logic: normalRent = netOtherSales * 0.1
-  // netOtherSales was defined as: realTotalSales (Revenue - TotalComm) - netMrMoonSales (Revenue - MoonComm)
-  // which equals: (TotalRev - TotalComm) - (MoonRev - MoonComm) = (TotalRev - MoonRev) - (TotalComm - MoonComm) = OthersRev - OthersComm
-  // So the Rent base remains "Net Sales" (Revenue - Commission).
-
-  const netTotalSales = totalRevenue - totalCommission;
-  const netOtherSales = netTotalSales - netMrMoonSales;
+  // Mr.Moon Rent is calculated on his Sales (List Price) as per user request
+  
+  const netTotalSales = realTotalSales - realTotalCommission;
+  // To get "Others Net Sales", we subtract Mr. Moon's ACTUAL revenue (discounted) from Total Net Sales
+  const netOtherSales = netTotalSales - mrMoonRevenue;
 
   const normalRent = netOtherSales * 0.1;
-  const mrMoonRent = netMrMoonSales * 0.05;
+  const mrMoonRent = mrMoonListRevenue * 0.05;
   const totalRent = normalRent + mrMoonRent;
+  const mrMoonDiscount = mrMoonListRevenue * 0.1;
 
   const ownerProfit = netTotalSales - totalRent - costAmount;
 
@@ -1130,15 +1160,16 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   return {
     summary: {
       grossAmount,
+      realTotalSales,
       netAmount,
       costAmount,
       grossProfit,
       rentAmount: normalRent,
       ownerProfit,
-      totalCommission: totalCommission - mrMoonCommission,
+      totalCommission: realTotalCommission,
       transactionCount,
       aov,
-      discountAmount: mrMoonCommission,
+      discountAmount: mrMoonDiscount,
       mrMoonRevenue: mrMoonListRevenue,
       mrMoonRent,
       discountRate,

@@ -17,12 +17,12 @@ export async function getGuides() {
  * Returns array of { guide_id, name, is_active, balance, last_tx_at }
  */
 export async function getGuideStats() {
-  try {
-    return await sbSelect('v_guide_balances', {
-      order: { column: 'name', ascending: true },
-    });
-  } catch (err) {
-    console.warn('v_guide_balances view missing or error, falling back to manual calc:', err);
+  // try {
+  //   return await sbSelect('v_guide_balances', {
+  //     order: { column: 'name', ascending: true },
+  //   });
+  // } catch (err) {
+  //   console.warn('v_guide_balances view missing or error, falling back to manual calc:', err);
     
     // Fallback: Fetch guides + ledger manually
     const guides = await sbSelect('guides', {
@@ -53,7 +53,7 @@ export async function getGuideStats() {
       balance: balanceMap[g.id] || 0,
       last_tx_at: lastTxMap[g.id] || null,
     }));
-  }
+  // }
 }
 
 /**
