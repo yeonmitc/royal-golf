@@ -177,14 +177,43 @@ export default function CheckStockPage() {
     });
   };
 
+  const handleDownloadTsv = () => {
+    if (finalRows.length === 0) {
+      alert('No data to download.');
+      return;
+    }
+
+    const header = ['Code', 'Sizes', 'Checked', 'Error'];
+    const rows = finalRows.map((item) => {
+      const isChecked = checkedCodes.has(item.code) ? 'Y' : '';
+      const isError = errorCodes.has(item.code) ? 'Y' : '';
+      const availableSizes = (item.sizes || [])
+        .filter((s) => s.stockQty > 0)
+        .map((s) => `${s.size}(${s.stockQty})`)
+        .join(', ');
+
+      return [item.code, availableSizes, isChecked, isError].join('\t');
+    });
+
+    const content = [header.join('\t'), ...rows].join('\n');
+    const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `stock_check_${new Date().toISOString().slice(0, 10)}.tsv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (isLoading) return <div className="p-4">Loading stock data...</div>;
 
   return (
     <div className="flex flex-col gap-4 pb-20">
       <div className="flex flex-col gap-2 sticky top-0 bg-[var(--bg-main)] z-10 p-2 shadow-sm -mx-2">
-        <div className="flex items-center gap-2 w-full flex-nowrap">
+        <div className="flex flex-wrap items-center gap-2 w-full">
           <h2 className="text-base font-semibold flex-none">Stock Check</h2>
-          <div className="flex items-center gap-1 ml-auto flex-none">
+          <div className="flex flex-wrap items-center gap-1 ml-auto">
             <Button
               variant={showCheckedOnly ? 'danger' : 'outline'}
               onClick={() => {
@@ -223,6 +252,15 @@ export default function CheckStockPage() {
               size="compact"
             >
               {showErrorOnly ? 'Show All' : 'Err'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadTsv}
+              size="compact"
+              icon="download"
+              title="Download TSV"
+            >
+              TSV
             </Button>
             <Button
               variant="outline"
@@ -334,6 +372,14 @@ export default function CheckStockPage() {
         </div>
       ) : (
         <div className="stock-check-table-wrapper">
+          {/* Total Count Display */}
+          <div className="flex justify-end mb-2 px-2 text-[var(--gold)] text-lg font-extrabold">
+            Total: {finalRows.length.toLocaleString()} codes /{' '}
+            {finalRows
+              .reduce((sum, item) => sum + (Number(item.totalStock) || 0), 0)
+              .toLocaleString()}{' '}
+            qty
+          </div>
           <table className="stock-check-table text-xs">
             <thead>
               <tr className="text-[10px] text-gray-400 border-b border-[var(--gold)]">
