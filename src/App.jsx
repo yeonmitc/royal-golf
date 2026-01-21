@@ -1,5 +1,4 @@
 // src/App.jsx
-import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import AdminRoute from './components/admin/AdminRoute';
 import Layout from './components/common/Layout';
@@ -14,8 +13,6 @@ import SalesHistoryPage from './pages/SalesHistoryPage';
 import SellPage from './pages/SellPage';
 import SettingsPage from './pages/SettingsPage';
 import SoldProductPage from './pages/SoldProductPage';
-
-const LogsPageDev = import.meta.env.DEV ? lazy(() => import('./pages/LogsPage')) : null;
 
 export default function App() {
   return (
@@ -57,18 +54,7 @@ export default function App() {
             </AdminRoute>
           }
         />
-        {LogsPageDev && (
-          <Route
-            path="/logs"
-            element={
-              <AdminRoute>
-                <Suspense fallback={<div className="page-card">Loading...</div>}>
-                  <LogsPageDev />
-                </Suspense>
-              </AdminRoute>
-            }
-          />
-        )}
+
         <Route
           path="/add"
           element={

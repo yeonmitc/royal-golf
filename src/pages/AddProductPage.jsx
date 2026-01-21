@@ -99,16 +99,21 @@ export default function AddProductPage() {
   const cnyNumber = Number(cnyValue);
   const computedKrwPrice =
     cnyValue === '' ? '' : String(Math.round((Number.isFinite(cnyNumber) ? cnyNumber : 0) * 220));
+  const computedP1PricePhp =
+    computedKrwPrice === ''
+      ? ''
+      : String(Math.round(Number(computedKrwPrice) / 25.5));
   const computedP2PricePhp =
     computedKrwPrice === ''
       ? ''
-      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25, 100))
+      : String(ceilToUnit((Number(computedKrwPrice) * 2) / 25, 100));
   const computedP3PricePhp =
     computedKrwPrice === ''
       ? ''
       : String(ceilToUnit((Number(computedKrwPrice) * 3) / 25, 100));
 
   const effectiveSalePricePhp = salePriceManual ? salePricePhp : computedP3PricePhp;
+  const p1PriceForDb = computedP1PricePhp;
   const p3PriceForDb = computedP3PricePhp;
 
   async function recomputeCode(next = {}) {
@@ -188,6 +193,7 @@ export default function AddProductPage() {
       qty: totalQty,
       kprice: Number(computedKrwPrice || 0) || 0,
       cprice: Number(priceCny || 0) || 0,
+      p1price: Number(p1PriceForDb || 0) || 0,
       p2price: Number(computedP2PricePhp || 0) || 0,
       p3price: Number(p3PriceForDb || 0) || 0,
     };
@@ -394,7 +400,15 @@ export default function AddProductPage() {
                 </div>
               </FormSection>
 
-              <FormSection columns={2}>
+              <FormSection columns={3}>
+                <div style={{ flex: 1 }}>
+                  <Input
+                    label="P1 Price"
+                    type="number"
+                    value={computedP1PricePhp}
+                    readOnly
+                  />
+                </div>
                 <div style={{ flex: 1 }}>
                   <Input
                     label="P2 Price"

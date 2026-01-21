@@ -1,6 +1,6 @@
 // src/features/products/productApi.js
-import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import db from '../../db/dexieClient';
+import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
@@ -77,6 +77,7 @@ function normalizeProductRow(r) {
     priceCny: Number(r.priceCny ?? r.price_cny ?? r.cprice ?? 0) || 0, // cprice alias
     cprice: Number(r.cprice ?? r.priceCny ?? r.price_cny ?? 0) || 0,
     kprice: Number(r.kprice ?? r.krwPrice ?? 0) || 0,
+    p1price: Number(r.p1price ?? 0) || 0,
     p2price: Number(r.p2price ?? 0) || 0,
     p3price: Number(r.p3price ?? 0) || 0,
     basePricePhp: Number(r.basePricePhp ?? r.base_price_php ?? 0) || 0,
@@ -107,9 +108,10 @@ function toDbProductRow(payload) {
   const out = {
     code,
     name: String(payload?.nameKo ?? payload?.name ?? '').trim(),
-    free_gift: hasOwn(payload, 'freeGift') || hasOwn(payload, 'free_gift')
-      ? Boolean(payload?.freeGift ?? payload?.free_gift)
-      : undefined,
+    free_gift:
+      hasOwn(payload, 'freeGift') || hasOwn(payload, 'free_gift')
+        ? Boolean(payload?.freeGift ?? payload?.free_gift)
+        : undefined,
   };
   if (hasOwn(payload, 'salePricePhp') || hasOwn(payload, 'sale_price')) {
     out.sale_price = Number(payload?.salePricePhp ?? payload?.sale_price ?? 0) || 0;
@@ -122,6 +124,7 @@ function toDbProductRow(payload) {
   if (hasOwn(payload, 'cprice') || hasOwn(payload, 'priceCny')) {
     out.cprice = Number(payload?.cprice ?? payload?.priceCny ?? 0) || 0;
   }
+  if (hasOwn(payload, 'p1price')) out.p1price = Number(payload?.p1price ?? 0) || 0;
   if (hasOwn(payload, 'p2price')) out.p2price = Number(payload?.p2price ?? 0) || 0;
   if (hasOwn(payload, 'p3price')) out.p3price = Number(payload?.p3price ?? 0) || 0;
   return out;
@@ -327,6 +330,7 @@ export async function upsertProduct(payload) {
   if (row.qty !== undefined) values.qty = row.qty;
   if (row.kprice !== undefined) values.kprice = row.kprice;
   if (row.cprice !== undefined) values.cprice = row.cprice;
+  if (row.p1price !== undefined) values.p1price = row.p1price;
   if (row.p2price !== undefined) values.p2price = row.p2price;
   if (row.p3price !== undefined) values.p3price = row.p3price;
 
@@ -336,11 +340,10 @@ export async function upsertProduct(payload) {
     limit: 1,
   });
   if (Array.isArray(existing) && existing.length > 0) {
-    await sbUpdate(
-      'products',
-      values,
-      { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
-    );
+    await sbUpdate('products', values, {
+      filters: [{ column: 'code', op: 'eq', value: code }],
+      returning: 'minimal',
+    });
   } else {
     const nextNo = row.no ? row.no : await getNextProductNo();
     const insertValues = { ...values };
@@ -348,6 +351,7 @@ export async function upsertProduct(payload) {
     if (insertValues.qty === undefined) insertValues.qty = 0;
     if (insertValues.kprice === undefined) insertValues.kprice = 0;
     if (insertValues.cprice === undefined) insertValues.cprice = 0;
+    if (insertValues.p1price === undefined) insertValues.p1price = 0;
     if (insertValues.p2price === undefined) insertValues.p2price = 0;
     if (insertValues.p3price === undefined) insertValues.p3price = 0;
     await sbInsert('products', [{ code, ...insertValues }], { returning: 'minimal' });
@@ -433,11 +437,10 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
     if (!existingNo) {
       values.no = await getNextInventoryNo();
     }
-    await sbUpdate(
-      'inventories',
-      values,
-      { filters: [{ column: 'code', op: 'eq', value: c }], returning: 'minimal' }
-    );
+    await sbUpdate('inventories', values, {
+      filters: [{ column: 'code', op: 'eq', value: c }],
+      returning: 'minimal',
+    });
   } else {
     const insertRow = { code: c };
     for (const sizeKey of SIZE_ORDER) {

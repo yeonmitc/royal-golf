@@ -17,7 +17,6 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const navItems = [
-    { to: '/logs', label: 'log', adminOnly: true },
     { to: '/inventory', label: 'product list', adminOnly: false },
     { to: '/check-stock', label: 'check stock', adminOnly: false },
     { to: '/sell', label: 'sell product', adminOnly: false },
@@ -29,7 +28,9 @@ export default function Header() {
     { to: '/settings', label: 'setting', adminOnly: true },
   ];
 
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const adminItems = visibleNavItems.filter((item) => item.adminOnly);
+  const publicItems = visibleNavItems.filter((item) => !item.adminOnly);
 
   useEffect(() => {
     const el = document.querySelector('main[data-scroll-root="main"]');
@@ -99,32 +100,62 @@ export default function Header() {
           className="header-nav"
           style={{
             display: 'flex',
+            flex: 1,
             alignItems: 'center',
-            gap: 8,
+            justifyContent: 'center',
+            gap: 40,
             whiteSpace: 'nowrap',
             overflowX: 'auto',
+            padding: '0 20px',
           }}
         >
-          {visibleNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              style={({ isActive }) => ({
-                padding: '8px 12px',
-                fontSize: 16,
-                fontWeight: 500,
-                borderRadius: 999,
-                color: isActive ? 'var(--gold)' : 'var(--text-main)',
-                background: isActive ? '#141420' : 'transparent',
-                textDecoration: 'none',
-                boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
-                cursor: 'pointer',
-              })}
-              end
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {/* Left: Admin Items (Gold) */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {adminItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => ({
+                  padding: '8px 12px',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  borderRadius: 999,
+                  color: isActive ? 'var(--gold)' : 'var(--gold-soft)',
+                  background: isActive ? '#141420' : 'transparent',
+                  textDecoration: 'none',
+                  boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
+                  cursor: 'pointer',
+                })}
+                end
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+
+          {/* Right: Public Items */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {publicItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => ({
+                  padding: '8px 12px',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  borderRadius: 999,
+                  color: isActive ? 'var(--gold)' : 'var(--text-main)',
+                  background: isActive ? '#141420' : 'transparent',
+                  textDecoration: 'none',
+                  boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
+                  cursor: 'pointer',
+                })}
+                end
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
         </nav>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

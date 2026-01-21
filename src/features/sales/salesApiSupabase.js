@@ -122,7 +122,7 @@ async function attachLocalProductMeta(items) {
 
   const inList = buildInList(productCodes);
   const products = await sbSelect('products', {
-    select: 'code,name,sale_price,free_gift,no,kprice',
+    select: 'code,name,sale_price,free_gift,no,kprice,p1price',
     filters: [{ column: 'code', op: 'in', value: inList }],
   });
 
@@ -135,6 +135,7 @@ async function attachLocalProductMeta(items) {
         nameKo: String(p.name || '').trim(),
         salePricePhp: Number(p.sale_price ?? 0) || 0,
         kprice: Number(p.kprice ?? 0) || 0,
+        p1price: Number(p.p1price ?? 0) || 0,
         freeGift: Boolean(p.free_gift ?? false),
       },
     ])
@@ -149,6 +150,7 @@ async function attachLocalProductMeta(items) {
       ...i,
       productNo: product?.no ?? i.productNo ?? 0,
       kprice: product?.kprice ?? i.kprice ?? 0,
+      p1price: product?.p1price ?? i.p1price ?? 0,
       nameKo:
         (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: i.sizeDisplay ?? i.size,
@@ -162,10 +164,12 @@ async function attachLocalProductMeta(items) {
 export async function checkoutCart(payload) {
   let cartItems = payload;
   let guideId = null;
+  let isMrMoon = false;
 
   if (!Array.isArray(payload) && payload?.items) {
     cartItems = payload.items;
     guideId = payload.guideId;
+    isMrMoon = payload.isMrMoon;
   }
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -258,10 +262,24 @@ export async function checkoutCart(payload) {
 
     const unitPriceOriginal =
       Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
-    const unitPriceChargedCandidate = Number(item.unitPricePhp ?? unitPriceOriginal);
-    const unitPriceCharged = Number.isFinite(unitPriceChargedCandidate)
-      ? unitPriceChargedCandidate
-      : unitPriceOriginal;
+
+    // Apply Mr. Moon discount logic (Ceiling to nearest 100) if applicable
+    let calculatedPrice = unitPriceOriginal;
+    if (isMrMoon && unitPriceOriginal > 1000) {
+      calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
+    }
+
+    const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
+    // If item.unitPricePhp matches original, we use calculatedPrice.
+    // If it was manually overridden (different from original), we might want to keep it?
+    // Assuming standard flow: item.unitPricePhp is original.
+    // If we want to FORCE the calculated price:
+    const unitPriceCharged = isMrMoon
+      ? calculatedPrice
+      : Number.isFinite(unitPriceChargedCandidate)
+        ? unitPriceChargedCandidate
+        : unitPriceOriginal;
+
     const lineTotal = unitPriceCharged * qty;
     const isFreeGift = unitPriceCharged === 0 || Boolean(product.freeGift);
 
@@ -682,7 +700,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         guideId: guideId,
         saleGroupId: r.sale_group_id,
         // If Mr. Moon, commission is 0 (it's a discount). Otherwise 10%.
-        commission: (guideId && !isMrMoon) ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
+        commission: guideId && !isMrMoon ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
       };
     })
     .filter((r) => r.qty > 0);
@@ -897,10 +915,11 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   const realTotalSales = totalRevenue - ellaCommission;
 
-  const grossAmount = nonRefundedRows.reduce(
-    (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
-    0
-  ) - ellaCommission;
+  const grossAmount =
+    nonRefundedRows.reduce(
+      (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
+      0
+    ) - ellaCommission;
 
   // Mr. Moon commission is actually the discount amount (already deducted from price),
   // so we should NOT deduct it again from Net Sales.
@@ -946,7 +965,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   // Rent calculation based on Net Sales (after commission)
   // Mr.Moon Rent is calculated on his Sales (List Price) as per user request
-  
+
   const netTotalSales = realTotalSales - realTotalCommission;
   // To get "Others Net Sales", we subtract Mr. Moon's ACTUAL revenue (discounted) from Total Net Sales
   const netOtherSales = netTotalSales - mrMoonRevenue;

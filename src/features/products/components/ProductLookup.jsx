@@ -251,6 +251,10 @@ export default function ProductLookup({
                       <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Number</span>{' '}
                       <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{serial}</span>
                     </span>
+                    <span>
+                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>DB No</span>{' '}
+                      <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{prod.no}</span>
+                    </span>
                   </div>
                 );
               })()}

@@ -35,16 +35,30 @@ export default function AnalyzePage() {
     setToDate(t);
   }
   function setWeek() {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 6);
+    // Current week: Sunday to Saturday based on today
+    const now = new Date();
+    const day = now.getDay(); // 0 (Sunday) - 6 (Saturday)
+
+    // Calculate start (Sunday)
+    const start = new Date(now);
+    start.setDate(now.getDate() - day);
+
+    // Calculate end (Saturday)
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
     setFromDate(toInputDate(start));
     setToDate(toInputDate(end));
   }
   function setMonth() {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 29);
+    // Current month: 1st to last day
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0); // Last day of current month
+
     setFromDate(toInputDate(start));
     setToDate(toInputDate(end));
   }
@@ -117,7 +131,10 @@ export default function AnalyzePage() {
             <div className="page-card">
               <div>Total Sales</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
-                {Math.round(data.summary.realTotalSales || data.summary.grossAmount).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.realTotalSales || data.summary.grossAmount).toLocaleString(
+                  'en-PH'
+                )}{' '}
+                PHP
               </div>
             </div>
             <div className="page-card">

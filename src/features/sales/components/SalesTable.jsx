@@ -202,10 +202,9 @@ export default function SalesTable({
         <div
           style={{
             display: 'flex',
-            justifyContent: 'flex-start',
+            justifyContent: 'center',
             gap: 8,
             alignItems: 'center',
-            paddingRight: '12px',
           }}
         >
           <span>{lineTotal.toLocaleString('en-US')}</span>
@@ -354,10 +353,10 @@ export default function SalesTable({
       style: isRefunded
         ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
         : giftChecked
-        ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
-        : isMrMoon
-        ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
-        : undefined,
+          ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
+          : isMrMoon
+            ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
+            : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
@@ -395,15 +394,20 @@ export default function SalesTable({
       <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
         <DataTable
           columns={[
-            { key: 'no', header: 'no', className: 'text-right', tdClassName: 'text-right' },
-            { key: 'soldAtDate', header: 'date', className: 'sales-col-date' },
+            { key: 'no', header: 'no', className: 'text-center', tdClassName: 'text-center' },
+            {
+              key: 'soldAtDate',
+              header: 'date',
+              className: 'text-center sales-col-date',
+              tdClassName: 'text-center sales-col-date',
+            },
             {
               key: 'soldAtTime',
               header: 'time',
               className: 'text-center sales-col-time',
               tdClassName: 'text-center sales-col-time',
             },
-            { key: 'code', header: 'code' },
+            { key: 'code', header: 'code', className: 'text-center', tdClassName: 'text-center' },
             {
               key: 'sizeDisplay',
               header: 'size',
@@ -413,27 +417,27 @@ export default function SalesTable({
             {
               key: 'color',
               header: 'color',
-              className: 'sales-col-color',
-              tdClassName: 'sales-col-color',
+              className: 'text-center sales-col-color',
+              tdClassName: 'text-center sales-col-color',
             },
-            { key: 'qty', header: 'qty', className: 'text-right', tdClassName: 'text-right' },
+            { key: 'qty', header: 'qty', className: 'text-center', tdClassName: 'text-center' },
             {
               key: 'brand',
               header: 'brand',
-              className: 'sales-col-brand',
-              tdClassName: 'sales-col-brand',
+              className: 'text-center sales-col-brand',
+              tdClassName: 'text-center sales-col-brand',
             },
             {
               key: 'unitPricePhp',
               header: 'price',
-              className: 'text-left sales-col-price',
-              tdClassName: 'text-left sales-col-price',
+              className: 'text-center sales-col-price',
+              tdClassName: 'text-center sales-col-price',
             },
             {
               key: 'commission',
               header: 'comm.',
-              className: 'text-right text-xs sales-col-commission',
-              tdClassName: 'text-right text-xs text-muted sales-col-commission',
+              className: 'text-center text-xs sales-col-commission',
+              tdClassName: 'text-center text-xs text-muted sales-col-commission',
             },
             {
               key: 'action',

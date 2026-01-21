@@ -25,7 +25,6 @@ export default function SellPage() {
   const cartItems = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
   const totalQty = useCartStore((s) => s.totalQty);
-  const totalPrice = useCartStore((s) => s.totalPrice);
   const togglePromo = useCartStore((s) => s.togglePromo);
   const setItemColor = useCartStore((s) => s.setItemColor);
   const removeItem = useCartStore((s) => s.removeItem);
@@ -39,8 +38,9 @@ export default function SellPage() {
   const calculateItemPrice = (price) => {
     const p = Number(price || 0);
     if (isMrMoonSelected && p > 1000) {
-      // 10% discount, rounded to nearest 100
-      return Math.round((p * 0.9) / 100) * 100;
+      // 10% discount, rounded up to nearest 100 (Ceiling)
+      // e.g., 4900 -> 4410 -> 4500
+      return Math.ceil((p * 0.9) / 100) * 100;
     }
     return p;
   };
@@ -61,23 +61,21 @@ export default function SellPage() {
     const currentGuideId = useCartStore.getState().guideId;
     if (currentItems.length === 0) return;
 
-    // Check if Mr. Moon is selected at checkout time
-    const guideList = await getGuides(); // Fetch fresh or use cache? relying on query cache usually fine
-    // But we can use the 'guides' from scope if we trust it hasn't changed, or just use the ID if we know the logic.
-    // We already have 'guides' from useQuery.
-    const mrMoon = (guides || []).find((g) => String(g.name || '').toLowerCase() === 'mr.moon');
-    const isMrMoon = currentGuideId && mrMoon && String(currentGuideId) === String(mrMoon.id);
-
     try {
       // We send original items; DB trigger handles the actual price modification.
-      const result = await checkoutCart({ items: currentItems, guideId: currentGuideId });
+      // UPDATE: We now calculate price explicitly to enforce Ceiling rounding for Mr. Moon.
+      const result = await checkoutCart({
+        items: currentItems,
+        guideId: currentGuideId,
+        isMrMoon: isMrMoonSelected,
+      });
 
       // Prepare receipt data with LOCAL calculation to match DB trigger
       const receiptItems = currentItems.map((item) => {
         const original = Number(item.unitPricePhp || item.price || 0);
         let finalPrice = original;
-        if (isMrMoon && original > 1000) {
-          finalPrice = Math.round((original * 0.9) / 100) * 100;
+        if (isMrMoonSelected && original > 1000) {
+          finalPrice = Math.ceil((original * 0.9) / 100) * 100;
         }
         return {
           code: item.code,
