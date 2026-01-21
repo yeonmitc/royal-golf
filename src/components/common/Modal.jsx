@@ -17,12 +17,20 @@ export default function Modal({
   const overlayRef = useRef(null);
   const containerRef = useRef(null);
 
+  const isTypingElement = (el) => {
+    if (!el) return false;
+    const tag = el.tagName?.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+  };
+
   useEffect(() => {
     if (!open) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
     const onKeyDown = (e) => {
+      if (isTypingElement(e.target)) return;
+
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose?.();

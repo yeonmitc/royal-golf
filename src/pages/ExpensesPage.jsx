@@ -1,10 +1,13 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import Button from '../components/common/Button';
-import Input from '../components/common/Input'; // Keeping for Add Modal
+import Input from '../components/common/Input';
+import Modal from '../components/common/Modal';
+import ExportActions from '../components/common/ExportActions';
 import { useToast } from '../context/ToastContext';
 import {
   useCreateExpenseMutation,
   useDeleteExpenseMutation,
+  useUpdateExpenseMutation,
   useExpenseCategories,
   useExpenses,
 } from '../features/expenses/expensesHooks';
@@ -16,14 +19,27 @@ const PAYMENT_METHODS = [
   { value: 'transfer', label: 'Transfer' },
 ];
 
-const DEFAULT_CATEGORIES = ['부자재', '의류 사입비', '물류비', '직원 월급', '가게 운영비', '기타'];
-
 function toInputDate(d) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
+
+// ---------- UI constants (shorten JSX) ----------
+const overlayStyle = {
+  zIndex: 9999,
+  backgroundColor: 'rgba(0,0,0,0.65)',
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+};
+
+const selectCls =
+  'w-full rounded-md px-3 py-2 bg-zinc-900 text-white border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-500';
+const labelCls = 'block text-sm font-medium text-zinc-200 mb-1';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -37,21 +53,16 @@ class ErrorBoundary extends React.Component {
     console.error('ErrorBoundary caught:', error, info);
   }
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 bg-red-100 text-red-700 border border-red-300 rounded">
-          <h3 className="font-bold">Something went wrong in the form.</h3>
-          <p>{this.state.error.message}</p>
-          <button
-            className="mt-2 text-sm underline"
-            onClick={() => this.setState({ hasError: false })}
-          >
-            Try again
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="p-4 bg-red-100 text-red-700 border border-red-300 rounded">
+        <h3 className="font-bold">Something went wrong in the form.</h3>
+        <p>{this.state.error?.message}</p>
+        <button className="mt-2 text-sm underline" onClick={() => this.setState({ hasError: false })}>
+          Try again
+        </button>
+      </div>
+    );
   }
 }
 
@@ -59,44 +70,28 @@ export default function ExpensesPage() {
   const { showToast } = useToast();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // UI State (Inputs)
   const todayStr = toInputDate(new Date());
-  const [fromInput, setFromInput] = useState(todayStr.slice(0, 7) + '-01'); // Default to 1st of current month
+  const [fromInput, setFromInput] = useState(todayStr.slice(0, 7) + '-01');
   const [toInput, setToInput] = useState(todayStr);
   const [searchInput, setSearchInput] = useState('');
 
-  // Applied Filter State (Triggers Fetch/Filter)
-  const [filters, setFilters] = useState({
-    from: todayStr.slice(0, 7) + '-01',
-    to: todayStr,
-  });
+  const [filters, setFilters] = useState({ from: todayStr.slice(0, 7) + '-01', to: todayStr });
   const [appliedSearch, setAppliedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
   const { data: categories } = useExpenseCategories();
+  const { data: expenses, isLoading } = useExpenses({ from: filters.from, to: filters.to });
+  const [editingExpense, setEditingExpense] = useState(null);
 
-  // DEBUG: Track render and modal state
-  console.log('ExpensesPage Render:', { isAddModalOpen, categories });
-
-  const { data: expenses, isLoading } = useExpenses({
-    from: filters.from,
-    to: filters.to,
-  });
-
-  // Helper to get category name safely
   const getCategoryName = useCallback(
     (item) => {
       if (item.expense_categories?.name) return item.expense_categories.name;
-      if (item.category_id && categories) {
-        const cat = categories.find((c) => c.id === item.category_id);
-        if (cat) return cat.name;
-      }
-      return '-';
+      const cat = categories?.find((c) => c.id === item.category_id);
+      return cat?.name ?? '-';
     },
     [categories]
   );
 
-  // Range Helpers
   const applyRange = (from, to) => {
     setFromInput(from);
     setToInput(to);
@@ -119,20 +114,16 @@ export default function ExpensesPage() {
     const day = now.getDay();
     const diffToMon = (day + 6) % 7;
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMon);
-    const from = toInputDate(start);
-    const to = toInputDate(now);
-    applyRange(from, to);
+    applyRange(toInputDate(start), toInputDate(now));
   };
 
   const setMonth = () => {
     const d = new Date();
     const to = toInputDate(d);
     d.setDate(1);
-    const from = toInputDate(d);
-    applyRange(from, to);
+    applyRange(toInputDate(d), to);
   };
 
-  // Search Actions
   const applySearch = () => {
     setFilters({ from: fromInput, to: toInput });
     setAppliedSearch(searchInput);
@@ -144,12 +135,9 @@ export default function ExpensesPage() {
     setAllRange();
   };
 
-  // Filtering
   const filteredExpenses = useMemo(() => {
     return expenses?.filter((item) => {
       const catName = getCategoryName(item);
-
-      // 1. Search term filter
       if (appliedSearch) {
         const lower = appliedSearch.toLowerCase();
         const match =
@@ -158,16 +146,12 @@ export default function ExpensesPage() {
           catName.toLowerCase().includes(lower);
         if (!match) return false;
       }
-      // 2. Category filter
-      if (selectedCategory !== 'All') {
-        if (catName !== selectedCategory) return false;
-      }
+      if (selectedCategory !== 'All' && catName !== selectedCategory) return false;
       return true;
     });
   }, [expenses, appliedSearch, selectedCategory, getCategoryName]);
 
   const deleteMutation = useDeleteExpenseMutation();
-
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this expense?')) return;
     try {
@@ -179,20 +163,20 @@ export default function ExpensesPage() {
     }
   };
 
+  const handleRowClick = (item) => {
+    setEditingExpense(item);
+    setIsAddModalOpen(true);
+  };
+
   const totalPhp = filteredExpenses?.reduce((sum, e) => sum + (Number(e.amount_php) || 0), 0) || 0;
   const totalKrw = filteredExpenses?.reduce((sum, e) => sum + (Number(e.amount_krw) || 0), 0) || 0;
-  const totalCny = filteredExpenses?.reduce((sum, e) => sum + (Number(e.amount_cny) || 0), 0) || 0;
 
-  // Rounding helper: Ceiling to nearest 10
   const roundUpTo10 = (val) => Math.ceil(val / 10) * 10;
-
-  // PHP * 25.5 + KRW
-  const grandTotalKrw = totalKrw + totalPhp * 25.5;
-  // KRW / 25.5 + PHP
-  const grandTotalPhp = totalPhp + totalKrw / 25.5;
-
   const displayTotalPhp = totalPhp > 0 ? roundUpTo10(totalPhp) : 0;
   const displayTotalKrw = totalKrw > 0 ? roundUpTo10(totalKrw) : 0;
+
+  const grandTotalKrw = totalKrw + totalPhp * 25.5;
+  const grandTotalPhp = totalPhp + totalKrw / 25.5;
   const displayGrandTotalPhp = roundUpTo10(grandTotalPhp);
   const displayGrandTotalKrw = roundUpTo10(grandTotalKrw);
 
@@ -204,15 +188,7 @@ export default function ExpensesPage() {
 
       <div style={{ marginBottom: 12 }}>
         {/* Date Controls Row */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 12,
-            flexWrap: 'wrap',
-            marginBottom: 8,
-            alignItems: 'center',
-          }}
-        >
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
           <div className="date-controls">
             <div className="date-control">
               <span className="date-control-label">From</span>
@@ -239,46 +215,22 @@ export default function ExpensesPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <Button
-              type="button"
-              onClick={setAllRange}
-              size="sm"
-              variant="outline"
-              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-            >
+            <Button type="button" onClick={setAllRange} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
               All
             </Button>
-            <Button
-              type="button"
-              onClick={setToday}
-              size="sm"
-              variant="outline"
-              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-            >
+            <Button type="button" onClick={setToday} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
               Today
             </Button>
-            <Button
-              type="button"
-              onClick={setWeek}
-              size="sm"
-              variant="outline"
-              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-            >
+            <Button type="button" onClick={setWeek} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
               Week
             </Button>
-            <Button
-              type="button"
-              onClick={setMonth}
-              size="sm"
-              variant="outline"
-              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
-            >
+            <Button type="button" onClick={setMonth} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
               Month
             </Button>
             <button
               type="button"
               onClick={() => {
-                console.log('Plus Button (Native) Clicked');
+                setEditingExpense(null);
                 setIsAddModalOpen(true);
               }}
               style={{
@@ -289,7 +241,7 @@ export default function ExpensesPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: '#ca8a04', // Amber-600 approx
+                backgroundColor: '#ca8a04',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
@@ -302,77 +254,30 @@ export default function ExpensesPage() {
         </div>
 
         {/* Search Row */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            minWidth: 0,
-            flexWrap: 'nowrap',
-          }}
-        >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, flexWrap: 'nowrap' }}>
           <input
             type="text"
             placeholder="Search by title, note, category..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') applySearch();
-            }}
-            style={{
-              flex: '1 1 0',
-              minWidth: 0,
-              height: 36,
-              padding: '0 12px',
-              borderRadius: 4,
-              border: '1px solid #ccc',
-            }}
+            onKeyDown={(e) => e.key === 'Enter' && applySearch()}
+            style={{ flex: '1 1 0', minWidth: 0, height: 36, padding: '0 12px', borderRadius: 4, border: '1px solid #ccc' }}
             className="input-field"
           />
-          <Button
-            type="button"
-            onClick={applySearch}
-            size="sm"
-            variant="primary"
-            title="Search"
-            icon="search"
-          />
-          <Button
-            type="button"
-            onClick={resetSearch}
-            size="sm"
-            variant="outline"
-            title="Reset"
-            icon="reset"
-          />
+          <Button type="button" onClick={applySearch} size="sm" variant="primary" title="Search" icon="search" />
+          <Button type="button" onClick={resetSearch} size="sm" variant="outline" title="Reset" icon="reset" />
         </div>
       </div>
 
       {/* Expense List Table */}
-
-      <div
-        className="page-card !rounded-none !border-x-0 !shadow-none !mb-0"
-        style={{ width: '100%', padding: '16px' }}
-      >
+      <div className="page-card !rounded-none !border-x-0 !shadow-none !mb-0" style={{ width: '100%', padding: '16px' }}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-bold text-amber-500">EXPENSE RECORDS</h3>
         </div>
 
-        {/* Category Filter Buttons (Card Actions) */}
-        <div
-          className="flex gap-2 mb-4"
-          style={{
-            overflowX: 'auto',
-            whiteSpace: 'nowrap',
-            paddingBottom: 4,
-          }}
-        >
-          <Button
-            variant={selectedCategory === 'All' ? 'primary' : 'outline'}
-            onClick={() => setSelectedCategory('All')}
-            size="sm"
-            style={{ width: 'auto', flexShrink: 0 }}
-          >
+        {/* Category Filter Buttons */}
+        <div className="flex flex-nowrap gap-2 mb-4" style={{ overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 4 }}>
+          <Button variant={selectedCategory === 'All' ? 'primary' : 'outline'} onClick={() => setSelectedCategory('All')} size="sm" style={{ width: 'auto', flexShrink: 0 }}>
             All
           </Button>
           {categories?.map((cat) => (
@@ -386,46 +291,43 @@ export default function ExpensesPage() {
               {cat.name}
             </Button>
           ))}
+          <ExportActions
+            columns={[
+              { key: 'date', header: 'Date' },
+              { key: 'category', header: 'Category' },
+              { key: 'title', header: 'Title' },
+              { key: 'php', header: 'PHP' },
+              { key: 'krw', header: 'KRW' },
+              { key: 'note', header: 'Note' },
+            ]}
+            rows={filteredExpenses?.map((item) => ({
+              date: item.expense_date?.slice(0, 10) || '',
+              category: getCategoryName(item),
+              title: item.title || '',
+              php: item.amount_php || 0,
+              krw: item.amount_krw || 0,
+              note: item.note || '',
+            })) || []}
+            filename={`expenses_${filters.from}_${filters.to}.csv`}
+            showDrive={false}
+          />
         </div>
 
         <div className="overflow-x-auto" style={{ width: '100%' }}>
-          <table
-            className="w-full text-sm text-center"
-            style={{ width: '100%', tableLayout: 'fixed' }}
-          >
+          <table className="w-full text-sm text-center" style={{ width: '100%', tableLayout: 'fixed' }}>
             <thead className="sticky top-0 z-20 shadow-sm">
               <tr className="bg-gray-900 font-bold text-xs" style={{ color: '#FACC15' }}>
                 <td colSpan={6} style={{ padding: 0 }}>
-                  <div
-                    style={{
-                      margin: '10px 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      borderBottom: '2px solid #ca8a04',
-                      paddingBottom: '10px',
-                    }}
-                  >
+                  <div style={{ margin: '10px 0', display: 'flex', alignItems: 'center', borderBottom: '2px solid #ca8a04', paddingBottom: '10px' }}>
                     <div style={{ flex: '0 0 auto', padding: '0 8px', fontWeight: 'bold' }}>
                       TOTAL ({filteredExpenses?.length || 0})
                     </div>
-                    <div
-                      style={{
-                        flex: '1 1 auto',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        gap: '20px',
-                      }}
-                    >
-                      <span>
-                        PHP: {displayTotalPhp > 0 ? displayTotalPhp.toLocaleString() : '-'}
-                      </span>
-                      <span>
-                        KRW: {displayTotalKrw > 0 ? displayTotalKrw.toLocaleString() : '-'}
-                      </span>
+                    <div style={{ flex: '1 1 auto', display: 'flex', justifyContent: 'center', gap: '20px' }}>
+                      <span>PHP: {displayTotalPhp > 0 ? displayTotalPhp.toLocaleString() : '-'}</span>
+                      <span>KRW: {displayTotalKrw > 0 ? displayTotalKrw.toLocaleString() : '-'}</span>
                     </div>
                     <div style={{ flex: '0 0 auto', padding: '0 8px', color: '#9ca3af' }}>
-                      ( PHP : {displayGrandTotalPhp.toLocaleString()} / KRW :{' '}
-                      {displayGrandTotalKrw.toLocaleString()} )
+                      ( PHP : {displayGrandTotalPhp.toLocaleString()} / KRW : {displayGrandTotalKrw.toLocaleString()} )
                     </div>
                   </div>
                 </td>
@@ -442,27 +344,19 @@ export default function ExpensesPage() {
             <tbody className="divide-y overflow-y-auto">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-2 text-center">
-                    Loading...
-                  </td>
+                  <td colSpan={6} className="px-2 py-2 text-center">Loading...</td>
                 </tr>
               ) : filteredExpenses?.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-2 text-center text-gray-500">
-                    No expenses found.
-                  </td>
+                  <td colSpan={6} className="px-2 py-2 text-center text-gray-500">No expenses found.</td>
                 </tr>
               ) : (
                 filteredExpenses?.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(item)}>
                     <td className="px-2 py-2">{item.expense_date?.slice(5)}</td>
                     <td className="px-2 py-2 font-medium">{item.title}</td>
-                    <td className="px-2 py-2 text-gray-600">
-                      {item.amount_php ? Number(item.amount_php).toLocaleString() : '-'}
-                    </td>
-                    <td className="px-2 py-2 text-gray-600">
-                      {item.amount_krw ? Number(item.amount_krw).toLocaleString() : '-'}
-                    </td>
+                    <td className="px-2 py-2 text-gray-600">{item.amount_php ? Number(item.amount_php).toLocaleString() : '-'}</td>
+                    <td className="px-2 py-2 text-gray-600">{item.amount_krw ? Number(item.amount_krw).toLocaleString() : '-'}</td>
                     <td className="px-2 py-2 text-gray-500 truncate">{item.note}</td>
                     <td className="px-2 py-2 flex justify-center items-center">
                       <Button
@@ -470,7 +364,10 @@ export default function ExpensesPage() {
                         size="sm"
                         icon="trash"
                         iconSize={14}
-                        onClick={() => handleDelete(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(item.id);
+                        }}
                         className="icon-only"
                         style={{ width: 28, height: 28, padding: 0 }}
                       />
@@ -483,131 +380,131 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Add Expense Modal */}
-      {isAddModalOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
-          style={{
-            zIndex: 9999,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {console.log('Rendering Modal DOM')}
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-              <h2 className="text-lg font-bold">Add Expense</h2>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700 p-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div className="p-6">
-              <ErrorBoundary>
-                <ExpenseFormContent
-                  categories={categories || []}
-                  onSuccess={() => setIsAddModalOpen(false)}
-                  onCancel={() => setIsAddModalOpen(false)}
-                />
-              </ErrorBoundary>
-            </div>
-          </div>
+      <Modal
+        open={isAddModalOpen}
+        title={<span className="text-amber-500 font-bold uppercase tracking-wider">{editingExpense ? 'Edit Expense' : 'Add Expense'}</span>}
+        onClose={() => setIsAddModalOpen(false)}
+        size="content"
+        containerStyle={{ width: '50vw', minWidth: '350px', maxWidth: '100vw' }}
+        footer={<></>}
+      >
+        <div className="p-1">
+          <ErrorBoundary>
+            <ExpenseFormContent
+              categories={categories || []}
+              initialData={editingExpense}
+              onSuccess={() => setIsAddModalOpen(false)}
+              onCancel={() => setIsAddModalOpen(false)}
+            />
+          </ErrorBoundary>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
 
-function ExpenseFormContent({ categories, onSuccess, onCancel }) {
-  console.log('ExpenseFormContent Mounted');
+function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
   const safeCategories = Array.isArray(categories) ? categories : [];
   const { showToast } = useToast();
   const createMutation = useCreateExpenseMutation();
+  const updateMutation = useUpdateExpenseMutation();
 
-  // Safe localStorage access
-  const getStoredState = () => {
+  const readStored = () => {
     try {
-      const stored = localStorage.getItem('expense_form_last_state');
-      return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-      console.warn('LocalStorage access failed', e);
+      const s = localStorage.getItem('expense_form_last_state');
+      return s ? JSON.parse(s) : null;
+    } catch {
       return null;
     }
   };
 
-  const [formData, setFormData] = useState(() => {
-    const stored = getStoredState();
+  const getDefaultCategoryId = () => {
+    const found = safeCategories.find((c) => c?.name === '부자재');
+    return found?.id ? String(found.id) : '';
+  };
+
+  const makeInitial = () => {
+    if (initialData) {
+      let cur = 'PHP';
+      let amt = '';
+      if (initialData.amount_krw && Number(initialData.amount_krw) > 0) {
+        cur = 'KRW';
+        amt = String(initialData.amount_krw);
+      } else if (initialData.amount_cny && Number(initialData.amount_cny) > 0) {
+        cur = 'CNY';
+        amt = String(initialData.amount_cny);
+      } else {
+        cur = 'PHP';
+        amt = String(initialData.amount_php || '');
+      }
+
+      return {
+        category_id: String(initialData.category_id || ''),
+        title: initialData.title || '',
+        currency: cur,
+        amount: amt,
+        method: initialData.method || 'cash',
+        expense_date: initialData.expense_date ? initialData.expense_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        note: initialData.note || '',
+      };
+    }
+
+    const stored = readStored();
     return {
-      category_id: stored?.category_id || '',
+      category_id: stored?.category_id || getDefaultCategoryId(), // default 부자재
       title: '',
-      currency: stored?.currency || 'KRW',
+      currency: stored?.currency || 'PHP', // default PHP
       amount: '',
-      method: stored?.method || 'cindy_card',
+      method: stored?.method || 'cash', // default cash
       expense_date: new Date().toISOString().slice(0, 10),
       note: stored?.note || '',
     };
-  });
+  };
 
-  const saveStateToStorage = (currentData) => {
+  const [formData, setFormData] = useState(makeInitial);
+
+  // Reset form when initialData changes (e.g. switching between add/edit or different items)
+  useEffect(() => {
+    setFormData(makeInitial());
+  }, [initialData]);
+
+  // categories 늦게 로드되면 category_id 비어있을 수 있어서 보정
+  useEffect(() => {
+    if (!formData.category_id) {
+      const id = getDefaultCategoryId();
+      if (id) setFormData((p) => ({ ...p, category_id: id }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeCategories.length]);
+
+  const savePrefs = (current) => {
     try {
-      const stateToSave = {
-        category_id: currentData.category_id,
-        currency: currentData.currency,
-        method: currentData.method,
-        note: currentData.note,
-      };
-      localStorage.setItem('expense_form_last_state', JSON.stringify(stateToSave));
-    } catch (e) {
-      console.warn('Failed to save state to localStorage', e);
-    }
+      localStorage.setItem(
+        'expense_form_last_state',
+        JSON.stringify({
+          category_id: current.category_id,
+          currency: current.currency,
+          method: current.method,
+          note: current.note,
+        })
+      );
+    } catch {}
   };
 
-  const handleTemplateClick = (keyword, defaultNote) => {
-    // Find category by name containing keyword (safely)
-    const cat = categories?.find((c) => c?.name?.includes(keyword));
-    if (cat) {
-      setFormData((prev) => ({
-        ...prev,
-        category_id: cat.id,
-        note: defaultNote || prev.note,
-      }));
-    } else {
-      showToast(`Category matching "${keyword}" not found.`);
-    }
+  const pickTemplate = (keyword, defaultNote) => {
+    const cat = safeCategories.find((c) => c?.name?.includes(keyword));
+    if (!cat) return showToast(`Category matching "${keyword}" not found.`);
+    setFormData((p) => ({ ...p, category_id: String(cat.id), note: defaultNote || p.note }));
   };
 
-  const processSubmit = async (shouldClose) => {
+  const submit = async (closeAfter) => {
     if (!formData.category_id) return showToast('Category is required.');
     if (!formData.title) return showToast('Title is required.');
-    if (!formData.amount || Number(formData.amount) <= 0)
-      return showToast('Amount must be greater than 0.');
+    const amountVal = Number(formData.amount);
+    if (!amountVal || amountVal <= 0) return showToast('Amount must be greater than 0.');
     if (!formData.method) return showToast('Payment method is required.');
 
     try {
-      const amountVal = Number(formData.amount);
-
       const payload = {
         category_id: Number(formData.category_id),
         title: formData.title,
@@ -619,157 +516,130 @@ function ExpenseFormContent({ categories, onSuccess, onCancel }) {
         amount_cny: formData.currency === 'CNY' ? amountVal : 0,
       };
 
-      await createMutation.mutateAsync(payload);
-      showToast(shouldClose ? 'Expense added.' : 'Saved. Ready for next.');
-
-      // Save preferences
-      saveStateToStorage(formData);
-
-      if (shouldClose) {
-        if (onSuccess) onSuccess();
+      if (initialData) {
+        await updateMutation.mutateAsync({ id: initialData.id, ...payload });
+        showToast('Expense updated.');
       } else {
-        // Reset for next entry (keep category, method, currency, note, date)
-        setFormData((prev) => ({
-          ...prev,
-          title: '',
-          amount: '',
-        }));
+        await createMutation.mutateAsync(payload);
+        showToast(closeAfter ? 'Expense added.' : 'Saved. Ready for next.');
       }
+
+      savePrefs(formData);
+
+      if (closeAfter) onSuccess?.();
+      else if (!initialData) setFormData((p) => ({ ...p, title: '', amount: '' }));
     } catch (e) {
       console.error(e);
-      showToast(e.message || 'Failed to add expense.');
+      showToast(e?.message || (initialData ? 'Failed to update expense.' : 'Failed to add expense.'));
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    processSubmit(true);
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Quick Templates */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
-          Quick Templates
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => handleTemplateClick('부자재', '부자재')}
-          >
-            부자재
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => handleTemplateClick('물류비', '물류비')}
-          >
-            물류비
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => handleTemplateClick('운영비', '가게 운영비')}
-          >
-            운영비
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => handleTemplateClick('기타', '기타')}
-          >
-            기타
-          </Button>
-        </div>
-      </div>
-
-      {/* A. Category */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Category <span className="text-red-500">*</span>
-        </label>
-        <select
-          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500"
-          value={formData.category_id}
-          onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-          required
-        >
-          <option value="">Select Category</option>
-          {safeCategories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* B. Title / Note */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <form onSubmit={(e) => (e.preventDefault(), submit(true))} className="space-y-5">
+      {/* Quick Templates - Only show in Add mode */}
+      {!initialData && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-semibold text-zinc-300 mb-2 uppercase tracking-wider">
+            Quick Templates
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('부자재', '부자재')}>
+              부자재
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('물류비', '물류비')}>
+              물류비
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('운영비', '가게 운영비')}>
+              운영비
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('기타', '기타')}>
+              기타
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        {/* Category */}
+        <div>
+          <label className={labelCls}>
+            Category <span className="text-red-500">*</span>
+          </label>
+          <select
+            className={selectCls}
+            value={formData.category_id}
+            onChange={(e) => setFormData((p) => ({ ...p, category_id: e.target.value }))}
+            required
+          >
+            <option value="">Select Category</option>
+            {safeCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Amount */}
+        <div>
+          <label className={labelCls}>
+            Amount <span className="text-red-500">*</span>
+          </label>
+          <div className="flex gap-2">
+            <select
+              className={`${selectCls} w-24`}
+              value={formData.currency}
+              onChange={(e) => setFormData((p) => ({ ...p, currency: e.target.value }))}
+            >
+              <option value="KRW">KRW</option>
+              <option value="PHP">PHP</option>
+              <option value="CNY">CNY</option>
+            </select>
+            <Input
+              type="number"
+              value={formData.amount}
+              onChange={(e) => setFormData((p) => ({ ...p, amount: e.target.value }))}
+              placeholder="0"
+              required
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+            />
+          </div>
+        </div>
+
+        {/* Title */}
+        <div>
+          <label className={labelCls}>
             Title <span className="text-red-500">*</span>
           </label>
           <Input
             value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
             placeholder="Expense Title"
             required
             containerStyle={{ marginBottom: 0 }}
           />
         </div>
+
+        {/* Note */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+          <label className={labelCls}>Note</label>
           <Input
             value={formData.note}
-            onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+            onChange={(e) => setFormData((p) => ({ ...p, note: e.target.value }))}
             placeholder="부자재/물류비..."
             containerStyle={{ marginBottom: 0 }}
           />
         </div>
-      </div>
 
-      {/* C. Amount Input (Currency + Amount) */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Amount <span className="text-red-500">*</span>
-        </label>
-        <div className="flex gap-2">
-          <select
-            className="w-24 border border-gray-300 rounded-md px-3 py-2 bg-gray-50 focus:ring-amber-500 focus:border-amber-500"
-            value={formData.currency}
-            onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-          >
-            <option value="KRW">KRW</option>
-            <option value="PHP">PHP</option>
-            <option value="CNY">CNY</option>
-          </select>
-          <Input
-            type="number"
-            value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-            placeholder="0"
-            required
-            containerStyle={{ flex: 1, marginBottom: 0 }}
-          />
-        </div>
-      </div>
-
-      {/* D. Payment Method & E. Date */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Payment Method */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className={labelCls}>
             Payment Method <span className="text-red-500">*</span>
           </label>
           <select
-            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500"
+            className={selectCls}
             value={formData.method}
-            onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+            onChange={(e) => setFormData((p) => ({ ...p, method: e.target.value }))}
             required
           >
             <option value="">Select Method</option>
@@ -780,36 +650,41 @@ function ExpenseFormContent({ categories, onSuccess, onCancel }) {
             ))}
           </select>
         </div>
+
+        {/* Date */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className={labelCls}>
             Date <span className="text-red-500">*</span>
           </label>
           <Input
             type="date"
             value={formData.expense_date}
-            onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+            onChange={(e) => setFormData((p) => ({ ...p, expense_date: e.target.value }))}
             required
             containerStyle={{ marginBottom: 0 }}
           />
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-3 pt-4 border-t mt-6">
-        <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => processSubmit(false)}
-          className="flex-1 bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"
-        >
-          Save & Add Another
-        </Button>
-        <Button type="submit" variant="primary" className="flex-1">
-          Save
-        </Button>
+      {/* Buttons aligned */}
+      <div className="pt-4 border-t border-zinc-800 mt-6">
+        <div className="flex flex-col sm:flex-row gap-3" style={{ marginTop: '15px' }}>
+          <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:flex-1 h-11">
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => submit(false)}
+            className="w-full sm:flex-1 h-11 bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"
+            disabled={!!initialData}
+          >
+            {initialData ? 'Save Changes' : 'Save & Add Another'}
+          </Button>
+          <Button type="submit" variant="primary" className="w-full sm:flex-1 h-11">
+            {initialData ? 'Save' : 'Save'}
+          </Button>
+        </div>
       </div>
     </form>
   );

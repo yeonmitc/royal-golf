@@ -9,6 +9,12 @@ import {
   searchProducts,
   upsertProduct,
   updateInventoryQuantities,
+  updateInventoryStatus,
+  batchUpdateInventoryStatus,
+  resetAllInventoryStatus,
+  upsertErroStock,
+  deleteErroStock,
+  getErroStock,
 } from './productApi';
 
 /**
@@ -78,6 +84,120 @@ export function useUpsertProductMutation() {
     mutationFn: upsertProduct,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useUpdateInventoryStatusMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['inventory', 'updateStatus'],
+    mutationFn: ({ code, status }) => updateInventoryStatus(code, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useBatchUpdateInventoryStatusMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['inventory', 'batchUpdateStatus'],
+    mutationFn: (changes) => batchUpdateInventoryStatus(changes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useResetAllInventoryStatusMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['inventory', 'resetAllStatus'],
+    mutationFn: resetAllInventoryStatus,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useUpsertErroStockMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['erroStock', 'upsert'],
+    mutationFn: upsertErroStock,
+    onMutate: async ({ code, memo }) => {
+      // 1. Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['inventory'] });
+
+      // 2. Snapshot the previous value
+      const previousInventory = queryClient.getQueryData(['inventory', 'withProducts']);
+
+      // 3. Optimistically update to the new value
+      queryClient.setQueryData(['inventory', 'withProducts'], (old) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((item) =>
+          item.code === code
+            ? {
+                ...item,
+                check_status: 'error',
+                error_memo: memo,
+                check_updated_at: new Date().toISOString(),
+              }
+            : item
+        );
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousInventory };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(['inventory', 'withProducts'], context.previousInventory);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useDeleteErroStockMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['erroStock', 'delete'],
+    mutationFn: deleteErroStock,
+    onMutate: async (code) => {
+      // 1. Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['inventory'] });
+
+      // 2. Snapshot the previous value
+      const previousInventory = queryClient.getQueryData(['inventory', 'withProducts']);
+
+      // 3. Optimistically update to the new value
+      queryClient.setQueryData(['inventory', 'withProducts'], (old) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((item) =>
+          item.code === code
+            ? {
+                ...item,
+                check_status: 'unchecked',
+                error_memo: '',
+                check_updated_at: new Date().toISOString(),
+              }
+            : item
+        );
+      });
+
+      return { previousInventory };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(['inventory', 'withProducts'], context.previousInventory);
+      }
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
     },
   });

@@ -1,6 +1,6 @@
 // src/features/products/productApi.js
 import db from '../../db/dexieClient';
-import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
+import { sbDelete, sbInsert, sbSelect, sbUpdate, sbUpsert } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
@@ -241,7 +241,7 @@ export async function getProductWithInventory(code) {
  */
 export async function getProductInventoryList() {
   try {
-    const [productsRaw, inventoriesRaw] = await Promise.all([
+    const [productsRaw, inventoriesRaw, errorStocksRaw] = await Promise.all([
       sbSelect('products', {
         select: 'code,name,sale_price,free_gift,no,kprice',
         order: { column: 'code', ascending: true },
@@ -250,10 +250,15 @@ export async function getProductInventoryList() {
         select: '*',
         order: { column: 'code', ascending: true },
       }),
+      sbSelect('erro_stock', {
+        select: 'code,memo',
+      }),
     ]);
     const products = (productsRaw || []).map(normalizeProductRow).filter(Boolean);
     const inventories = inventoriesRaw || [];
+    const errorStocks = errorStocksRaw || [];
     const byCode = new Map((inventories || []).map((r) => [String(r?.code || '').trim(), r]));
+    const memoByCode = new Map((errorStocks || []).map((r) => [String(r?.code || '').trim(), r.memo]));
 
     return products.map((p) => {
       const invRow = byCode.get(p.code);
@@ -264,6 +269,9 @@ export async function getProductInventoryList() {
         ...p,
         totalStock,
         sizes,
+        check_status: invRow?.check_status || 'unchecked',
+        check_updated_at: invRow?.check_updated_at || null,
+        error_memo: memoByCode.get(p.code) || '',
       };
     });
   } catch (e) {
@@ -287,8 +295,234 @@ export async function getProductInventoryList() {
     return (products || []).map((p) => {
       const entry = map.get(p.code) || { totalStock: 0, sizes: [] };
       const totalStock = entry.sizes.length > 0 ? entry.totalStock : p.totalStock || 0;
-      return { ...p, totalStock, sizes: entry.sizes };
+      return { 
+        ...p, 
+        totalStock, 
+        sizes: entry.sizes,
+        check_status: p.check_status || 'unchecked',
+        check_updated_at: p.check_updated_at || null,
+      };
     });
+  }
+}
+
+export async function updateInventoryStatus(code, status) {
+  // requireAdminOrThrow(); // Stock check allowed for staff
+  if (!code) throw new Error('Code is required.');
+  const c = String(code).trim();
+  const now = new Date().toISOString();
+
+  // 1. Optimistically update Dexie (Local First)
+  try {
+    await db.products.update(c, { 
+      check_status: status,
+      check_updated_at: now
+    });
+  } catch (dexieErr) {
+    console.warn('Failed to update Dexie:', dexieErr);
+  }
+
+  // 2. Update Supabase
+  try {
+    await sbUpdate(
+      'inventories',
+      {
+        check_status: status,
+        check_updated_at: now,
+      },
+      {
+        filters: [{ column: 'code', op: 'eq', value: c }],
+        returning: 'minimal',
+      }
+    );
+  } catch (e) {
+    if (isNetworkFailure(e)) {
+      console.warn('Network failure during status update. Saved to local DB.');
+      return;
+    }
+    throw e;
+  }
+}
+
+export async function batchUpdateInventoryStatus(changes) {
+  // changes: { [code]: status }
+  if (!changes || Object.keys(changes).length === 0) return;
+  const now = new Date().toISOString();
+  
+  const entries = Object.entries(changes);
+  
+  // 1. Update Dexie in bulk (parallel is fine for local IDB)
+  try {
+    const promises = entries.map(([code, status]) => 
+      db.products.update(code, { check_status: status, check_updated_at: now })
+    );
+    await Promise.all(promises);
+  } catch (dexieErr) {
+    console.warn('Failed to batch update Dexie:', dexieErr);
+  }
+
+  // 2. Update Supabase with concurrency control
+  // Since we don't have a bulk update RPC, we run updates in chunks.
+  const CHUNK_SIZE = 5; 
+  for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+    const chunk = entries.slice(i, i + CHUNK_SIZE);
+    await Promise.all(chunk.map(([code, status]) => 
+      sbUpdate(
+        'inventories',
+        { check_status: status, check_updated_at: now },
+        {
+          filters: [{ column: 'code', op: 'eq', value: code }],
+          returning: 'minimal',
+        }
+      ).catch(e => {
+        if (!isNetworkFailure(e)) console.error(`Failed to update ${code}:`, e);
+      })
+    ));
+  }
+}
+
+export async function upsertErroStock({ code, memo }) {
+  if (!code) throw new Error('Code is required.');
+  const c = String(code).trim();
+  const m = String(memo || '').trim();
+  const now = new Date().toISOString();
+
+  // Parallel: Local Dexie + Remote erro_stock
+  // Note: We rely on DB Triggers to update 'inventories.check_status' on the server.
+  await Promise.all([
+    // 1. Update Dexie (Local First) - Critical for offline support
+    db.products.update(c, { 
+      error_memo: m,
+      check_status: 'error',
+      check_updated_at: now
+    }).catch(dexieErr => console.warn('Failed to update Dexie error_memo:', dexieErr)),
+
+    // 2. erro_stock upsert (Supabase)
+    (async () => {
+      try {
+        // Check if record exists
+        const existing = await sbSelect('erro_stock', {
+          select: 'id',
+          filters: [{ column: 'code', op: 'eq', value: c }],
+          limit: 1,
+        });
+        
+        if (Array.isArray(existing) && existing.length > 0) {
+          // Update
+          await sbUpdate('erro_stock', { memo: m, updated_at: now }, {
+            filters: [{ column: 'code', op: 'eq', value: c }],
+            returning: 'minimal',
+          });
+        } else {
+          // Insert
+          await sbInsert('erro_stock', [{ code: c, memo: m, updated_at: now }], {
+            returning: 'minimal',
+          });
+        }
+      } catch (e) {
+        console.error('Supabase save error:', e);
+        throw e;
+      }
+    })(),
+
+    // 3. Explicitly update inventories (Supabase)
+    sbUpdate('inventories', {
+      check_status: 'error',
+      check_updated_at: now
+    }, {
+      filters: [{ column: 'code', op: 'eq', value: c }],
+      returning: 'minimal',
+    }).catch(e => console.warn('Failed to explicit update inventories (upsert error):', e))
+  ]);
+}
+
+export async function deleteErroStock(code) {
+  if (!code) throw new Error('Code is required.');
+  const c = String(code).trim();
+  const now = new Date().toISOString();
+
+  // Parallel: Local Dexie + Remote erro_stock
+  // Note: We rely on DB Triggers to update 'inventories.check_status' on the server.
+  // UPDATE: We also explicitly update inventories to ensure consistency even if trigger fails.
+  await Promise.all([
+    // 1. Update Dexie (Local First)
+    db.products.update(c, { 
+      error_memo: '',
+      check_status: 'unchecked',
+      check_updated_at: now
+    }).catch(dexieErr => console.warn('Failed to update Dexie error_memo:', dexieErr)),
+
+    // 2. erro_stock delete (Supabase)
+    sbDelete('erro_stock', {
+      filters: [{ column: 'code', op: 'eq', value: c }],
+      returning: 'representation',
+    }).then(rows => {
+      if (!rows || rows.length === 0) {
+        console.warn('DELETE_NO_MATCH: No rows deleted from erro_stock. Check RLS policies.');
+      }
+      return rows;
+    }).catch(e => {
+      console.error('Supabase delete error:', e);
+      throw e;
+    }),
+
+    // 3. Explicitly update inventories (Supabase)
+    sbUpdate('inventories', {
+      check_status: 'unchecked',
+      check_updated_at: now
+    }, {
+      filters: [{ column: 'code', op: 'eq', value: c }],
+      returning: 'minimal',
+    }).catch(e => console.warn('Failed to explicit update inventories (delete error):', e))
+  ]);
+}
+
+export async function getErroStock(code) {
+  if (!code) return null;
+  const c = String(code).trim();
+  try {
+    const rows = await sbSelect('erro_stock', {
+      select: 'memo',
+      filters: [{ column: 'code', op: 'eq', value: c }],
+      limit: 1,
+    });
+    return rows?.[0] || null;
+  } catch (e) {
+    if (isNetworkFailure(e)) return null; // Offline fallback: cannot fetch memo
+    throw e;
+  }
+}
+
+export async function resetAllInventoryStatus() {
+  // requireAdminOrThrow();
+  const now = new Date().toISOString();
+
+  // 1. Dexie (Local)
+  try {
+    await db.products.toCollection().modify({ 
+      check_status: 'unchecked',
+      check_updated_at: now
+    });
+  } catch (dexieErr) {
+    console.warn('Failed to reset Dexie:', dexieErr);
+  }
+
+  // 2. Supabase
+  try {
+    await sbUpdate(
+      'inventories',
+      { check_status: 'unchecked', check_updated_at: now },
+      {
+        filters: [{ column: 'check_status', op: 'neq', value: 'unchecked' }],
+        returning: 'minimal',
+      }
+    );
+  } catch (e) {
+    if (isNetworkFailure(e)) {
+      console.warn('Network failure during reset. Saved to local DB.');
+      return;
+    }
+    throw e;
   }
 }
 

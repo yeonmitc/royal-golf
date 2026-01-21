@@ -131,7 +131,7 @@ export default function ExportActions({
   }
 
   return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+    <>
       <Button
         variant="custom"
         size="sm"
@@ -140,7 +140,7 @@ export default function ExportActions({
         title={label || csvLabel || 'Download TSV'}
         disabled={!hasRows}
         icon="download"
-        style={btnCsvStyle}
+        style={{ ...btnCsvStyle, borderRadius: '50%', aspectRatio: '1/1', padding: 0, flexShrink: 0 }}
       />
       {showDrive && (
         <Button
@@ -154,6 +154,6 @@ export default function ExportActions({
           style={btnDriveStyle}
         />
       )}
-    </div>
+    </>
   );
 }
