@@ -101,6 +101,26 @@
   transform: scale(0.96);
 }
 
+/* --- Variant: success (green) --- */
+.btn.success {
+  background: #16a34a; /* green-600 */
+  color: white;
+  border-color: #16a34a;
+  box-shadow: 0 0 10px rgba(22, 163, 74, 0.25);
+}
+
+.btn.success:hover {
+  background: #15803d; /* green-700 */
+  border-color: #15803d;
+  transform: scale(1.05);
+}
+
+.btn.success:active {
+  background: #166534; /* green-800 */
+  border-color: #166534;
+  transform: scale(0.96);
+}
+
 /* --- Size options --- */
 .btn.sm {
   padding: 8px 14px;
