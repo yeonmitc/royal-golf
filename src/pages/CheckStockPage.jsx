@@ -346,25 +346,27 @@ export default function CheckStockPage() {
         </div>
 
         <div className="flex gap-2 w-full">
-           <Button
-            variant={showErrorOnly ? 'primary' : 'outline'}
+          <Button
+            variant="outline"
             size="compact"
-            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            className="flex-1 font-medium border-green-600 text-green-600 hover:bg-green-600/10 text-[11px]"
             onClick={handleDownloadTsv}
           >
-             Download
+            Download
           </Button>
           <Button
-            variant="solid"
-            className="flex-[3] h-10 text-sm bg-blue-600 text-white hover:bg-blue-700 shadow-md font-bold"
+            variant="outline"
+            size="compact"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             onClick={handleSaveAll}
             disabled={isSaving || !hasChanges}
           >
             {isSaving ? 'Saving...' : `Save Checks (${Object.keys(pendingChanges).length})`}
           </Button>
           <Button
-            variant="solid"
-            className="flex-[3] h-10 text-sm bg-yellow-600 text-white hover:bg-yellow-700 shadow-md font-bold"
+            variant="outline"
+            size="compact"
+            className="flex-1 font-medium border-red-500 text-red-500 hover:bg-red-500/10 text-[11px]"
             onClick={handleResetAll}
             disabled={isResetting}
           >
