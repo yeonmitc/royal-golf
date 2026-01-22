@@ -309,7 +309,8 @@ export default function CheckStockPage() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           <Button
             variant={showCheckedOnly ? 'primary' : 'outline'}
-            className="flex-1 h-10 text-sm font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10"
+            size="compact"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             onClick={() => {
               setShowCheckedOnly(!showCheckedOnly);
               setShowErrorOnly(false);
@@ -320,7 +321,8 @@ export default function CheckStockPage() {
           </Button>
           <Button
             variant={showUncheckedOnly ? 'primary' : 'outline'}
-            className="flex-1 h-10 text-sm font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10"
+            size="compact"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             onClick={() => {
               setShowUncheckedOnly(!showUncheckedOnly);
               setShowCheckedOnly(false);
@@ -331,7 +333,8 @@ export default function CheckStockPage() {
           </Button>
           <Button
             variant={showErrorOnly ? 'primary' : 'outline'}
-            className="flex-1 h-10 text-sm font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10"
+            size="compact"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             onClick={() => {
               setShowErrorOnly(!showErrorOnly);
               setShowCheckedOnly(false);
@@ -343,12 +346,13 @@ export default function CheckStockPage() {
         </div>
 
         <div className="flex gap-2 w-full">
-          <Button
-            variant="outline"
-            className="flex-[1] h-10 text-sm border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 flex items-center justify-center gap-1"
+           <Button
+            variant={showErrorOnly ? 'primary' : 'outline'}
+            size="compact"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             onClick={handleDownloadTsv}
           >
-            <span className="text-lg">📥</span> TSV
+             Download
           </Button>
           <Button
             variant="solid"
