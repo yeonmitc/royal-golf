@@ -205,6 +205,9 @@ export default function SalesTable({
             justifyContent: 'center',
             gap: 8,
             alignItems: 'center',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            height: '100%',
+            padding: '8px',
           }}
         >
           <span>{lineTotal.toLocaleString('en-US')}</span>

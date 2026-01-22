@@ -250,6 +250,45 @@ export function TrashIcon({ className, size = 16, strokeWidth = 2, color = 'curr
   );
 }
 
+export function FilterIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+    </svg>
+  );
+}
+
+export function ZeroIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+    </svg>
+  );
+}
+
 const ICON_MAP = {
   search: SearchIcon,
   refresh: RefreshIcon,
@@ -266,6 +305,9 @@ const ICON_MAP = {
   check: CheckIcon,
   x: XIcon,
   trash: TrashIcon,
+  filter: FilterIcon,
+  zero: ZeroIcon,
+  zore: ZeroIcon, // Mapping typo 'zore' to ZeroIcon
 };
 
 export default function Icon({ name, ...props }) {

@@ -264,16 +264,32 @@ export default function ExpensesPage() {
             style={{ flex: '1 1 0', minWidth: 0, height: 36, padding: '0 12px', borderRadius: 4, border: '1px solid #ccc' }}
             className="input-field"
           />
-          <Button type="button" onClick={applySearch} size="sm" variant="primary" title="Search" icon="search" />
+          <Button 
+            type="button" 
+            onClick={applySearch} 
+            variant="primary" 
+            title="Search" 
+            icon="search" 
+            iconSize={16}
+            style={{ 
+              width: '30px',
+              height: '30px',
+              minWidth: '30px',
+              flex: '0 0 30px',
+              borderRadius: '50%',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          />
           <Button type="button" onClick={resetSearch} size="sm" variant="outline" title="Reset" icon="reset" />
         </div>
       </div>
 
       {/* Expense List Table */}
       <div className="page-card !rounded-none !border-x-0 !shadow-none !mb-0" style={{ width: '100%', padding: '16px' }}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold text-amber-500">EXPENSE RECORDS</h3>
-        </div>
+    
 
         {/* Category Filter Buttons */}
         <div className="flex flex-nowrap gap-2 mb-4" style={{ overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 4 }}>
@@ -317,7 +333,7 @@ export default function ExpensesPage() {
           <table className="w-full text-sm text-center" style={{ width: '100%', tableLayout: 'fixed' }}>
             <thead className="sticky top-0 z-20 shadow-sm">
               <tr className="bg-gray-900 font-bold text-xs" style={{ color: '#FACC15' }}>
-                <td colSpan={6} style={{ padding: 0 }}>
+                <td colSpan={7} style={{ padding: 0 }}>
                   <div style={{ margin: '10px 0', display: 'flex', alignItems: 'center', borderBottom: '2px solid #ca8a04', paddingBottom: '10px' }}>
                     <div style={{ flex: '0 0 auto', padding: '0 8px', fontWeight: 'bold' }}>
                       TOTAL ({filteredExpenses?.length || 0})
@@ -334,9 +350,10 @@ export default function ExpensesPage() {
               </tr>
               <tr className="bg-gray-50 border-b">
                 <th className="px-2 py-2 w-[10%]">Date</th>
-                <th className="px-2 py-2 w-[25%]">Title</th>
-                <th className="px-2 py-2 w-[15%]">PHP</th>
-                <th className="px-2 py-2 w-[15%]">KRW</th>
+                <th className="px-2 py-2 w-[15%]">Category</th>
+                <th className="px-2 py-2 w-[20%]">Title</th>
+                <th className="px-2 py-2 w-[10%]">PHP</th>
+                <th className="px-2 py-2 w-[10%]">KRW</th>
                 <th className="px-2 py-2 w-[25%]">Note</th>
                 <th className="px-2 py-2 w-[10%]">Manage</th>
               </tr>
@@ -344,16 +361,17 @@ export default function ExpensesPage() {
             <tbody className="divide-y overflow-y-auto">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-2 text-center">Loading...</td>
+                  <td colSpan={7} className="px-2 py-2 text-center">Loading...</td>
                 </tr>
               ) : filteredExpenses?.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-2 text-center text-gray-500">No expenses found.</td>
+                  <td colSpan={7} className="px-2 py-2 text-center text-gray-500">No expenses found.</td>
                 </tr>
               ) : (
                 filteredExpenses?.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(item)}>
-                    <td className="px-2 py-2">{item.expense_date?.slice(5)}</td>
+                    <td className="px-2 py-2">{item.expense_date?.slice(2, 10)}</td>
+                    <td className="px-2 py-2 text-gray-600 truncate">{getCategoryName(item)}</td>
                     <td className="px-2 py-2 font-medium">{item.title}</td>
                     <td className="px-2 py-2 text-gray-600">{item.amount_php ? Number(item.amount_php).toLocaleString() : '-'}</td>
                     <td className="px-2 py-2 text-gray-600">{item.amount_krw ? Number(item.amount_krw).toLocaleString() : '-'}</td>

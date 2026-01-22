@@ -27,6 +27,7 @@ export default function ProductLookup({
   const [localPrice, setLocalPrice] = useState('');
   const [localCprice, setLocalCprice] = useState('');
   const [localKprice, setLocalKprice] = useState('');
+  const [localP1price, setLocalP1price] = useState('');
   const [localP2price, setLocalP2price] = useState('');
   const [localP3price, setLocalP3price] = useState('');
 
@@ -43,6 +44,7 @@ export default function ProductLookup({
       setLocalPrice(prod.salePricePhp ?? 0);
       setLocalCprice(prod.cprice ?? prod.priceCny ?? 0);
       setLocalKprice(prod.kprice ?? 0);
+      setLocalP1price(prod.p1price ?? 0);
       setLocalP2price(prod.p2price ?? 0);
       setLocalP3price(prod.p3price ?? 0);
     } else {
@@ -50,6 +52,7 @@ export default function ProductLookup({
       setLocalPrice('');
       setLocalCprice('');
       setLocalKprice('');
+      setLocalP1price('');
       setLocalP2price('');
       setLocalP3price('');
     }
@@ -59,9 +62,11 @@ export default function ProductLookup({
     setLocalCprice(val);
     const cnyValue = Number(val || 0);
     const kp = Math.round(cnyValue * 220);
+    const p1 = Math.round(kp / 25.5);
     const p2 = Math.ceil((kp / 25 * 2) / 100) * 100;
     const p3 = Math.ceil((kp / 25 * 3) / 100) * 100;
     setLocalKprice(kp);
+    setLocalP1price(p1);
     setLocalP2price(p2);
     setLocalP3price(p3);
   }
@@ -101,6 +106,7 @@ export default function ProductLookup({
           salePricePhp: newPrice,
           cprice: Number(localCprice || 0),
           kprice: Number(localKprice || 0),
+          p1price: Number(localP1price || 0),
           p2price: Number(localP2price || 0),
           p3price: Number(localP3price || 0),
         });
@@ -302,7 +308,7 @@ export default function ProductLookup({
                   >
                     Admin Pricing
                   </div>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-5 gap-3">
                     <Input
                       label="Cost (CNY)"
                       type="number"
@@ -310,6 +316,12 @@ export default function ProductLookup({
                       onChange={(e) => handleCpriceChange(e.target.value)}
                     />
                     <Input label="KRW Price" value={localKprice} readOnly />
+                    <Input
+                      label="P1 Price"
+                      type="number"
+                      value={localP1price}
+                      onChange={(e) => setLocalP1price(e.target.value)}
+                    />
                     <Input label="P2 Price" value={localP2price} readOnly />
                     <Input label="P3 Price" value={localP3price} readOnly />
                   </div>

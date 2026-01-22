@@ -357,10 +357,21 @@ export default function SalesHistoryPage() {
           <Button
             type="button"
             onClick={applySearch}
-            size="sm"
             variant="primary"
             title="Search"
             icon="search"
+            iconSize={16}
+            style={{ 
+              width: '30px',
+              height: '30px',
+              minWidth: '30px',
+              flex: '0 0 30px',
+              borderRadius: '50%',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           />
           <Button
             type="button"

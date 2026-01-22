@@ -13,6 +13,8 @@ import SalesHistoryPage from './pages/SalesHistoryPage';
 import SellPage from './pages/SellPage';
 import SettingsPage from './pages/SettingsPage';
 import SoldProductPage from './pages/SoldProductPage';
+import StaffSoldProductPage from './pages/StaffSoldProductPage';
+import ProfitPage from './pages/ProfitPage';
 
 export default function App() {
   return (
@@ -71,6 +73,15 @@ export default function App() {
             </AdminRoute>
           }
         />
+        <Route
+          path="/profit"
+          element={
+            <AdminRoute>
+              <ProfitPage />
+            </AdminRoute>
+          }
+        />
+        <Route path="/staff-sold" element={<StaffSoldProductPage />} />
         <Route path="/check-stock" element={<CheckStockPage />} />
         {/* 404 */}
         <Route path="*" element={<div className="page-card">Page Not Found</div>} />

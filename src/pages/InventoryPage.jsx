@@ -197,6 +197,18 @@ export default function InventoryPage() {
                 onClick={clearSearch}
                 title="Reset"
                 icon="refresh"
+                style={{
+                  width: '30px',
+                  height: '30px',
+                  minWidth: '30px',
+                  flex: '0 0 30px',
+                  borderRadius: '50%',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                iconSize={16}
               />
               <Button
                 variant="outline"
@@ -218,9 +230,8 @@ export default function InventoryPage() {
               >
                 <div
                   style={{
-                    marginTop: 0,
-                    width: 40,
-                    height: 40,
+                    width: 24,
+                    height: 24,
                     backgroundColor: onlyZeroStock ? '#ef4444' : 'var(--gold-soft)',
                     maskImage: `url(${soldoutSvg})`,
                     WebkitMaskImage: `url(${soldoutSvg})`,
