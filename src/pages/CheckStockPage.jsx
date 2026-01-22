@@ -349,7 +349,7 @@ export default function CheckStockPage() {
           <Button
             variant="outline"
             size="compact"
-            className="flex-1 font-medium border-green-600 text-green-600 hover:bg-green-600/10 text-[11px]"
+            className="flex-1 font-medium !border-green-600 !text-green-600 hover:!bg-green-600 hover:!text-white text-[11px]"
             onClick={handleDownloadTsv}
           >
             Download
@@ -366,7 +366,7 @@ export default function CheckStockPage() {
           <Button
             variant="outline"
             size="compact"
-            className="flex-1 font-medium border-red-500 text-red-500 hover:bg-red-500/10 text-[11px]"
+            className="flex-1 font-medium !border-red-500 !text-red-500 hover:!bg-red-500 hover:!text-white text-[11px]"
             onClick={handleResetAll}
             disabled={isResetting}
           >
