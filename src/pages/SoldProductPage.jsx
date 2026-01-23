@@ -1,12 +1,11 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Button from '../components/common/Button';
-import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import Input from '../components/common/Input';
-import { sbRpc } from '../db/supabaseRest';
 import Modal from '../components/common/Modal';
-import ProductLookup from '../features/products/components/ProductLookup';
 import { useToast } from '../context/ToastContext';
+import { sbRpc } from '../db/supabaseRest';
+import ProductLookup from '../features/products/components/ProductLookup';
 import { useAdminStore } from '../store/adminStore';
 
 export default function SoldProductPage() {
@@ -14,7 +13,8 @@ export default function SoldProductPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+  const [sortMode, setSortMode] = useState('best'); // 'best' | 'high_margin' | 'low_margin'
+
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalCode, setModalCode] = useState('');
@@ -33,12 +33,12 @@ export default function SoldProductPage() {
     try {
       // Note: This RPC function needs to be created in Supabase using the SQL provided.
       const result = await sbRpc('get_sold_product_stats');
-      
+
       // Map keys to English for easier handling
-      const mapped = (result || []).map(row => {
+      const mapped = (result || []).map((row) => {
         const currentStock = Number(row['현재재고'] || 0);
         const soldQty = Number(row['팔린갯수'] || 0);
-        
+
         return {
           code: row['제품코드'],
           purchasedQty: currentStock + soldQty,
@@ -70,16 +70,20 @@ export default function SoldProductPage() {
     // Filter by search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      processed = processed.filter(row => 
-        row.code?.toLowerCase().includes(q)
-      );
+      processed = processed.filter((row) => row.code?.toLowerCase().includes(q));
     }
 
-    // Sort by soldQty desc
-    processed.sort((a, b) => b.soldQty - a.soldQty);
+    // Sort based on mode
+    if (sortMode === 'best') {
+      processed.sort((a, b) => b.soldQty - a.soldQty);
+    } else if (sortMode === 'high_margin') {
+      processed.sort((a, b) => b.profitMargin - a.profitMargin);
+    } else if (sortMode === 'low_margin') {
+      processed.sort((a, b) => a.profitMargin - b.profitMargin);
+    }
 
     return processed;
-  }, [data, searchQuery]);
+  }, [data, searchQuery, sortMode]);
 
   const columns = [
     { key: 'index', header: 'No.', className: 'text-center font-bold text-gray-500 w-12' },
@@ -87,7 +91,7 @@ export default function SoldProductPage() {
       key: 'code',
       header: '제품코드',
       className: 'font-bold',
-      tdClassName: 'font-bold cursor-pointer hover:underline text-blue-400'
+      tdClassName: 'font-bold cursor-pointer hover:underline text-blue-400',
     },
     { key: 'purchasedQty', header: '구매한갯수', className: 'text-right' },
     { key: 'currentStock', header: '현재재고', className: 'text-right' },
@@ -134,9 +138,20 @@ export default function SoldProductPage() {
     const totalMarginSum = filteredData.reduce((sum, row) => sum + row.profitMargin, 0);
     const avgProfitMargin = totalCount > 0 ? totalMarginSum / totalCount : 0;
     const totalRealSales = filteredData.reduce((sum, row) => sum + row.realTotalSales, 0);
-    const totalPurchaseCost = filteredData.reduce((sum, row) => sum + (row.p1Price * row.purchasedQty), 0);
+    const totalPurchaseCost = filteredData.reduce(
+      (sum, row) => sum + row.p1Price * row.purchasedQty,
+      0
+    );
 
-    return { totalCount, totalPurchased, totalStock, totalSold, avgProfitMargin, totalRealSales, totalPurchaseCost };
+    return {
+      totalCount,
+      totalPurchased,
+      totalStock,
+      totalSold,
+      avgProfitMargin,
+      totalRealSales,
+      totalPurchaseCost,
+    };
   }, [filteredData]);
 
   const handleDownloadTSV = () => {
@@ -146,33 +161,48 @@ export default function SoldProductPage() {
     }
 
     const headers = [
-      'No.', '제품코드', '구매한갯수', '현재재고', '팔린갯수', 
-      '평균판매가', '실제총매출', '현재판매가', '사입원가', 
-      '개당운영비', '실질원가', '개당이익', '이익률(%)'
+      'No.',
+      '제품코드',
+      '구매한갯수',
+      '현재재고',
+      '팔린갯수',
+      '평균판매가',
+      '실제총매출',
+      '현재판매가',
+      '사입원가',
+      '개당운영비',
+      '실질원가',
+      '개당이익',
+      '이익률(%)',
     ];
 
-    const rows = filteredData.map((row, i) => [
-      i + 1,
-      row.code,
-      row.purchasedQty,
-      row.currentStock,
-      row.soldQty,
-      row.avgSalePrice,
-      row.realTotalSales,
-      row.setSalePrice,
-      row.p1Price,
-      row.opCost,
-      row.realCost,
-      row.unitProfit,
-      row.profitMargin ? `${row.profitMargin.toFixed(2)}%` : '0%'
-    ].join('\t'));
+    const rows = filteredData.map((row, i) =>
+      [
+        i + 1,
+        row.code,
+        row.purchasedQty,
+        row.currentStock,
+        row.soldQty,
+        row.avgSalePrice,
+        row.realTotalSales,
+        row.setSalePrice,
+        row.p1Price,
+        row.opCost,
+        row.realCost,
+        row.unitProfit,
+        row.profitMargin ? `${row.profitMargin.toFixed(2)}%` : '0%',
+      ].join('\t')
+    );
 
     const tsvContent = [headers.join('\t'), ...rows].join('\n');
     const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `sold_product_analysis_${new Date().toISOString().slice(0, 10)}.tsv`);
+    link.setAttribute(
+      'download',
+      `sold_product_analysis_${new Date().toISOString().slice(0, 10)}.tsv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -202,13 +232,12 @@ export default function SoldProductPage() {
               style={{
                 flex: 1,
                 minWidth: 0,
-                maxWidth: 560,
                 display: 'flex',
                 gap: 8,
                 alignItems: 'center',
               }}
             >
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, maxWidth: '50vw' }}>
                 <Input
                   placeholder="Search (Start with # for partial code search)"
                   value={searchQuery}
@@ -253,32 +282,57 @@ export default function SoldProductPage() {
                 }}
                 iconSize={16}
               />
+              <div className="h-6 w-px bg-gray-300 mx-1" />
+              <Button
+                variant={sortMode === 'best' ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setSortMode('best')}
+                style={{ width: '60px', padding: 0 }}
+              >
+                Best
+              </Button>
+              <Button
+                variant={sortMode === 'high_margin' ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setSortMode('high_margin')}
+                style={{ width: '80px', padding: 0 }}
+              >
+                High %
+              </Button>
+              <Button
+                variant={sortMode === 'low_margin' ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setSortMode('low_margin')}
+                style={{ width: '80px', padding: 0 }}
+              >
+                Low %
+              </Button>
             </div>
           </div>
-          
-          <div 
-            className="p-4 bg-gray-900/50 rounded-lg flex flex-wrap gap-6 border border-gray-700 text-yellow-400 font-bold text-lg" 
+
+          <div
+            className="p-4 bg-gray-900/50 rounded-lg flex flex-wrap gap-6 border border-gray-700 text-yellow-400 font-bold text-lg"
             style={{ margin: '5px 0', color: 'yellow-400' }}
           >
-            <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Total Products: {summary.totalCount.toLocaleString()}
             </span>
-             <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Total Purchased: {summary.totalPurchased.toLocaleString()}
             </span>
-             <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Total Stock: {summary.totalStock.toLocaleString()}
             </span>
-             <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Total Sold: {summary.totalSold.toLocaleString()}
             </span>
-             <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Avg Margin: {summary.avgProfitMargin.toFixed(2)}%
             </span>
-            <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Total Sales: {summary.totalRealSales.toLocaleString()}
             </span>
-            <span  style={{ margin: '0 5px' }}>
+            <span style={{ margin: '0 5px' }}>
               Total Purchase Cost: {summary.totalPurchaseCost.toLocaleString()}
             </span>
           </div>
@@ -295,7 +349,7 @@ export default function SoldProductPage() {
             </div>
           </div>
         )}
-        
+
         <div className="product-table-container">
           <DataTable
             columns={columns}
