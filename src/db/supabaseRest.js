@@ -116,14 +116,24 @@ async function request(path, { method = 'GET', query, body, headers } = {}) {
   }
 }
 
-export async function sbSelect(table, { select = '*', filters = [], order, limit, offset } = {}) {
+export async function sbSelect(table, { select = '*', filters = [], order, orders, limit, offset } = {}) {
   const query = { select };
-  if (order?.column) {
+  
+  // Support multiple sort columns (priority over single 'order')
+  if (orders && Array.isArray(orders) && orders.length > 0) {
+    const orderParts = orders.map(o => {
+      const dir = o.ascending ? 'asc' : 'desc';
+      const nulls = o.nulls === 'first' ? '.nullsfirst' : o.nulls === 'last' ? '.nullslast' : '';
+      return `${o.column}.${dir}${nulls}`;
+    });
+    query.order = orderParts.join(',');
+  } else if (order?.column) {
     const dir = order.ascending ? 'asc' : 'desc';
     const nulls =
       order.nulls === 'first' ? '.nullsfirst' : order.nulls === 'last' ? '.nullslast' : '';
     query.order = `${order.column}.${dir}${nulls}`;
   }
+  
   if (limit != null) query.limit = limit;
   if (offset != null) query.offset = offset;
 

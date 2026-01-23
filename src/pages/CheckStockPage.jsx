@@ -1,25 +1,26 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import {
-  useProductInventoryList,
   useBatchUpdateInventoryStatusMutation,
+  // useUpdateInventoryStatusMutation,
+  useDeleteErroStockMutation,
+  useProductInventoryList,
   useResetAllInventoryStatusMutation,
   useUpsertErroStockMutation,
-  useUpdateInventoryStatusMutation,
-  useDeleteErroStockMutation,
 } from '../features/products/productHooks';
 
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
 export default function CheckStockPage() {
   const { data: allProducts = [], isLoading } = useProductInventoryList();
-  const { mutate: batchUpdateStatus, isPending: isSaving } = useBatchUpdateInventoryStatusMutation();
+  const { mutate: batchUpdateStatus, isPending: isSaving } =
+    useBatchUpdateInventoryStatusMutation();
   const { mutate: resetAllStatus, isPending: isResetting } = useResetAllInventoryStatusMutation();
   const { mutate: upsertErroStock, isPending: isUpsertingError } = useUpsertErroStockMutation();
   const { mutate: deleteErroStock, isPending: isDeletingError } = useDeleteErroStockMutation();
-  const { mutate: updateStatus } = useUpdateInventoryStatusMutation();
+  // const { mutate: updateStatus } = useUpdateInventoryStatusMutation();
 
   // Local state for pending changes: { [code]: 'checked' | 'error' | 'unchecked' }
   const [pendingChanges, setPendingChanges] = useState({});
@@ -42,7 +43,7 @@ export default function CheckStockPage() {
       onError: (err) => {
         console.error(err);
         alert(`Failed to save: ${err.message}`);
-      }
+      },
     });
   };
 
@@ -57,7 +58,7 @@ export default function CheckStockPage() {
       onError: (err) => {
         console.error(err);
         alert(`Failed to reset statuses: ${err.message}`);
-      }
+      },
     });
   };
 
@@ -205,16 +206,14 @@ export default function CheckStockPage() {
   const toggleError = (product) => {
     const code = product.code;
     const currentStatus = pendingChanges[code] ?? product.check_status ?? 'unchecked';
-    
+
     // Always open modal to allow Edit/Delete
     let memoToEdit = product.error_memo || '';
     if (currentStatus !== 'error' && !memoToEdit) {
       // Generate default memo from sizes for new errors
-      memoToEdit = (product.sizes || [])
-        .map(s => `${s.sizeDisplay}(${s.stockQty})`)
-        .join(', ');
+      memoToEdit = (product.sizes || []).map((s) => `${s.sizeDisplay}(${s.stockQty})`).join(', ');
     }
-      
+
     setEditingError({ code, memo: memoToEdit });
     setErrorModalOpen(true);
   };
@@ -224,7 +223,7 @@ export default function CheckStockPage() {
       console.warn('No editingError state found');
       return;
     }
-    
+
     // Optimistic update: Close modal and update local state immediately
     const targetCode = editingError.code;
     setPendingChanges((prev) => ({ ...prev, [targetCode]: 'error' }));
@@ -237,13 +236,13 @@ export default function CheckStockPage() {
         console.error('Save failed:', err);
         // We might want to alert the user or revert the state here
         alert(`Failed to save error memo for ${targetCode}: ${err.message}`);
-      }
+      },
     });
   };
 
   const handleDeleteError = () => {
     if (!editingError) return;
-    
+
     // Optimistic update
     const targetCode = editingError.code;
     setPendingChanges((prev) => ({ ...prev, [targetCode]: 'unchecked' }));
@@ -255,7 +254,7 @@ export default function CheckStockPage() {
       onError: (err) => {
         console.error(err);
         alert(`Failed to delete error for ${targetCode}: ${err.message}`);
-      }
+      },
     });
   };
 
@@ -497,7 +496,7 @@ export default function CheckStockPage() {
 
                 return (
                   <tr key={item.code} className={isChecked ? 'bg-[rgba(34,197,94,0.10)]' : ''}>
-                    <td 
+                    <td
                       className={`font-mono text-[11px] pr-2 pl-2 align-top border-l border-r border-white/20 whitespace-nowrap ${isError ? 'cursor-pointer hover:underline text-red-400 font-bold' : ''}`}
                       onClick={() => {
                         if (isError) {
@@ -579,34 +578,32 @@ export default function CheckStockPage() {
               {isDeletingError ? 'Deleting...' : 'Delete'}
             </Button>
 
-   
-              <Button
-                variant="outline"
-                className="h-10 px-4 border-[var(--border-soft)] hover:bg-[var(--bg-card)]"
-                onClick={() => {
-                  setErrorModalOpen(false);
-                  setEditingError(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="solid"
-                className="!bg-blue-600 !border-blue-600 !text-white hover:!bg-blue-700 font-bold h-10 px-6 shadow-lg shadow-blue-900/30"
-                onClick={handleSaveErrorMemo}
-                disabled={isUpsertingError}
-              >
-                {isUpsertingError ? 'Saving...' : 'Save'}
-              </Button>
-            </div>
-        
+            <Button
+              variant="outline"
+              className="h-10 px-4 border-[var(--border-soft)] hover:bg-[var(--bg-card)]"
+              onClick={() => {
+                setErrorModalOpen(false);
+                setEditingError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="solid"
+              className="!bg-blue-600 !border-blue-600 !text-white hover:!bg-blue-700 font-bold h-10 px-6 shadow-lg shadow-blue-900/30"
+              onClick={handleSaveErrorMemo}
+              disabled={isUpsertingError}
+            >
+              {isUpsertingError ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         }
       >
         <div className="flex flex-col gap-4 min-w-[300px]">
           <div className="text-sm text-gray-400">
             Code: <span className="font-mono text-[var(--gold)]">{editingError?.code}</span>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Error Memo (Sizes)
@@ -621,7 +618,9 @@ export default function CheckStockPage() {
               onKeyUp={(e) => {
                 e.stopPropagation();
               }}
-              onChange={(e) => setEditingError((prev) => ({ ...(prev ?? {}), memo: e.target.value }))}
+              onChange={(e) =>
+                setEditingError((prev) => ({ ...(prev ?? {}), memo: e.target.value }))
+              }
               placeholder="Enter details about the stock error..."
             />
           </div>

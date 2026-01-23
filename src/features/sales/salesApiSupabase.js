@@ -284,6 +284,7 @@ export async function checkoutCart(payload) {
     const isFreeGift = unitPriceCharged === 0 || Boolean(product.freeGift);
 
     totalAmount += lineTotal;
+    // const ellaRevenue = 0; // Unused
     totalQty += qty;
 
     const sizeKey = normalizeSizeKey(size ?? item.sizeDisplay);
@@ -880,7 +881,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   let mrMoonRevenue = 0;
   let mrMoonListRevenue = 0;
   let ellaCommission = 0;
-  let ellaRevenue = 0;
+  // let ellaRevenue = 0;
   try {
     analyzedRows.forEach((r) => {
       const name = r.guideId ? String(guideMap.get(String(r.guideId)) || '').toLowerCase() : '';
@@ -894,7 +895,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
       }
       if (isElla) {
         ellaCommission += Number(r.commission || 0) || 0;
-        ellaRevenue += Number(r.lineTotalPhp || 0) || 0;
+        // ellaRevenue += Number(r.lineTotalPhp || 0) || 0;
       }
     });
   } catch {
@@ -902,7 +903,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     mrMoonRevenue = 0;
     mrMoonListRevenue = 0;
     ellaCommission = 0;
-    ellaRevenue = 0;
+    // ellaRevenue = 0;
   }
 
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt

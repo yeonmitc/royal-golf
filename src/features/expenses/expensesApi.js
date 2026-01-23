@@ -32,7 +32,7 @@ export async function getExpenses({ from, to, categoryId } = {}) {
       )
     `,
     filters,
-    orders: [{ column: 'expense_date', ascending: false }, { column: 'created_at', ascending: false }],
+    orders: [{ column: 'expense_date', ascending: false }],
   });
   
   return expenses || [];

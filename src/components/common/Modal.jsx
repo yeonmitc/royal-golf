@@ -13,6 +13,7 @@ export default function Modal({
   containerStyle,
   align = 'center',
   topOffset = 0,
+  className = '',
 }) {
   const overlayRef = useRef(null);
   const containerRef = useRef(null);
@@ -98,6 +99,7 @@ export default function Modal({
     >
       <div
         ref={containerRef}
+        className={className}
         style={{
           width:
             size === 'content' ? 'auto' : size === 'lg' ? '80vw' : size === 'md' ? '60vw' : '40vw',
@@ -107,10 +109,10 @@ export default function Modal({
             size === 'content'
               ? '90vw'
               : size === 'lg'
-              ? '1200px'
-              : size === 'md'
-              ? '960px'
-              : '720px',
+                ? '1200px'
+                : size === 'md'
+                  ? '960px'
+                  : '720px',
           maxHeight:
             size === 'content' ? '80vh' : size === 'lg' ? '80vh' : size === 'md' ? '70vh' : '50vh',
           overflow: size === 'content' ? 'auto' : 'hidden',

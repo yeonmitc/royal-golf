@@ -14,7 +14,6 @@ import {
   resetAllInventoryStatus,
   upsertErroStock,
   deleteErroStock,
-  getErroStock,
 } from './productApi';
 
 /**

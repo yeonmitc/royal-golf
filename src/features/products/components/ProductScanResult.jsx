@@ -26,7 +26,7 @@ export default function ProductScanResult({ code }) {
       init[sz] = Number(r?.stockQty ?? 0) || 0;
     });
     setLocalStocks(init);
-  }, [data?.code]);
+  }, [data?.code, data?.inventory]);
 
   if (!code) {
     return (

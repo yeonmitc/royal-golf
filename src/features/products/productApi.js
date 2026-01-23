@@ -1,6 +1,6 @@
 // src/features/products/productApi.js
 import db from '../../db/dexieClient';
-import { sbDelete, sbInsert, sbSelect, sbUpdate, sbUpsert } from '../../db/supabaseRest';
+import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];

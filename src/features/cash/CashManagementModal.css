@@ -1,0 +1,20 @@
+.cash-management-modal {
+  /* Desktop: Width 80vw (from lg), Height Content (Auto) */
+  width: 80vw !important;
+  height: auto !important;
+  max-height: 85vh !important; /* Limit height to viewport */
+  overflow-y: auto !important;
+}
+
+@media (max-width: 768px) {
+  .cash-management-modal {
+    /* Mobile: 100% Viewport */
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    inset: 0 !important;
+  }
+}

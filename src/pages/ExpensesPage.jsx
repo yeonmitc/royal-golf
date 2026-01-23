@@ -1,15 +1,17 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import settingIcon from '../assets/setting.svg';
 import Button from '../components/common/Button';
+import ExportActions from '../components/common/ExportActions';
 import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
-import ExportActions from '../components/common/ExportActions';
 import { useToast } from '../context/ToastContext';
+import CashManagementModal from '../features/cash/CashManagementModal';
 import {
   useCreateExpenseMutation,
   useDeleteExpenseMutation,
-  useUpdateExpenseMutation,
   useExpenseCategories,
   useExpenses,
+  useUpdateExpenseMutation,
 } from '../features/expenses/expensesHooks';
 
 const PAYMENT_METHODS = [
@@ -27,15 +29,6 @@ function toInputDate(d) {
 }
 
 // ---------- UI constants (shorten JSX) ----------
-const overlayStyle = {
-  zIndex: 9999,
-  backgroundColor: 'rgba(0,0,0,0.65)',
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-};
 
 const selectCls =
   'w-full rounded-md px-3 py-2 bg-zinc-900 text-white border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-500';
@@ -58,7 +51,10 @@ class ErrorBoundary extends React.Component {
       <div className="p-4 bg-red-100 text-red-700 border border-red-300 rounded">
         <h3 className="font-bold">Something went wrong in the form.</h3>
         <p>{this.state.error?.message}</p>
-        <button className="mt-2 text-sm underline" onClick={() => this.setState({ hasError: false })}>
+        <button
+          className="mt-2 text-sm underline"
+          onClick={() => this.setState({ hasError: false })}
+        >
           Try again
         </button>
       </div>
@@ -69,6 +65,7 @@ class ErrorBoundary extends React.Component {
 export default function ExpensesPage() {
   const { showToast } = useToast();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
 
   const todayStr = toInputDate(new Date());
   const [fromInput, setFromInput] = useState(todayStr.slice(0, 7) + '-01');
@@ -136,7 +133,7 @@ export default function ExpensesPage() {
   };
 
   const filteredExpenses = useMemo(() => {
-    return expenses?.filter((item) => {
+    const filtered = expenses?.filter((item) => {
       const catName = getCategoryName(item);
       if (appliedSearch) {
         const lower = appliedSearch.toLowerCase();
@@ -148,6 +145,17 @@ export default function ExpensesPage() {
       }
       if (selectedCategory !== 'All' && catName !== selectedCategory) return false;
       return true;
+    });
+
+    // Force client-side sort as final fallback
+    if (!filtered) return [];
+
+    // Sort ONLY by expense_date (descending) as requested
+    return [...filtered].sort((a, b) => {
+      const dateA = a.expense_date || '';
+      const dateB = b.expense_date || '';
+      // Descending: b - a
+      return dateB.localeCompare(dateA);
     });
   }, [expenses, appliedSearch, selectedCategory, getCategoryName]);
 
@@ -188,7 +196,15 @@ export default function ExpensesPage() {
 
       <div style={{ marginBottom: 12 }}>
         {/* Date Controls Row */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 8,
+            alignItems: 'center',
+          }}
+        >
           <div className="date-controls">
             <div className="date-control">
               <span className="date-control-label">From</span>
@@ -215,16 +231,40 @@ export default function ExpensesPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <Button type="button" onClick={setAllRange} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
+            <Button
+              type="button"
+              onClick={setAllRange}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
               All
             </Button>
-            <Button type="button" onClick={setToday} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
+            <Button
+              type="button"
+              onClick={setToday}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
               Today
             </Button>
-            <Button type="button" onClick={setWeek} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
+            <Button
+              type="button"
+              onClick={setWeek}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
               Week
             </Button>
-            <Button type="button" onClick={setMonth} size="sm" variant="outline" style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}>
+            <Button
+              type="button"
+              onClick={setMonth}
+              size="sm"
+              variant="outline"
+              style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
+            >
               Month
             </Button>
             <button
@@ -254,24 +294,33 @@ export default function ExpensesPage() {
         </div>
 
         {/* Search Row */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, flexWrap: 'nowrap' }}>
+        <div
+          style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, flexWrap: 'nowrap' }}
+        >
           <input
             type="text"
             placeholder="Search by title, note, category..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && applySearch()}
-            style={{ flex: '1 1 0', minWidth: 0, height: 36, padding: '0 12px', borderRadius: 4, border: '1px solid #ccc' }}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              height: 36,
+              padding: '0 12px',
+              borderRadius: 4,
+              border: '1px solid #ccc',
+            }}
             className="input-field"
           />
-          <Button 
-            type="button" 
-            onClick={applySearch} 
-            variant="primary" 
-            title="Search" 
-            icon="search" 
+          <Button
+            type="button"
+            onClick={applySearch}
+            variant="primary"
+            title="Search"
+            icon="search"
             iconSize={16}
-            style={{ 
+            style={{
               width: '30px',
               height: '30px',
               minWidth: '30px',
@@ -283,17 +332,55 @@ export default function ExpensesPage() {
               justifyContent: 'center',
             }}
           />
-          <Button type="button" onClick={resetSearch} size="sm" variant="outline" title="Reset" icon="reset" />
+          <Button
+            type="button"
+            onClick={resetSearch}
+            size="sm"
+            variant="outline"
+            title="Reset"
+            icon="reset"
+          />
+          <button
+            type="button"
+            onClick={() => setIsCashModalOpen(true)}
+            style={{
+              width: '30px',
+              height: '30px',
+              minWidth: '30px',
+              flex: '0 0 30px',
+              borderRadius: '50%',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#ca8a04', // Yellow/Gold
+              border: 'none',
+              cursor: 'pointer',
+              marginLeft: '8px',
+            }}
+            title="Cash Management"
+          >
+            <img src={settingIcon} alt="Cash" style={{ width: '18px', height: '18px' }} />
+          </button>
         </div>
       </div>
 
       {/* Expense List Table */}
-      <div className="page-card !rounded-none !border-x-0 !shadow-none !mb-0" style={{ width: '100%', padding: '16px' }}>
-    
-
+      <div
+        className="page-card !rounded-none !border-x-0 !shadow-none !mb-0"
+        style={{ width: '100%', padding: '16px' }}
+      >
         {/* Category Filter Buttons */}
-        <div className="flex flex-nowrap gap-2 mb-4" style={{ overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 4 }}>
-          <Button variant={selectedCategory === 'All' ? 'primary' : 'outline'} onClick={() => setSelectedCategory('All')} size="sm" style={{ width: 'auto', flexShrink: 0 }}>
+        <div
+          className="flex flex-nowrap gap-2 mb-4"
+          style={{ overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 4 }}
+        >
+          <Button
+            variant={selectedCategory === 'All' ? 'primary' : 'outline'}
+            onClick={() => setSelectedCategory('All')}
+            size="sm"
+            style={{ width: 'auto', flexShrink: 0 }}
+          >
             All
           </Button>
           {categories?.map((cat) => (
@@ -316,34 +403,59 @@ export default function ExpensesPage() {
               { key: 'krw', header: 'KRW' },
               { key: 'note', header: 'Note' },
             ]}
-            rows={filteredExpenses?.map((item) => ({
-              date: item.expense_date?.slice(0, 10) || '',
-              category: getCategoryName(item),
-              title: item.title || '',
-              php: item.amount_php || 0,
-              krw: item.amount_krw || 0,
-              note: item.note || '',
-            })) || []}
+            rows={
+              filteredExpenses?.map((item) => ({
+                date: item.expense_date?.slice(0, 10) || '',
+                category: getCategoryName(item),
+                title: item.title || '',
+                php: item.amount_php || 0,
+                krw: item.amount_krw || 0,
+                note: item.note || '',
+              })) || []
+            }
             filename={`expenses_${filters.from}_${filters.to}.csv`}
             showDrive={false}
           />
         </div>
 
         <div className="overflow-x-auto" style={{ width: '100%' }}>
-          <table className="w-full text-sm text-center" style={{ width: '100%', tableLayout: 'fixed' }}>
+          <table
+            className="w-full text-sm text-center"
+            style={{ width: '100%', tableLayout: 'fixed' }}
+          >
             <thead className="sticky top-0 z-20 shadow-sm">
               <tr className="bg-gray-900 font-bold text-xs" style={{ color: '#FACC15' }}>
                 <td colSpan={7} style={{ padding: 0 }}>
-                  <div style={{ margin: '10px 0', display: 'flex', alignItems: 'center', borderBottom: '2px solid #ca8a04', paddingBottom: '10px' }}>
+                  <div
+                    style={{
+                      margin: '10px 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderBottom: '2px solid #ca8a04',
+                      paddingBottom: '10px',
+                    }}
+                  >
                     <div style={{ flex: '0 0 auto', padding: '0 8px', fontWeight: 'bold' }}>
                       TOTAL ({filteredExpenses?.length || 0})
                     </div>
-                    <div style={{ flex: '1 1 auto', display: 'flex', justifyContent: 'center', gap: '20px' }}>
-                      <span>PHP: {displayTotalPhp > 0 ? displayTotalPhp.toLocaleString() : '-'}</span>
-                      <span>KRW: {displayTotalKrw > 0 ? displayTotalKrw.toLocaleString() : '-'}</span>
+                    <div
+                      style={{
+                        flex: '1 1 auto',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        gap: '20px',
+                      }}
+                    >
+                      <span>
+                        PHP: {displayTotalPhp > 0 ? displayTotalPhp.toLocaleString() : '-'}
+                      </span>
+                      <span>
+                        KRW: {displayTotalKrw > 0 ? displayTotalKrw.toLocaleString() : '-'}
+                      </span>
                     </div>
                     <div style={{ flex: '0 0 auto', padding: '0 8px', color: '#9ca3af' }}>
-                      ( PHP : {displayGrandTotalPhp.toLocaleString()} / KRW : {displayGrandTotalKrw.toLocaleString()} )
+                      ( PHP : {displayGrandTotalPhp.toLocaleString()} / KRW :{' '}
+                      {displayGrandTotalKrw.toLocaleString()} )
                     </div>
                   </div>
                 </td>
@@ -361,20 +473,32 @@ export default function ExpensesPage() {
             <tbody className="divide-y overflow-y-auto">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-2 py-2 text-center">Loading...</td>
+                  <td colSpan={7} className="px-2 py-2 text-center">
+                    Loading...
+                  </td>
                 </tr>
               ) : filteredExpenses?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-2 py-2 text-center text-gray-500">No expenses found.</td>
+                  <td colSpan={7} className="px-2 py-2 text-center text-gray-500">
+                    No expenses found.
+                  </td>
                 </tr>
               ) : (
                 filteredExpenses?.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleRowClick(item)}>
+                  <tr
+                    key={item.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleRowClick(item)}
+                  >
                     <td className="px-2 py-2">{item.expense_date?.slice(2, 10)}</td>
                     <td className="px-2 py-2 text-gray-600 truncate">{getCategoryName(item)}</td>
                     <td className="px-2 py-2 font-medium">{item.title}</td>
-                    <td className="px-2 py-2 text-gray-600">{item.amount_php ? Number(item.amount_php).toLocaleString() : '-'}</td>
-                    <td className="px-2 py-2 text-gray-600">{item.amount_krw ? Number(item.amount_krw).toLocaleString() : '-'}</td>
+                    <td className="px-2 py-2 text-gray-600">
+                      {item.amount_php ? Number(item.amount_php).toLocaleString() : '-'}
+                    </td>
+                    <td className="px-2 py-2 text-gray-600">
+                      {item.amount_krw ? Number(item.amount_krw).toLocaleString() : '-'}
+                    </td>
                     <td className="px-2 py-2 text-gray-500 truncate">{item.note}</td>
                     <td className="px-2 py-2 flex justify-center items-center">
                       <Button
@@ -400,7 +524,11 @@ export default function ExpensesPage() {
 
       <Modal
         open={isAddModalOpen}
-        title={<span className="text-amber-500 font-bold uppercase tracking-wider">{editingExpense ? 'Edit Expense' : 'Add Expense'}</span>}
+        title={
+          <span className="text-amber-500 font-bold uppercase tracking-wider">
+            {editingExpense ? 'Edit Expense' : 'Add Expense'}
+          </span>
+        }
         onClose={() => setIsAddModalOpen(false)}
         size="content"
         containerStyle={{ width: '50vw', minWidth: '350px', maxWidth: '100vw' }}
@@ -417,12 +545,16 @@ export default function ExpensesPage() {
           </ErrorBoundary>
         </div>
       </Modal>
+
+      {isCashModalOpen && (
+        <CashManagementModal open={isCashModalOpen} onClose={() => setIsCashModalOpen(false)} />
+      )}
     </div>
   );
 }
 
 function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
-  const safeCategories = Array.isArray(categories) ? categories : [];
+  const safeCategories = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
   const { showToast } = useToast();
   const createMutation = useCreateExpenseMutation();
   const updateMutation = useUpdateExpenseMutation();
@@ -436,12 +568,12 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
     }
   };
 
-  const getDefaultCategoryId = () => {
+  const getDefaultCategoryId = useCallback(() => {
     const found = safeCategories.find((c) => c?.name === '부자재');
     return found?.id ? String(found.id) : '';
-  };
+  }, [safeCategories]);
 
-  const makeInitial = () => {
+  const makeInitial = useCallback(() => {
     if (initialData) {
       let cur = 'PHP';
       let amt = '';
@@ -462,7 +594,9 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
         currency: cur,
         amount: amt,
         method: initialData.method || 'cash',
-        expense_date: initialData.expense_date ? initialData.expense_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        expense_date: initialData.expense_date
+          ? initialData.expense_date.slice(0, 10)
+          : toInputDate(new Date()),
         note: initialData.note || '',
       };
     }
@@ -474,17 +608,17 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
       currency: stored?.currency || 'PHP', // default PHP
       amount: '',
       method: stored?.method || 'cash', // default cash
-      expense_date: new Date().toISOString().slice(0, 10),
+      expense_date: toInputDate(new Date()),
       note: stored?.note || '',
     };
-  };
+  }, [initialData, getDefaultCategoryId]);
 
   const [formData, setFormData] = useState(makeInitial);
 
   // Reset form when initialData changes (e.g. switching between add/edit or different items)
   useEffect(() => {
     setFormData(makeInitial());
-  }, [initialData]);
+  }, [initialData, makeInitial]);
 
   // categories 늦게 로드되면 category_id 비어있을 수 있어서 보정
   useEffect(() => {
@@ -506,7 +640,9 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
           note: current.note,
         })
       );
-    } catch {}
+    } catch {
+      // ignore
+    }
   };
 
   const pickTemplate = (keyword, defaultNote) => {
@@ -548,7 +684,9 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
       else if (!initialData) setFormData((p) => ({ ...p, title: '', amount: '' }));
     } catch (e) {
       console.error(e);
-      showToast(e?.message || (initialData ? 'Failed to update expense.' : 'Failed to add expense.'));
+      showToast(
+        e?.message || (initialData ? 'Failed to update expense.' : 'Failed to add expense.')
+      );
     }
   };
 
@@ -561,16 +699,36 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
             Quick Templates
           </label>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('부자재', '부자재')}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => pickTemplate('부자재', '부자재')}
+            >
               부자재
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('물류비', '물류비')}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => pickTemplate('물류비', '물류비')}
+            >
               물류비
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('운영비', '가게 운영비')}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => pickTemplate('운영비', '가게 운영비')}
+            >
               운영비
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => pickTemplate('기타', '기타')}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => pickTemplate('기타', '기타')}
+            >
               기타
             </Button>
           </div>
@@ -687,7 +845,12 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
       {/* Buttons aligned */}
       <div className="pt-4 border-t border-zinc-800 mt-6">
         <div className="flex flex-col sm:flex-row gap-3" style={{ marginTop: '15px' }}>
-          <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:flex-1 h-11">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="w-full sm:flex-1 h-11"
+          >
             Cancel
           </Button>
           <Button
