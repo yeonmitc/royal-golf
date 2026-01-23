@@ -249,7 +249,7 @@ export default function SalesHistoryPage() {
   }, [sortAscending, noGuideOnly, refundOnly, exportActions]);
 
   return (
-    <div style={{ padding: 16 }}>
+    <div className="page-container">
       <h2 style={{ marginBottom: 12 }}>Sales History</h2>
 
       <div style={{ marginBottom: 12 }}>

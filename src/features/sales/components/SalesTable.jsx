@@ -394,7 +394,7 @@ export default function SalesTable({
 
   return (
     <>
-      <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
+      <div className="sales-table-container" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
         <DataTable
           columns={[
             { key: 'no', header: 'no', className: 'text-center', tdClassName: 'text-center' },

@@ -159,14 +159,15 @@ export default function CashManagementModal({ open, onClose }) {
         {/* 2. Add Transaction Form */}
         <div>
           <form onSubmit={handleSubmit} className="bg-gray-50 p-4 rounded border border-gray-200">
-            {/* Account Selection - Modern Checkbox Style (Inline Styles to force layout) */}
+            {/* Account Selection - Modern Checkbox Style */}
             <div className="space-y-1" style={{ marginBottom: '10px' }}>
-              <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
+              <div className="account-selection-row">
                 {ACCOUNT_OPTIONS.map((opt) => {
                   const isSelected = form.account === opt.value;
                   return (
                     <div
                       key={opt.value}
+                      className="account-selection-item"
                       onClick={() => setForm({ ...form, account: opt.value })}
                       style={{
                         flex: 1,
@@ -248,17 +249,9 @@ export default function CashManagementModal({ open, onClose }) {
                 </Button>
               </div>
             </div>
-            {/* Amount, Memo, Save - Single Line (Inline-Block Layout) */}
-            <div style={{ marginBottom: '10px', width: '100%', fontSize: 0 }}>
-              <div
-                style={{
-                  display: 'inline-block',
-                  width: '40%',
-                  verticalAlign: 'middle',
-                  paddingRight: '8px',
-                  boxSizing: 'border-box',
-                }}
-              >
+            {/* Amount, Memo, Save - Responsive Flex Layout */}
+            <div className="input-row-container">
+              <div className="input-item-amount">
                 <Input
                   type="number"
                   placeholder="Amount"
@@ -270,15 +263,7 @@ export default function CashManagementModal({ open, onClose }) {
                 />
               </div>
 
-              <div
-                style={{
-                  display: 'inline-block',
-                  width: '40%',
-                  verticalAlign: 'middle',
-                  paddingRight: '8px',
-                  boxSizing: 'border-box',
-                }}
-              >
+              <div className="input-item-memo">
                 <Input
                   type="text"
                   placeholder="Memo"
@@ -289,14 +274,7 @@ export default function CashManagementModal({ open, onClose }) {
                 />
               </div>
 
-              <div
-                style={{
-                  display: 'inline-block',
-                  width: '20%',
-                  verticalAlign: 'middle',
-                  boxSizing: 'border-box',
-                }}
-              >
+              <div className="input-item-save">
                 <Button
                   type="submit"
                   variant="primary"

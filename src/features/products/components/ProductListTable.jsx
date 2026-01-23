@@ -157,7 +157,7 @@ export default function ProductListTable({
   });
 
   return (
-    <div className="p-2" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
+    <div className="product-table-container" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
       <DataTable
         columns={[
           {

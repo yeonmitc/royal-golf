@@ -212,12 +212,14 @@ export default function StaffSoldProductPage() {
           </div>
         )}
         
-        <DataTable
-          columns={columns}
-          rows={tableRows}
-          loading={loading}
-          keyField="code"
-        />
+        <div className="product-table-container">
+          <DataTable
+            columns={columns}
+            rows={tableRows}
+            loading={loading}
+            keyField="code"
+          />
+        </div>
       </div>
     </div>
   );

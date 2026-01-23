@@ -296,17 +296,19 @@ export default function SoldProductPage() {
           </div>
         )}
         
-        <DataTable
-          columns={columns}
-          rows={tableRows}
-          loading={loading}
-          keyField="code"
-          defaultSort={{ key: 'soldQty', direction: 'desc' }}
-          onRowClick={(row) => {
-            setModalCode(row.code);
-            setModalOpen(true);
-          }}
-        />
+        <div className="product-table-container">
+          <DataTable
+            columns={columns}
+            rows={tableRows}
+            loading={loading}
+            keyField="code"
+            defaultSort={{ key: 'soldQty', direction: 'desc' }}
+            onRowClick={(row) => {
+              setModalCode(row.code);
+              setModalOpen(true);
+            }}
+          />
+        </div>
       </div>
 
       <Modal

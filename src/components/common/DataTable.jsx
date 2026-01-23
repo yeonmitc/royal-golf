@@ -56,7 +56,9 @@ export default function DataTable({
           </span>
           <button
             className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50 hover:bg-gray-50"
-            onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.current + 1))}
+            onClick={() =>
+              pagination.onPageChange(Math.min(pagination.totalPages, pagination.current + 1))
+            }
             disabled={pagination.current >= pagination.totalPages}
           >
             Next

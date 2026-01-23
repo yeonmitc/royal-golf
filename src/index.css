@@ -252,6 +252,18 @@ input {
   color: var(--gold-soft);
 }
 
+.page-container {
+  padding: 24px 30px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .page-container {
+    padding: 12px;
+    width: 100%;
+  }
+}
+
 .date-control {
   display: flex;
   gap: 8px;
@@ -264,6 +276,7 @@ input {
   letter-spacing: 0.06em;
   color: var(--text-muted);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .date-control-box {
@@ -274,44 +287,54 @@ input {
   padding-right: 40px;
 }
 
+.date-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
 @media (max-width: 640px) {
   .date-control-input {
-    padding: 6px 30px 6px 10px; /* Adjust padding for mobile, keeping room for icon */
-    height: 36px; /* Explicitly reduce height */
-    font-size: 13px;
+    padding: 6px 10px;
+    height: 36px;
+    font-size: 12px;
+  }
+
+  .date-control-box {
+    width: 110px; /* Force smaller width for mobile */
+  }
+
+  .date-control-label {
+    font-size: 10px;
+    margin-right: -4px; /* Tighten gap */
+  }
+
+  .date-control {
+    gap: 4px;
+  }
+
+  .date-controls {
+    flex-wrap: nowrap; /* Force single line */
+    overflow-x: auto;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-bottom: 4px; /* Space for scrollbar if any */
+  }
+
+  /* Adjust calendar picker icon position/size */
+  .date-control-input::-webkit-calendar-picker-indicator {
+    width: 14px;
+    height: 14px;
+    margin-left: 0;
   }
 }
 
 .date-control-input::-webkit-calendar-picker-indicator {
   filter: invert(1);
   opacity: 0.7;
-}
-
-.date-control-input::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-}
-
-.date-control-input::-webkit-inner-spin-button,
-.date-control-input::-webkit-clear-button {
-  display: none;
-}
-
-.date-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-@media (max-width: 640px) {
-  .date-controls {
-    width: 100%;
-  }
-  .date-controls .date-control {
-    flex: 1;
-  }
-  .date-controls .date-control-box {
-    width: 100%;
-  }
 }
 
 /* 인터랙티브 요소 커서 포인터 */
@@ -460,5 +483,43 @@ main[data-scroll-root='main'] {
   .sales-col-brand,
   .sales-col-commission {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Mobile Table Optimization: Edge-to-Edge in Card */
+  .sales-table-container,
+  .product-table-container {
+    width: calc(100% + 24px) !important;
+    margin-left: -12px !important;
+    margin-right: -12px !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+
+  /* Force table width to match container */
+  .sales-table-container table,
+  .product-table-container table {
+    width: 100% !important;
+    border-collapse: collapse;
+    margin: 0 !important;
+  }
+
+  /* Minimize cell padding to maximize data visibility */
+  .sales-table-container th,
+  .sales-table-container td,
+  .product-table-container th,
+  .product-table-container td {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+    font-size: 11px !important;
+  }
+
+  .sales-table-container tr,
+  .product-table-container tr {
+    border-left: none !important;
+    border-right: none !important;
   }
 }

@@ -189,7 +189,7 @@ export default function ExpensesPage() {
   const displayGrandTotalKrw = roundUpTo10(grandTotalKrw);
 
   return (
-    <div style={{ margin: '30px' }}>
+    <div className="page-container">
       <div className="flex justify-between items-center mb-3">
         <h2 style={{ margin: 0 }}>Expenses</h2>
       </div>

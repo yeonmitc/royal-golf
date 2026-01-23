@@ -6,4 +6,7 @@ export default defineConfig(({ mode }) => ({
   base: mode === 'production' ? (process.env.VITE_BASE_PATH || '/royal-golf/') : '/',
   envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   plugins: [react()],
+  server: {
+    host: true,
+  },
 }))
