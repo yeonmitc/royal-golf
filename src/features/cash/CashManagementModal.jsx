@@ -65,8 +65,8 @@ export default function CashManagementModal({ open, onClose }) {
     const php = getBalance('php_cash');
     const krw = getBalance('krw_cash') + getBalance('krw_bank');
     const usd = getBalance('usd_cash');
-    // Formula: PHP + (KRW Total / 25.5) + (USD * 57)
-    return php + krw / 25.5 + usd * 57;
+    // Formula: PHP + (KRW Total / 25.5) + (USD * 56)
+    return php + krw / 25.5 + usd * 56;
   })();
 
   return (

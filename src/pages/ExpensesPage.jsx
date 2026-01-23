@@ -63,6 +63,7 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function ExpensesPage() {
+  // Mobile UI Optimization: Force Refresh
   const { showToast } = useToast();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
