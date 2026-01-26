@@ -1,11 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CASH_KEYS } from '../cash/cashHooks';
 import {
-  getExpenses,
   createExpense,
-  updateExpense,
+  createExpenseCategory,
   deleteExpense,
   getExpenseCategories,
-  createExpenseCategory,
+  getExpenses,
+  updateExpense,
 } from './expensesApi';
 
 export function useExpenseCategories() {
@@ -38,6 +39,7 @@ export function useCreateExpenseMutation() {
     mutationFn: createExpense,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: CASH_KEYS.all });
     },
   });
 }

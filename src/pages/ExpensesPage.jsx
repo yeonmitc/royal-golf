@@ -579,7 +579,7 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
       let cur = 'PHP';
       let amt = '';
       if (initialData.amount_krw && Number(initialData.amount_krw) > 0) {
-        cur = 'KRW';
+        cur = initialData.method === 'bankTranse' ? 'KRW(Bank)' : 'KRW';
         amt = String(initialData.amount_krw);
       } else if (initialData.amount_cny && Number(initialData.amount_cny) > 0) {
         cur = 'CNY';
@@ -666,7 +666,8 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
         method: formData.method,
         expense_date: formData.expense_date,
         note: formData.note,
-        amount_krw: formData.currency === 'KRW' ? amountVal : 0,
+        amount_krw:
+          formData.currency === 'KRW' || formData.currency === 'KRW(Bank)' ? amountVal : 0,
         amount_php: formData.currency === 'PHP' ? amountVal : 0,
         amount_cny: formData.currency === 'CNY' ? amountVal : 0,
       };
@@ -700,6 +701,14 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
             Quick Templates
           </label>
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => pickTemplate('의류사입비', '의류사입비')}
+            >
+              의류사입비
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -764,11 +773,19 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
           </label>
           <div className="flex gap-2">
             <select
-              className={`${selectCls} w-24`}
+              className={`${selectCls} w-28`}
               value={formData.currency}
-              onChange={(e) => setFormData((p) => ({ ...p, currency: e.target.value }))}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData((p) => ({
+                  ...p,
+                  currency: val,
+                  method: val === 'KRW(Bank)' ? 'bankTranse' : p.method,
+                }));
+              }}
             >
               <option value="KRW">KRW</option>
+              <option value="KRW(Bank)">KRW(Bank)</option>
               <option value="PHP">PHP</option>
               <option value="CNY">CNY</option>
             </select>
