@@ -15,7 +15,7 @@ WITH
   SELECT
     SUM(
       COALESCE(e.amount_php, 0)
-      + (COALESCE(e.amount_krw, 0) / 25.5)
+      + (COALESCE(e.amount_krw, 0) / 25)
     )::numeric AS 운영지출_php
   FROM public.expenses e
   LEFT JOIN public.expense_categories c ON c.id = e.category_id

@@ -28,7 +28,7 @@ params AS (
     CEILING(
       SUM(
         COALESCE(e.amount_php, 0)
-        + CEILING(COALESCE(e.amount_krw, 0) / 25.5)
+        + CEILING(COALESCE(e.amount_krw, 0) / 25)
       )
     )::bigint AS 지출_php
   FROM public.expenses e

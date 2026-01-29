@@ -1,4 +1,4 @@
-import { sbInsert, sbSelect } from '../../db/supabaseRest';
+import { sbDelete, sbInsert, sbSelect } from '../../db/supabaseRest';
 
 /**
  * Fetch current balances for all accounts
@@ -13,7 +13,7 @@ export async function getCashBalances() {
 /**
  * Fetch recent transactions (default 3)
  */
-export async function getCashTransactions(limit = 3) {
+export async function getCashTransactions(limit = 10) {
   const rows = await sbSelect('cash_tx', {
     order: { column: 'occurred_at', ascending: false },
     limit,
@@ -31,4 +31,15 @@ export async function addCashTransaction(payload) {
 
   const [inserted] = await sbInsert('cash_tx', [payload]);
   return inserted;
+}
+
+/**
+ * Delete a transaction
+ * @param {string|number} id
+ */
+export async function deleteCashTransaction(id) {
+  await sbDelete('cash_tx', {
+    filters: [{ column: 'id', op: 'eq', value: id }],
+  });
+  return true;
 }

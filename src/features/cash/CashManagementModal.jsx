@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import Button from '../../components/common/Button';
+import { TrashIcon } from '../../components/common/Icons';
 import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../context/ToastContext';
-import { useAddCashTransactionMutation, useCashBalances, useCashTransactions } from './cashHooks';
+import {
+  useAddCashTransactionMutation,
+  useCashBalances,
+  useCashTransactions,
+  useDeleteCashTransactionMutation,
+} from './cashHooks';
 import './CashManagementModal.css';
 
 const ACCOUNT_LABELS = {
@@ -23,6 +29,8 @@ export default function CashManagementModal({ open, onClose }) {
   const { data: balances, isLoading: loadingBalances } = useCashBalances();
   const { data: transactions, isLoading: loadingTransactions } = useCashTransactions();
   const addMutation = useAddCashTransactionMutation();
+  // Delete mutation hook
+  const deleteMutation = useDeleteCashTransactionMutation();
 
   const [form, setForm] = useState({
     account: 'php_cash',
@@ -55,6 +63,17 @@ export default function CashManagementModal({ open, onClose }) {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    try {
+      await deleteMutation.mutateAsync(id);
+      showToast('삭제되었습니다.');
+    } catch (err) {
+      console.error(err);
+      showToast('삭제 실패');
+    }
+  };
+
   const formatNumber = (num) => {
     return Number(num || 0).toLocaleString();
   };
@@ -65,8 +84,8 @@ export default function CashManagementModal({ open, onClose }) {
     const php = getBalance('php_cash');
     const krw = getBalance('krw_cash') + getBalance('krw_bank');
     const usd = getBalance('usd_cash');
-    // Formula: PHP + (KRW Total / 25.5) + (USD * 56)
-    return php + krw / 25.5 + usd * 56;
+    // Formula: PHP + (KRW Total / 25) + (USD * 56)
+    return php + krw / 25 + usd * 56;
   })();
 
   return (
@@ -293,7 +312,7 @@ export default function CashManagementModal({ open, onClose }) {
         {/* 3. Recent History */}
         <div>
           <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">
-            Recent History (Last 3)
+            Recent History (Last 10)
           </h3>
           {loadingTransactions ? (
             <div className="text-center py-4">Loading history...</div>
@@ -307,10 +326,11 @@ export default function CashManagementModal({ open, onClose }) {
               <table className="w-full text-sm text-left">
                 <thead className="bg-gray-100 text-gray-600 font-semibold border-b border-gray-200">
                   <tr>
-                    <th className="px-3 py-2">Time</th>
-                    <th className="px-3 py-2">Account</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2 w-[120px]">Time</th>
+                    <th className="px-3 py-2 w-[100px]">Account</th>
+                    <th className="px-3 py-2 text-right w-[120px]">Amount</th>
                     <th className="px-3 py-2">Memo</th>
+                    <th className="px-3 py-2 w-[60px] text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -334,6 +354,15 @@ export default function CashManagementModal({ open, onClose }) {
                         {formatNumber(tx.amount)}
                       </td>
                       <td className="px-3 py-2 text-gray-600">{tx.memo}</td>
+                      <td className="px-3 py-2 text-center">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          icon={<TrashIcon size={16} />}
+                          onClick={() => handleDelete(tx.id)}
+                          title="삭제"
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

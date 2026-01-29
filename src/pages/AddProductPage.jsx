@@ -102,7 +102,7 @@ export default function AddProductPage() {
   const computedP1PricePhp =
     computedKrwPrice === ''
       ? ''
-      : String(Math.round(Number(computedKrwPrice) / 25.5));
+      : String(Math.round(Number(computedKrwPrice) / 25));
   const computedP2PricePhp =
     computedKrwPrice === ''
       ? ''

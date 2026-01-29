@@ -184,8 +184,8 @@ export default function ExpensesPage() {
   const displayTotalPhp = totalPhp > 0 ? roundUpTo10(totalPhp) : 0;
   const displayTotalKrw = totalKrw > 0 ? roundUpTo10(totalKrw) : 0;
 
-  const grandTotalKrw = totalKrw + totalPhp * 25.5;
-  const grandTotalPhp = totalPhp + totalKrw / 25.5;
+  const grandTotalKrw = totalKrw + totalPhp * 25;
+  const grandTotalPhp = totalPhp + totalKrw / 25;
   const displayGrandTotalPhp = roundUpTo10(grandTotalPhp);
   const displayGrandTotalKrw = roundUpTo10(grandTotalKrw);
 
@@ -692,80 +692,61 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
     }
   };
 
+  const isSelected = (keyword) => {
+    const cat = safeCategories.find((c) => c?.name?.includes(keyword));
+    return cat && String(cat.id) === String(formData.category_id);
+  };
+
   return (
     <form onSubmit={(e) => (e.preventDefault(), submit(true))} className="space-y-5">
-      {/* Quick Templates - Only show in Add mode */}
-      {!initialData && (
-        <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-2 uppercase tracking-wider">
-            Quick Templates
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => pickTemplate('의류사입비', '의류사입비')}
-            >
-              의류사입비
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => pickTemplate('부자재', '부자재')}
-            >
-              부자재
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => pickTemplate('물류비', '물류비')}
-            >
-              물류비
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => pickTemplate('운영비', '가게 운영비')}
-            >
-              운영비
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => pickTemplate('기타', '기타')}
-            >
-              기타
-            </Button>
-          </div>
+      {/* Quick Templates - Always show */}
+      <div>
+       
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected('의류') ? 'primary' : 'outline'}
+            onClick={() => pickTemplate('의류', '의류사입비')}
+          >
+            의류사입비
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected('부자재') ? 'primary' : 'outline'}
+            onClick={() => pickTemplate('부자재', '부자재')}
+          >
+            부자재
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected('물류비') ? 'primary' : 'outline'}
+            onClick={() => pickTemplate('물류비', '물류비')}
+          >
+            물류비
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected('운영비') ? 'primary' : 'outline'}
+            onClick={() => pickTemplate('운영비', '가게 운영비')}
+          >
+            운영비
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected('기타') ? 'primary' : 'outline'}
+            onClick={() => pickTemplate('기타', '기타')}
+          >
+            기타
+          </Button>
         </div>
-      )}
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        {/* Category */}
-        <div>
-          <label className={labelCls}>
-            Category <span className="text-red-500">*</span>
-          </label>
-          <select
-            className={selectCls}
-            value={formData.category_id}
-            onChange={(e) => setFormData((p) => ({ ...p, category_id: e.target.value }))}
-            required
-          >
-            <option value="">Select Category</option>
-            {safeCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Amount */}
         <div>
           <label className={labelCls}>

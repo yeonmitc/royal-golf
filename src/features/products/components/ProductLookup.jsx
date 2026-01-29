@@ -62,7 +62,7 @@ export default function ProductLookup({
     setLocalCprice(val);
     const cnyValue = Number(val || 0);
     const kp = Math.round(cnyValue * 220);
-    const p1 = Math.round(kp / 25.5);
+    const p1 = Math.round(kp / 25);
     const p2 = Math.ceil((kp / 25 * 2) / 100) * 100;
     const p3 = Math.ceil((kp / 25 * 3) / 100) * 100;
     setLocalKprice(kp);
