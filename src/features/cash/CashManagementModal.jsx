@@ -46,6 +46,12 @@ export default function CashManagementModal({ open, onClose }) {
       return;
     }
 
+    const memoTrim = String(form.memo || '').trim();
+    if (memoTrim.startsWith('[Expense]')) {
+      showToast('지출 자동 생성 거래는 수동으로 추가하지 마세요.');
+      return;
+    }
+
     try {
       const finalAmount = form.type === 'withdrawal' ? -Number(form.amount) : Number(form.amount);
 
