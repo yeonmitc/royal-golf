@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -23,6 +23,7 @@ export default function AddProductPage() {
 
   // Fetch code parts from Supabase (or Dexie fallback)
   const { data: allCodeParts = [] } = useCodeParts();
+  const restoredRef = useRef(false);
 
   const [category, setCategory] = useState('');
   const [kind, setKind] = useState('');
@@ -160,6 +161,35 @@ export default function AddProductPage() {
     setNameKo(name);
   }
 
+  useEffect(() => {
+    if (allCodeParts.length > 0 && !restoredRef.current) {
+      restoredRef.current = true;
+      try {
+        const saved = localStorage.getItem('royal_golf_last_selection');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.category || parsed.kind || parsed.type || parsed.brand || parsed.color) {
+            setCategory(parsed.category || '');
+            setKind(parsed.kind || '');
+            setType(parsed.type || '');
+            setBrand(parsed.brand || '');
+            setColor(parsed.color || '');
+
+            recomputeCode({
+              category: parsed.category,
+              kind: parsed.kind,
+              type: parsed.type,
+              brand: parsed.brand,
+              color: parsed.color,
+            });
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [allCodeParts]);
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!isAdmin) {
@@ -202,6 +232,15 @@ export default function AddProductPage() {
 
     try {
       const savedCode = await saveProduct(payload);
+
+      // Save last selection for consecutive adds
+      localStorage.setItem('royal_golf_last_selection', JSON.stringify({
+        category,
+        kind,
+        type,
+        brand,
+        color,
+      }));
 
       await updateInv({ code: savedCode, changes });
       showToast(`Product added: ${savedCode}`);
