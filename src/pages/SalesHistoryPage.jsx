@@ -25,7 +25,7 @@ export default function SalesHistoryPage() {
   const [toInput, setToInput] = useState(today);
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
-  const [noGuideOnly, setNoGuideOnly] = useState(false);
+  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon'
   const [refundOnly, setRefundOnly] = useState(false);
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
@@ -110,13 +110,21 @@ export default function SalesHistoryPage() {
         .map((g) => String(g.id))
     );
 
-    const filtered = noGuideOnly
-      ? base.filter((r) => {
-          const gid = r.guideId;
-          if (!gid) return true;
-          return mrMoonGuideIds.has(String(gid));
-        })
-      : base;
+    const filtered = base.filter((r) => {
+      const gid = r.guideId;
+      const isMrMoon = gid && mrMoonGuideIds.has(String(gid));
+
+      if (filterMode === 'no-guide') {
+        return !gid;
+      }
+      if (filterMode === 'guide') {
+        return gid && !isMrMoon;
+      }
+      if (filterMode === 'mr-moon') {
+        return isMrMoon;
+      }
+      return true;
+    });
 
     if (!sortAscending) return filtered;
     return [...filtered].sort((a, b) => {
@@ -124,7 +132,7 @@ export default function SalesHistoryPage() {
       const bt = new Date(b.soldAt || 0).getTime();
       return at - bt;
     });
-  }, [allRows, sortAscending, noGuideOnly, guides, refundOnly]);
+  }, [allRows, sortAscending, filterMode, guides, refundOnly]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -222,11 +230,31 @@ export default function SalesHistoryPage() {
         Ascending
       </Button>,
       <Button
+        key="guide-toggle"
+        type="button"
+        onClick={() => setFilterMode((prev) => (prev === 'guide' ? 'all' : 'guide'))}
+        size="sm"
+        variant={filterMode === 'guide' ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        Guide
+      </Button>,
+      <Button
+        key="mr-moon-toggle"
+        type="button"
+        onClick={() => setFilterMode((prev) => (prev === 'mr-moon' ? 'all' : 'mr-moon'))}
+        size="sm"
+        variant={filterMode === 'mr-moon' ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        Mr.Moon
+      </Button>,
+      <Button
         key="no-guide-toggle"
         type="button"
-        onClick={() => setNoGuideOnly((prev) => !prev)}
+        onClick={() => setFilterMode((prev) => (prev === 'no-guide' ? 'all' : 'no-guide'))}
         size="sm"
-        variant={noGuideOnly ? 'primary' : 'outline'}
+        variant={filterMode === 'no-guide' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
       >
         NoGuide
@@ -246,7 +274,7 @@ export default function SalesHistoryPage() {
       actions.push(exportActions);
     }
     return actions;
-  }, [sortAscending, noGuideOnly, refundOnly, exportActions]);
+  }, [sortAscending, filterMode, refundOnly, exportActions]);
 
   return (
     <div className="page-container">
@@ -361,7 +389,7 @@ export default function SalesHistoryPage() {
             title="Search"
             icon="search"
             iconSize={16}
-            style={{ 
+            style={{
               width: '30px',
               height: '30px',
               minWidth: '30px',
