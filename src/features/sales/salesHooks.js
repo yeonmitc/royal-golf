@@ -141,3 +141,16 @@ export function useSetSaleTimeMutation() {
     },
   });
 }
+
+export function useUpdateSalePriceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['sales', 'updateSalePrice'],
+    mutationFn: (payload) => import('./salesApiClient').then((m) => m.updateSalePrice(payload)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+    },
+  });
+}

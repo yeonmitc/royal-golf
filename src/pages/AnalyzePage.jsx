@@ -115,7 +115,7 @@ export default function AnalyzePage() {
         </div>
       </div>
 
-      <Card title="Sales Summary">
+      <Card title={`Sales Summary (${fromDate} ~ ${toDate})`}>
         {!data ? (
           <div className="text-sm text-[var(--text-muted)]">
             Please select a period and click Analyze.

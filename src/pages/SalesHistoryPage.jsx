@@ -100,7 +100,7 @@ export default function SalesHistoryPage() {
   const visibleRows = useMemo(() => {
     const base = (allRows || []).filter((r) => {
       const isRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
-      if (!refundOnly && isRefunded) return false;
+      if (refundOnly && isRefunded) return false;
       return true;
     });
 
@@ -217,6 +217,19 @@ export default function SalesHistoryPage() {
     );
   }, [visibleRows]);
 
+  const summary = useMemo(() => {
+    const rows = visibleRows || [];
+    const count = rows.length;
+    const totalQty = rows.reduce((acc, r) => acc + (Number(r.qty) || 0), 0);
+    const totalAmount = rows.reduce((acc, r) => {
+      if (typeof r.lineTotalPhp === 'number') return acc + r.lineTotalPhp;
+      const price = Number(r.price ?? r.unitPricePhp ?? 0);
+      const qty = Number(r.qty ?? 0);
+      return acc + price * qty;
+    }, 0);
+    return { count, totalQty, totalAmount };
+  }, [visibleRows]);
+
   const cardActions = useMemo(() => {
     const actions = [
       <Button
@@ -267,7 +280,7 @@ export default function SalesHistoryPage() {
         variant={refundOnly ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
       >
-        Refund
+        No Refund
       </Button>,
     ];
     if (exportActions) {
@@ -412,7 +425,19 @@ export default function SalesHistoryPage() {
         </div>
       </div>
 
-      <Card title="Sales Records">
+      <Card
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Sales Records</span>
+            <span style={{ fontSize: '0.9em', fontWeight: 'normal', color: 'var(--text-muted)' }}>
+              Total: {summary.count} tx / {summary.totalQty} items /{' '}
+              <span style={{ color: 'var(--gold-soft)', fontWeight: 'bold' }}>
+                {summary.totalAmount.toLocaleString()} PHP
+              </span>
+            </span>
+          </div>
+        }
+      >
         <div
           style={{
             display: 'flex',

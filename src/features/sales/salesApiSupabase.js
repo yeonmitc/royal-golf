@@ -572,6 +572,30 @@ export async function setSaleTime({ saleGroupId, saleId, soldAt } = {}) {
   return { ok: true };
 }
 
+export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
+  const p = Number(price);
+  if (!Number.isFinite(p) || p < 0) throw new Error('INVALID_PRICE');
+
+  const filters = [];
+  const gid = String(saleGroupId || '').trim();
+  const sid = Number(saleId || 0);
+
+  if (gid) {
+    filters.push({ column: 'sale_group_id', op: 'eq', value: gid });
+  } else if (sid) {
+    filters.push({ column: 'id', op: 'eq', value: sid });
+  } else {
+    throw new Error('INVALID_SALE_KEY');
+  }
+
+  // Update price (unit price)
+  // We remove unit_price_php and discount_unit_price_php as they seem to cause schema errors
+  // and are not used in the main checkoutCart flow (which uses 'price').
+  await sbUpdate('sales', { price: p }, { filters, returning: 'minimal' });
+
+  return { ok: true };
+}
+
 async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query = '' } = {}) {
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;

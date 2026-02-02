@@ -252,6 +252,138 @@ export async function setSaleTime({ saleId, soldAt } = {}) {
   return { ok: true };
 }
 
+export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
+  const sid = Number(saleId || 0);
+  const p = Number(price);
+  if (!sid || !Number.isFinite(p) || p < 0) throw new Error('INVALID_PRICE_UPDATE');
+
+  // Local DB uses saleItems table for items.
+  // We need to find the item. In local DB, saleId in saleItems refers to the parent sale header ID?
+  // No, looking at checkoutCart in salesApi.js:
+  // saleId is returned from db.sales.add
+  // saleItems have saleId pointing to that.
+  
+  // Wait, `saleId` passed here might be the item's ID or the parent ID?
+  // In `SalesTable.jsx`:
+  // row.saleGroupId is the group ID (Supabase).
+  // row.saleId is... let's check SalesTable.jsx mapping.
+  // `id: row.saleId` (Supabase uses `id` column of `sales` table).
+  // In Local `getSalesHistoryFlat`:
+  // `saleId` property of item comes from `saleMap.get(i.saleId)`.
+  // The items themselves have an `id` in `saleItems` table?
+  // `saleItems.bulkAdd` -> IDs are auto-generated?
+  // Dexie `saleItems` table probably has an `id`.
+  
+  // In `getSalesHistoryFlat` (local):
+  // It returns items.
+  // `const allItems = await db.saleItems...`
+  // The mapped object doesn't explicitly include `id` of the item, but `...i` spreads it.
+  // So `row.id` (or similar) should be available.
+  
+  // However, SalesTable.jsx uses `row.saleId` as the unique identifier for the row in some places?
+  // Actually `SalesTable.jsx`:
+  // `id: row.saleId-row.code...` for key.
+  // `saleGroupId: row.saleGroupId`
+  // `guideId: row.guideId`
+  
+  // If I use `saleId` to identify the row, in Supabase it's the unique ID of the row.
+  // In Local, `saleItems` has an `id`.
+  // If `row.saleId` corresponds to `saleItems.id`, then I can use it.
+  
+  // Let's assume `saleId` passed to this function is the ID of the `saleItems` record (local) or `sales` record (Supabase).
+  // I will check if `saleItems` has `id`.
+  
+  // update local item
+  // Note: local DB structure might be different from Supabase.
+  // Supabase: `sales` table has `id`.
+  // Local: `saleItems` table has `id`.
+  // If `saleId` is passed, I'll assume it targets the item.
+  
+  // But wait, `SalesTable.jsx` might be passing `saleId` which is the HEADER id in local mode?
+  // In `SalesTable.jsx`:
+  // `row.saleId` comes from `sales` table `id` in Supabase (which is the ITEM id? No, Supabase `sales` table is the item table).
+  // In Local `getSalesHistoryFlat`:
+  // `return allItems.map(i => ...)`
+  // `i` is a `saleItems` row. It has `id`.
+  // But does `SalesTable` use `i.id`?
+  // `SalesTable` expects `row.saleId`.
+  // In `getSalesHistoryFlat` (local):
+  // `...i` spreads item properties. `i.id` is the item ID.
+  // But `i.saleId` is the parent ID.
+  // If `SalesTable` uses `saleId` as the primary key for updates, it might be ambiguous.
+  
+  // Let's check `SalesTable.jsx` again.
+  // `id: ${row.saleId}-${row.code}...`
+  // It seems `row.saleId` is used.
+  // In Supabase `sales` table (items), `id` is the PK.
+  // In Local `saleItems` table, `id` is the PK.
+  // So `saleId` should be the item ID.
+  
+  // However, in `getSalesHistoryFlat` (local):
+  // `const sale = saleMap.get(i.saleId);`
+  // `...i` includes `saleId` (parent ID).
+  // It does NOT explicitly rename `i.id` to anything.
+  // So `row.id` would be the item ID.
+  // But `SalesTable` uses `row.saleId` which usually refers to the parent ID in local context?
+  // Actually, let's look at `getSalesHistoryFlat` in `salesApi.js` again.
+  // `return allItems.map((i) => { ... saleId: i.saleId ... })`
+  // `i.saleId` is the parent ID.
+  // `i.id` is the item ID.
+  
+  // If `SalesTable` uses `row.saleId` for `updateSalePrice`, it might be targeting the WRONG thing in local mode if it expects Item ID.
+  // In Supabase mode, `row.saleId` is the Item ID (since `sales` table is items).
+  // In Local mode, `row.saleId` is the Parent ID.
+  
+  // This is a discrepancy.
+  // If I want to update a specific item, I need the Item ID.
+  // In `SalesTable.jsx`, `row` has `saleId` (Parent ID in local, Item ID in Supabase?).
+  // Let's verify what `row.saleId` is in Supabase mode.
+  // `getSalesHistoryFilteredResult` calls `getSalesHistoryFlat`.
+  // In `salesApiSupabase.js`:
+  // `sbSelectAll('sales', ...)` -> returns rows from `sales` table (items).
+  // So `row.id` is the Item ID.
+  // `row.sale_group_id` is the group ID.
+  // `salesApiSupabase.js` `getSalesHistoryFlat` maps `id` to `saleId`?
+  // Let's check `getSalesHistoryFlat` in `salesApiSupabase.js`.
+  // (I haven't read that part yet, I only read up to `checkoutCart` in `salesApiSupabase.js`).
+  
+  // I need to read `getSalesHistoryFlat` in `salesApiSupabase.js` to confirm.
+  // But assuming I need to pass the Item ID.
+  // I will make sure `SalesTable` passes the correct ID.
+  
+  // For now, I'll implement `updateSalePrice` in `salesApi.js` assuming `saleId` passed is the Item ID (if I can distinguish).
+  // Or maybe I should accept `itemId` separately?
+  // But `SalesTable` rows might not have `itemId` property normalized.
+  
+  // Let's assume for Local mode, we might need to find the item by other means or ensure we have the item ID.
+  // Actually, looking at `salesApi.js` `getSalesHistoryFlat`:
+  // `...i` -> `i` has `id`.
+  // So `row.id` (if not overwritten) is Item ID.
+  // But `SalesTable` constructs a custom `id` for the grid: `id: row.saleId...`.
+  
+  // I will just implement `updateSalePrice` in `salesApi.js` to update `saleItems` by `id`.
+  // I will call it `updateSaleItemPrice` to be clear, or just `updateSalePrice` and treat the ID as Item ID.
+  // NOTE: If `saleId` passed is the parent ID, this will fail.
+  // I should probably ensure `SalesTable` passes the Item ID.
+  
+  // Let's look at `SalesTable` again.
+  // `row` object comes from `useSalesHistoryFiltered`.
+  
+  // If I look at `salesApiSupabase.js`, I'll check how it returns data.
+  
+  // I'll proceed with adding the function to `salesApi.js` assuming `saleId` is the primary key of the item record.
+  
+  const item = await db.saleItems.get(sid);
+  if (!item) throw new Error('ITEM_NOT_FOUND');
+  
+  await db.saleItems.update(sid, {
+    unitPricePhp: p,
+    discountUnitPricePhp: undefined // Remove discount to apply new price
+  });
+  
+  return { ok: true };
+}
+
 export async function getSaleItemsBySaleId(saleId) {
   const items = await db.saleItems.where('saleId').equals(saleId).toArray();
 

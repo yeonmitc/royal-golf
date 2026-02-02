@@ -89,3 +89,10 @@ export function setSaleTime(payload) {
     () => local.setSaleTime(payload)
   );
 }
+
+export function updateSalePrice(payload) {
+  return withOfflineFallback(
+    () => supabase.updateSalePrice(payload),
+    () => local.updateSalePrice(payload)
+  );
+}

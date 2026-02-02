@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
+import PriceEditModal from '../../../components/sales/PriceEditModal';
 import ReceiptModal from '../../../components/sales/ReceiptModal';
 import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
@@ -29,6 +30,8 @@ export default function SalesTable({
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideTargetGroup, setGuideTargetGroup] = useState(null);
   const [selectedGuide, setSelectedGuide] = useState('');
+  const [priceEditOpen, setPriceEditOpen] = useState(false);
+  const [priceEditTarget, setPriceEditTarget] = useState(null);
   const [timeOpen, setTimeOpen] = useState(false);
   const [timeTarget, setTimeTarget] = useState(null);
   const [timeDate, setTimeDate] = useState('');
@@ -172,6 +175,7 @@ export default function SalesTable({
     const finalUnit = isRefunded ? 0 : finalUnitRaw;
     const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
     const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+    const isRental = row.code === 'GA-GC-RT-BK-01';
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
     const qtyForTotal = isRefunded ? 0 : qty;
@@ -185,6 +189,7 @@ export default function SalesTable({
 
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
+      saleId: row.saleId,
       no: index + 1,
       saleGroupId: row.saleGroupId,
       soldAt: row.soldAt,
@@ -205,7 +210,6 @@ export default function SalesTable({
             justifyContent: 'center',
             gap: 8,
             alignItems: 'center',
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
             height: '100%',
             padding: '8px',
           }}
@@ -351,6 +355,29 @@ export default function SalesTable({
               setGuideOpen(true);
             }}
           />
+          <Button
+            variant="outline"
+            icon="settings"
+            title="Edit Price"
+            disabled={isRefunded}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isAdmin) {
+                openLoginModal();
+                return;
+              }
+              setPriceEditTarget(row);
+              setPriceEditOpen(true);
+            }}
+          />
         </div>
       ),
       style: isRefunded
@@ -359,7 +386,11 @@ export default function SalesTable({
           ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
           : isMrMoon
             ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
-            : undefined,
+            : isRental
+              ? { backgroundColor: 'rgba(160, 82, 45, 0.1)', color: 'var(--text-main)' }
+              : row.guideId
+                ? { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
+                : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
@@ -394,7 +425,10 @@ export default function SalesTable({
 
   return (
     <>
-      <div className="sales-table-container" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
+      <div
+        className="sales-table-container"
+        style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}
+      >
         <DataTable
           columns={[
             { key: 'no', header: 'no', className: 'text-center', tdClassName: 'text-center' },
@@ -546,6 +580,14 @@ export default function SalesTable({
           </div>
         )}
       </Modal>
+      <PriceEditModal
+        open={priceEditOpen}
+        saleItem={priceEditTarget}
+        onClose={() => {
+          setPriceEditOpen(false);
+          setPriceEditTarget(null);
+        }}
+      />
       <Modal
         open={guideOpen}
         onClose={() => {
