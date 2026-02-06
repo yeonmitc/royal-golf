@@ -701,7 +701,6 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
     <form onSubmit={(e) => (e.preventDefault(), submit(true))} className="space-y-5">
       {/* Quick Templates - Always show */}
       <div>
-       
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -726,6 +725,14 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
             onClick={() => pickTemplate('물류비', '물류비')}
           >
             물류비
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={isSelected('월급') ? 'primary' : 'outline'}
+            onClick={() => pickTemplate('월급', '직원 월급')}
+          >
+            직원 월급
           </Button>
           <Button
             type="button"
