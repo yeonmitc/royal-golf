@@ -145,7 +145,8 @@ async function attachLocalProductMeta(items) {
     const product = productMap.get(i.code);
     const qtyN = Number(i.qty || 0) || 0;
     const listUnit = Number((product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
-    const commission = i.guideId ? listUnit * qtyN * 0.1 : 0;
+    const isFreeGift = Boolean(i.freeGift ?? false) || i.unitPricePhp === 0;
+    const commission = i.guideId && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
     return {
       ...i,
       productNo: product?.no ?? i.productNo ?? 0,
@@ -274,7 +275,7 @@ export async function checkoutCart(payload) {
     // If it was manually overridden (different from original), we might want to keep it?
     // Assuming standard flow: item.unitPricePhp is original.
     // If we want to FORCE the calculated price:
-    
+
     // FIX: If item is explicitly marked as free (0), we must respect that even for Mr. Moon.
     const isExplicitlyFree = item.unitPricePhp === 0;
 
@@ -709,6 +710,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
       const isMrMoon = nameLower === 'mrmoon';
+      const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
 
       return {
         saleId: r.id,
@@ -723,20 +725,26 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         unitPricePhp: isRefunded ? 0 : unit,
         discountUnitPricePhp: undefined,
         lineTotalPhp: (isRefunded ? 0 : unit) * qtyN,
-        freeGift: Boolean(r.free_gift ?? false) || unit === 0,
+        freeGift: isFreeGift,
         refundedAt,
         refundReason: String(r.refund_reason || '').trim(),
         isRefunded,
         nameKo: '',
         guideId: guideId,
         saleGroupId: r.sale_group_id,
+        isMrMoon,
         // If Mr. Moon, commission is 0 (it's a discount). Otherwise 10%.
-        commission: guideId && !isMrMoon ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
+        // FIX: Explicitly exclude free gifts from commission display for all guides
+        commission: guideId && !isMrMoon && !isFreeGift ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
       };
     })
     .filter((r) => r.qty > 0);
 
-  const withMeta = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
+  const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
+  const withMeta = withMetaRaw.map((r) => ({
+    ...r,
+    commission: r.isMrMoon ? 0 : r.commission,
+  }));
   const q = String(query || '').trim();
   if (!q) return withMeta;
   return withMeta.filter((r) => {
