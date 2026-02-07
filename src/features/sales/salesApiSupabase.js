@@ -274,11 +274,17 @@ export async function checkoutCart(payload) {
     // If it was manually overridden (different from original), we might want to keep it?
     // Assuming standard flow: item.unitPricePhp is original.
     // If we want to FORCE the calculated price:
-    const unitPriceCharged = isMrMoon
-      ? calculatedPrice
-      : Number.isFinite(unitPriceChargedCandidate)
-        ? unitPriceChargedCandidate
-        : unitPriceOriginal;
+    
+    // FIX: If item is explicitly marked as free (0), we must respect that even for Mr. Moon.
+    const isExplicitlyFree = item.unitPricePhp === 0;
+
+    const unitPriceCharged = isExplicitlyFree
+      ? 0
+      : isMrMoon
+        ? calculatedPrice
+        : Number.isFinite(unitPriceChargedCandidate)
+          ? unitPriceChargedCandidate
+          : unitPriceOriginal;
 
     const lineTotal = unitPriceCharged * qty;
     const isFreeGift = unitPriceCharged === 0 || Boolean(product.freeGift);

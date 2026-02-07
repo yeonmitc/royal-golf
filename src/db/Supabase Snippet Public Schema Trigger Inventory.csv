@@ -33,11 +33,13 @@ begin
   end if;
 
   -- 라인 합계(정상가 기준)
+  -- FIX: Exclude free gifts from commission calculation
   select coalesce(sum(price * qty), 0)
     into v_subtotal
   from public.sales
   where sale_group_id = p_group_id
-    and refunded_at is null;
+    and refunded_at is null
+    and (free_gift is false or free_gift is null);
 
   -- 고객 결제 금액은 정상가 그대로
   update public.sale_groups
