@@ -1,13 +1,13 @@
 // src/pages/GuidesPage.jsx
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getGuideStats, adjustGuidePoints } from '../features/guides/guideApi';
-import DataTable from '../components/common/DataTable';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import Button from '../components/common/Button';
-import Modal from '../components/common/Modal';
-import Input from '../components/common/Input';
 import Card from '../components/common/Card';
+import DataTable from '../components/common/DataTable';
+import Input from '../components/common/Input';
+import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
+import { adjustGuidePoints, getGuideStats } from '../features/guides/guideApi';
 
 export default function GuidesPage() {
   const { showToast } = useToast();
@@ -34,22 +34,22 @@ export default function GuidesPage() {
     },
   });
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setSelectedGuide(null);
     setNewBalance('');
     setReason('');
-  };
+  }, []);
 
   const handleSubmit = async () => {
     if (!selectedGuide || newBalance === '') return;
-    
+
     const current = Number(selectedGuide.balance || 0);
     const target = Number(newBalance);
     if (isNaN(target)) {
       showToast('Please enter a valid number.');
       return;
     }
-    
+
     const delta = target - current;
     if (delta === 0) {
       handleClose();
@@ -87,19 +87,25 @@ export default function GuidesPage() {
         <DataTable
           columns={[
             { key: 'name', header: 'Name' },
-            { key: 'balance', header: 'Current Points', className: 'text-right', tdClassName: 'text-right font-mono font-bold' },
-            { key: 'action', header: 'Action', className: 'text-center', tdClassName: 'text-center' },
+            {
+              key: 'balance',
+              header: 'Current Points',
+              className: 'text-right',
+              tdClassName: 'text-right font-mono font-bold',
+            },
+            {
+              key: 'action',
+              header: 'Action',
+              className: 'text-center',
+              tdClassName: 'text-center',
+            },
           ]}
           rows={(guideStats || []).map((g) => ({
             id: g.guide_id,
             name: g.name,
             balance: Number(g.balance).toLocaleString('en-US'),
             action: (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openAdjustModal(g)}
-              >
+              <Button size="sm" variant="outline" onClick={() => openAdjustModal(g)}>
                 Edit Points
               </Button>
             ),
@@ -118,7 +124,11 @@ export default function GuidesPage() {
               <Button variant="outline" onClick={handleClose} disabled={isPending}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleSubmit} disabled={isPending || newBalance === ''}>
+              <Button
+                variant="primary"
+                onClick={handleSubmit}
+                disabled={isPending || newBalance === ''}
+              >
                 {isPending ? 'Saving...' : 'Confirm Update'}
               </Button>
             </>
