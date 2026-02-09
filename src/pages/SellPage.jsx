@@ -302,7 +302,9 @@ export default function SellPage() {
                         return nameA.localeCompare(nameB);
                       })
                       .map((g) => {
-                        const isMrMoon = String(g.name || '').toLowerCase() === 'mr.moon';
+                        const nameLower = String(g.name || '').toLowerCase();
+                        const isMrMoon = nameLower === 'mr.moon';
+                        const isElla = nameLower.includes('ella');
                         return (
                           <option
                             key={g.id}
@@ -310,7 +312,9 @@ export default function SellPage() {
                             style={
                               isMrMoon
                                 ? { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' }
-                                : {}
+                                : isElla
+                                  ? { backgroundColor: 'rgba(255, 105, 180, 0.1)', color: 'var(--text-main)' }
+                                  : {}
                             }
                           >
                             {g.name}
