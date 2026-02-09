@@ -90,6 +90,13 @@ export function setSaleTime(payload) {
   );
 }
 
+export function updateSaleItemColor(payload) {
+  return withOfflineFallback(
+    () => supabase.updateSaleItemColor(payload),
+    () => local.updateSaleItemColor(payload)
+  );
+}
+
 export function updateSalePrice(payload) {
   return withOfflineFallback(
     () => supabase.updateSalePrice(payload),

@@ -579,6 +579,19 @@ export async function setSaleTime({ saleGroupId, saleId, soldAt } = {}) {
   return { ok: true };
 }
 
+export async function updateSaleItemColor({ saleId, color } = {}) {
+  const sid = Number(saleId || 0);
+  const colorVal = String(color || '').trim();
+  if (!sid) throw new Error('INVALID_ITEM_ID');
+
+  await sbUpdate(
+    'sales',
+    { color: colorVal },
+    { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
+  );
+  return { ok: true };
+}
+
 export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
   const p = Number(price);
   if (!Number.isFinite(p) || p < 0) throw new Error('INVALID_PRICE');

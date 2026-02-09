@@ -523,3 +523,12 @@ main[data-scroll-root='main'] {
     border-right: none !important;
   }
 }
+
+/* 유틸리티: 스크롤바 숨김 */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}

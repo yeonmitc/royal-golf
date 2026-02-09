@@ -154,3 +154,18 @@ export function useUpdateSalePriceMutation() {
     },
   });
 }
+
+export function useUpdateSaleItemColorMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['sales', 'updateItemColor'],
+    mutationFn: (payload) => import('./salesApiClient').then((m) => m.updateSaleItemColor(payload)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
+      queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+    },
+    onError: (err) => {
+      console.error('Color update failed:', err);
+    },
+  });
+}

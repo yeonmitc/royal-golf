@@ -135,8 +135,8 @@ export default function SalesHistoryPage() {
       if (filterMode === 'mr-moon') {
         return isMrMoon;
       }
-      if (filterMode === 'ella') {
-        return isElla;
+      if (filterMode === 'no-ella') {
+        return !isElla;
       }
       return true;
     });
@@ -300,25 +300,32 @@ export default function SalesHistoryPage() {
       <Button
         key="ella-toggle"
         type="button"
-        onClick={() => setFilterMode((prev) => (prev === 'ella' ? 'all' : 'ella'))}
+        onClick={() => setFilterMode((prev) => (prev === 'no-ella' ? 'all' : 'no-ella'))}
         size="sm"
-        variant={filterMode === 'ella' ? 'primary' : 'outline'}
-        title="Ella Sales"
+        variant="outline"
+        title="No Ella Sales"
         style={{
           width: '32px',
           height: '32px',
-          padding: '6px',
+          padding: '2px',
           minWidth: '32px',
+          flex: '0 0 32px',
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          backgroundColor: filterMode === 'no-ella' ? '#FFD700' : 'transparent',
+          borderColor: filterMode === 'no-ella' ? '#FFD700' : 'transparent',
         }}
       >
-        <img
-          src={ellaIcon}
-          alt="Ella"
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            backgroundColor: filterMode === 'no-ella' ? '#000000' : '#FFD700',
+            mask: `url(${ellaIcon}) no-repeat center / contain`,
+            WebkitMask: `url(${ellaIcon}) no-repeat center / contain`,
+          }}
         />
       </Button>,
     ];
@@ -478,6 +485,7 @@ export default function SalesHistoryPage() {
         }
       >
         <div
+          className="no-scrollbar"
           style={{
             display: 'flex',
             gap: 8,

@@ -5,6 +5,7 @@ import ellaIcon from '../../../assets/ella.svg';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
+import ColorChangeModal from '../../../components/sales/ColorChangeModal';
 import PriceEditModal from '../../../components/sales/PriceEditModal';
 import ReceiptModal from '../../../components/sales/ReceiptModal';
 import RefundModal from '../../../components/sales/RefundModal';
@@ -12,7 +13,11 @@ import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
 import { getGuides } from '../../guides/guideApi';
-import { useSetSaleGroupGuideMutation, useSetSaleTimeMutation } from '../salesHooks';
+import {
+  useSetSaleGroupGuideMutation,
+  useSetSaleTimeMutation,
+  useUpdateSaleItemColorMutation,
+} from '../salesHooks';
 
 export default function SalesTable({
   rows = [],
@@ -38,8 +43,11 @@ export default function SalesTable({
   const [timeDate, setTimeDate] = useState('');
   const [timeClock, setTimeClock] = useState('');
   const [timeError, setTimeError] = useState('');
+  const [colorEditOpen, setColorEditOpen] = useState(false);
+  const [colorEditTarget, setColorEditTarget] = useState(null);
   const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
+  const { mutateAsync: updateColor } = useUpdateSaleItemColorMutation();
   const { mutateAsync: setSaleTime, isPending: savingTime } = useSetSaleTimeMutation();
 
   async function copyTextToClipboard(text) {
@@ -322,6 +330,25 @@ export default function SalesTable({
               if (isRefunded) return;
               setRefundTarget(row);
               setRefundOpen(true);
+            }}
+          />
+          <Button
+            variant="outline"
+            icon="palette"
+            title="Change Color"
+            disabled={isRefunded}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setColorEditTarget(row);
+              setColorEditOpen(true);
             }}
           />
           <Button
@@ -681,6 +708,29 @@ export default function SalesTable({
           </select>
         </div>
       </Modal>
+      <ColorChangeModal
+        isOpen={colorEditOpen}
+        onClose={() => {
+          setColorEditOpen(false);
+          setColorEditTarget(null);
+        }}
+        saleItem={colorEditTarget}
+        onSave={async (newColor) => {
+          if (!colorEditTarget) return;
+          try {
+            await updateColor({
+              saleId: colorEditTarget.saleId,
+              code: colorEditTarget.code,
+              size: colorEditTarget.size,
+              color: newColor,
+            });
+            showToast('Color updated.');
+          } catch (e) {
+            console.error(e);
+            showToast('Failed to update color.');
+          }
+        }}
+      />
     </>
   );
 }

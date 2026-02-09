@@ -252,6 +252,20 @@ export async function setSaleTime({ saleId, soldAt } = {}) {
   return { ok: true };
 }
 
+export async function updateSaleItemColor({ saleId, code, size, color } = {}) {
+  const sid = Number(saleId || 0);
+  if (!sid || !code) throw new Error('INVALID_ITEM_UPDATE');
+  
+  const sizeKey = String(size ?? '').trim();
+  const colorVal = String(color || '').trim();
+
+  const item = await db.saleItems.where({ saleId: sid, code, size: sizeKey }).first();
+  if (!item) throw new Error('SALE_ITEM_NOT_FOUND');
+
+  await db.saleItems.update(item.id, { color: colorVal });
+  return { ok: true };
+}
+
 export async function updateSalePrice({ saleId, price } = {}) {
   const sid = Number(saleId || 0);
   const p = Number(price);

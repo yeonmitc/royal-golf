@@ -1,6 +1,6 @@
-import Button from './Button';
-import { exportToTsv } from '../../utils/csvExport';
 import { useToast } from '../../context/ToastContext';
+import { exportToTsv } from '../../utils/csvExport';
+import Button from './Button';
 
 async function ensureGapiLoaded() {
   if (window.gapi && window.gapi.load) return true;
@@ -75,6 +75,15 @@ export default function ExportActions({
     color: '#fff',
     border: 'none',
     boxShadow: '0 3px 0 #047857',
+    width: '32px',
+    height: '32px',
+    minWidth: '32px',
+    padding: 0,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: '0 0 32px',
   };
 
   const btnDriveStyle = {
@@ -82,6 +91,15 @@ export default function ExportActions({
     color: '#fff',
     border: 'none',
     boxShadow: '0 3px 0 #1D4ED8',
+    width: '32px',
+    height: '32px',
+    minWidth: '32px',
+    padding: 0,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: '0 0 32px',
   };
 
   async function handleCsv() {
@@ -140,7 +158,18 @@ export default function ExportActions({
         title={label || csvLabel || 'Download TSV'}
         disabled={!hasRows}
         icon="download"
-        style={{ ...btnCsvStyle, borderRadius: '50%', aspectRatio: '1/1', padding: 0, flexShrink: 0 }}
+        style={{
+          ...btnCsvStyle,
+          width: '32px',
+          height: '32px',
+          minWidth: '32px',
+          flex: '0 0 32px',
+          borderRadius: '50%',
+          padding: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       />
       {showDrive && (
         <Button
@@ -151,7 +180,19 @@ export default function ExportActions({
           title={label || driveLabel || 'Upload to Google Drive'}
           disabled={!hasRows || !canDrive}
           icon="cloud"
-          style={btnDriveStyle}
+          style={{
+            ...btnDriveStyle,
+            width: '32px',
+            height: '32px',
+            minWidth: '32px',
+            flex: '0 0 32px',
+            borderRadius: '50%',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: '8px',
+          }}
         />
       )}
     </>

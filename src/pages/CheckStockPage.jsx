@@ -4,12 +4,12 @@ import Modal from '../components/common/Modal';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import {
   useBatchUpdateInventoryStatusMutation,
-  // useUpdateInventoryStatusMutation,
   useDeleteErroStockMutation,
   useProductInventoryList,
   useResetAllInventoryStatusMutation,
   useUpsertErroStockMutation,
 } from '../features/products/productHooks';
+import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
 
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
@@ -67,10 +67,89 @@ export default function CheckStockPage() {
   const [showErrorOnly, setShowErrorOnly] = useState(false);
   const [showUncheckedOnly, setShowUncheckedOnly] = useState(false);
 
-  // 1. Filter products that have at least 1 stock
+  // Sold Items Check Mode
+  const [soldDate, setSoldDate] = useState(() => {
+    // Default to yesterday
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [soldProductCodes, setSoldProductCodes] = useState(null);
+  const [isLoadingSold, setIsLoadingSold] = useState(false);
+
+  const handleCheckSoldItems = async () => {
+    if (!soldDate) return;
+    if (
+      !window.confirm(
+        'This will reset current filters, show ONLY items sold on the selected date, and auto-mark other items as CHECKED. Continue?'
+      )
+    )
+      return;
+
+    setIsLoadingSold(true);
+    try {
+      // Fetch sales for that date (fromDate = toDate = soldDate)
+      const result = await getSalesHistoryFilteredResult({
+        fromDate: soldDate,
+        toDate: soldDate,
+      });
+
+      if (!result.rows || result.rows.length === 0) {
+        alert('No sales found for this date.');
+        setSoldProductCodes(null);
+        setIsLoadingSold(false);
+        return;
+      }
+
+      const codes = new Set(result.rows.map((r) => r.code));
+      setSoldProductCodes(codes);
+
+      // Auto-Check Logic:
+      // - If code is in sold list -> Status = 'unchecked' (so user can verify)
+      // - If code is NOT in sold list -> Status = 'checked' (assumed safe)
+      // Apply this to ALL stocked products
+      const newPendingChanges = {};
+      allProducts.forEach((p) => {
+        // Only consider products with stock > 0 for "checking"
+        if ((p.totalStock || 0) > 0) {
+          if (codes.has(p.code)) {
+            newPendingChanges[p.code] = 'unchecked';
+          } else {
+            newPendingChanges[p.code] = 'checked';
+          }
+        }
+      });
+      setPendingChanges(newPendingChanges);
+
+      // Reset other filters
+      setSelectedType(null);
+      setFilterLine(null);
+      setFilterGender(null);
+      setFilterBrand(null);
+      setShowCheckedOnly(false);
+      setShowErrorOnly(false);
+      setShowUncheckedOnly(true); // Auto-show unchecked items (which are the sold items)
+    } catch (err) {
+      console.error(err);
+      alert('Failed to fetch sales data.');
+    } finally {
+      setIsLoadingSold(false);
+    }
+  };
+
+  const clearSoldFilter = () => {
+    setSoldProductCodes(null);
+    setShowUncheckedOnly(false); // Reset view when filter is cleared
+    // Don't reset soldDate, keep last selection
+  };
+
+  // 1. Filter products that have at least 1 stock OR are in the sold list
   const stockedProducts = useMemo(() => {
+    if (soldProductCodes) {
+      return allProducts.filter((p) => soldProductCodes.has(p.code));
+    }
     return allProducts.filter((p) => (p.totalStock || 0) > 0);
-  }, [allProducts]);
+  }, [allProducts, soldProductCodes]);
 
   // Filter states
   const [filterLine, setFilterLine] = useState(null); // 'G' or 'L'
@@ -305,11 +384,97 @@ export default function CheckStockPage() {
   return (
     <div className="flex flex-col gap-4 pb-20">
       <div className="flex flex-col gap-2 sticky top-0 bg-[var(--bg-main)] z-10 p-2 shadow-sm -mx-2">
+        {/* Sold Items Check Control */}
+        <div className="flex items-center w-full px-1">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              border: '1px solid var(--gold)',
+              borderRadius: '999px',
+              overflow: 'hidden',
+              height: 28,
+              backgroundColor: 'rgba(20, 20, 32, 0.4)',
+              width: '100%',
+            }}
+          >
+            <input
+              type="date"
+              value={soldDate}
+              onChange={(e) => setSoldDate(e.target.value)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                fontSize: 12,
+                height: '100%',
+                padding: '0 8px 0 12px',
+                outline: 'none',
+                flex: 6, // 60% width
+                textAlign: 'center',
+                minWidth: 0,
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleCheckSoldItems}
+              disabled={!soldDate || isLoadingSold}
+              style={{
+                height: '100%',
+                border: 'none',
+                backgroundColor: '#2563eb', // Blue background
+                color: 'white',
+                fontSize: 11,
+                fontWeight: 'bold',
+                padding: '0 4px',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderLeft: '1px solid var(--gold)',
+                flex: soldProductCodes ? 2.5 : 4, // Adjust based on Reset button presence
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {isLoadingSold ? '...' : 'Sold Check'}
+            </button>
+            {soldProductCodes && (
+              <button
+                onClick={clearSoldFilter}
+                style={{
+                  height: '100%',
+                  border: 'none',
+                  backgroundColor: '#dc2626', // Red background
+                  color: 'white',
+                  fontSize: 11,
+                  fontWeight: 'bold',
+                  padding: '0 4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderLeft: '1px solid var(--gold)',
+                  flex: 1.5, // Remaining space for Reset
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                Reset ({soldProductCodes.size})
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 w-full">
           <Button
             variant={showCheckedOnly ? 'primary' : 'outline'}
             size="compact"
             className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            style={{ marginTop: '6px' }}
             onClick={() => {
               setShowCheckedOnly(!showCheckedOnly);
               setShowErrorOnly(false);
@@ -322,6 +487,7 @@ export default function CheckStockPage() {
             variant={showUncheckedOnly ? 'primary' : 'outline'}
             size="compact"
             className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            style={{ marginTop: '6px' }}
             onClick={() => {
               setShowUncheckedOnly(!showUncheckedOnly);
               setShowCheckedOnly(false);
@@ -334,6 +500,7 @@ export default function CheckStockPage() {
             variant={showErrorOnly ? 'primary' : 'outline'}
             size="compact"
             className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            style={{ marginTop: '6px' }}
             onClick={() => {
               setShowErrorOnly(!showErrorOnly);
               setShowCheckedOnly(false);
@@ -349,6 +516,7 @@ export default function CheckStockPage() {
             variant="success"
             size="compact"
             className="flex-1 font-medium bg-green-600 border-green-600 text-green-600 hover:bg-green-600/10 text-[11px]"
+            style={{ marginTop: '6px' }}
             onClick={handleDownloadTsv}
           >
             Download
@@ -357,6 +525,7 @@ export default function CheckStockPage() {
             variant="outline"
             size="compact"
             className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            style={{ marginTop: '6px' }}
             onClick={handleSaveAll}
             disabled={isSaving || !hasChanges}
           >
@@ -366,6 +535,7 @@ export default function CheckStockPage() {
             variant="danger"
             size="compact"
             className="flex-1 font-medium border-red-500 text-red-500 hover:bg-red-500/10 text-[11px]"
+            style={{ marginTop: '6px' }}
             onClick={handleResetAll}
             disabled={isResetting}
           >
@@ -374,7 +544,7 @@ export default function CheckStockPage() {
         </div>
         <hr className="border-t-2 border-[var(--gold)]" />
         <div className="flex flex-col gap-2 border-b pb-2">
-          <div className="flex gap-1 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
             {['G', 'L'].map((line) => (
               <Button
                 key={line}
@@ -382,6 +552,7 @@ export default function CheckStockPage() {
                 variant={filterLine === line ? 'primary' : 'outline'}
                 size="compact"
                 className="text-[11px]"
+                style={{ marginTop: '6px' }}
               >
                 {line === 'G' ? 'Golf' : 'Luxury'}
               </Button>
@@ -398,6 +569,7 @@ export default function CheckStockPage() {
                 variant={filterGender === code ? 'primary' : 'outline'}
                 size="compact"
                 className="text-[11px]"
+                style={{ marginTop: '6px' }}
               >
                 {label}
               </Button>
@@ -406,7 +578,7 @@ export default function CheckStockPage() {
           <hr className="border-t-2 border-[var(--gold)]" />
           {productBrands.length > 0 && (
             <div
-              className="flex gap-1 overflow-x-auto pb-1 no-scrollbar pt-1"
+              className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pt-1"
               style={{ flexWrap: 'nowrap' }}
             >
               {productBrands.map((b) => (
@@ -422,6 +594,7 @@ export default function CheckStockPage() {
                   variant={filterBrand === b ? 'primary' : 'outline'}
                   size="compact"
                   className="whitespace-nowrap flex-shrink-0 text-[11px]"
+                  style={{ marginTop: '6px' }}
                 >
                   {getBrandLabel(b)}
                 </Button>
@@ -433,7 +606,7 @@ export default function CheckStockPage() {
         </div>
 
         <div
-          className="flex gap-1 overflow-x-auto pb-1 no-scrollbar pt-1"
+          className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pt-1"
           style={{ flexWrap: 'nowrap' }}
         >
           {productTypes.map((t) => (
@@ -452,6 +625,7 @@ export default function CheckStockPage() {
               }
               size="compact"
               className="whitespace-nowrap flex-shrink-0 text-[11px]"
+              style={{ marginTop: '6px' }}
             >
               {getTypeName(t)}
             </Button>

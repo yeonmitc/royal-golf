@@ -69,28 +69,26 @@ export default function Header() {
         }}
       >
         <NavLink
-          to="/sold-products"
-          className="flex items-center gap-3 px-2 rounded-md transition-colors"
+          to="/sell"
           style={{
-            background: 'transparent',
-            height: 'var(--header-height, 86px)',
+            display: 'flex',
             alignItems: 'center',
-            cursor: 'pointer',
-            textDecoration: 'none',
+            justifyContent: 'center',
+            height: '100%',
+            aspectRatio: '1',
+            marginRight: 12,
           }}
         >
           <img
             src={logoUrl}
-            alt="Logo"
+            alt="Royal Golf Logo"
             style={{
-              width: 'var(--logo-size, 86px)',
-              height: 'var(--logo-size, 86px)',
-              borderRadius: 8,
-              background: 'transparent',
-              display: 'block',
-              transition: 'transform 200ms ease, filter 200ms ease',
-              transform: logoHovered ? 'scale(1.2)' : 'scale(1)',
-              filter: logoHovered ? 'brightness(0) invert(1)' : 'none',
+              height: '100%',
+              width: '100%',
+              objectFit: 'contain',
+              transition: 'transform 0.3s ease, filter 0.3s ease',
+              transform: logoHovered ? 'scale(1.05)' : 'scale(1)',
+              filter: logoHovered ? 'invert(1)' : 'none',
               willChange: 'transform, filter',
             }}
             onMouseEnter={() => setLogoHovered(true)}
