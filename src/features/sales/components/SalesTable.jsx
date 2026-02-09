@@ -1,6 +1,7 @@
 // src/features/sales/components/SalesTable.jsx
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import ellaIcon from '../../../assets/ella.svg';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
@@ -109,6 +110,16 @@ export default function SalesTable({
       .map((g) => String(g.id))
   );
 
+  const ellaGuideIds = new Set(
+    (guides || [])
+      .filter((g) =>
+        String(g.name || '')
+          .toLowerCase()
+          .includes('ella')
+      )
+      .map((g) => String(g.id))
+  );
+
   const { totalQty, totalPrice, totalCommission } = visibleRows.reduce(
     (acc, row) => {
       const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
@@ -121,7 +132,8 @@ export default function SalesTable({
       const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
       const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
-      const commissionForTotal = isRefunded || isMrMoon ? 0 : commission;
+      const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
+      const commissionForTotal = isRefunded || isMrMoon || isElla ? 0 : commission;
       const lineTotalForTotal = finalUnit * qtyForTotal;
 
       return {
@@ -175,6 +187,7 @@ export default function SalesTable({
     const finalUnit = isRefunded ? 0 : finalUnitRaw;
     const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
     const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+    const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
     const isRental = row.code === 'GA-GC-RT-BK-01';
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
@@ -201,8 +214,15 @@ export default function SalesTable({
       sizeDisplay: row.sizeDisplay,
       qty: qty,
       brand,
-      commission:
-        !isMrMoon && commissionForTotal > 0 ? commissionForTotal.toLocaleString('en-US') : '-',
+      commission: isElla ? (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <img src={ellaIcon} alt="Ella" style={{ width: 20, height: 20 }} />
+        </div>
+      ) : !isMrMoon && commissionForTotal > 0 ? (
+        commissionForTotal.toLocaleString('en-US')
+      ) : (
+        '-'
+      ),
       unitPricePhp: (
         <div
           style={{

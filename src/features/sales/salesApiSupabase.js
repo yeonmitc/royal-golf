@@ -710,6 +710,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
       const isMrMoon = nameLower === 'mrmoon';
+      const isElla = nameLower.includes('ella');
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
 
       return {
@@ -733,9 +734,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         guideId: guideId,
         saleGroupId: r.sale_group_id,
         isMrMoon,
+        isElla,
         // If Mr. Moon, commission is 0 (it's a discount). Otherwise 10%.
         // FIX: Explicitly exclude free gifts from commission display for all guides
-        commission: guideId && !isMrMoon && !isFreeGift ? (isRefunded ? 0 : unit) * qtyN * 0.1 : 0,
+        commission:
+          guideId && !isMrMoon && !isElla && !isFreeGift
+            ? (isRefunded ? 0 : unit) * qtyN * 0.1
+            : 0,
       };
     })
     .filter((r) => r.qty > 0);
