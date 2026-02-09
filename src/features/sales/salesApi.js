@@ -252,7 +252,7 @@ export async function setSaleTime({ saleId, soldAt } = {}) {
   return { ok: true };
 }
 
-export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
+export async function updateSalePrice({ saleId, price } = {}) {
   const sid = Number(saleId || 0);
   const p = Number(price);
   if (!sid || !Number.isFinite(p) || p < 0) throw new Error('INVALID_PRICE_UPDATE');

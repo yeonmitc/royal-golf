@@ -184,10 +184,11 @@ export default function AddProductPage() {
             });
           }
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allCodeParts]);
 
   async function handleSubmit(e) {

@@ -1,6 +1,7 @@
 // src/pages/SalesHistoryPage.jsx
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import ellaIcon from '../assets/ella.svg';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import ExportActions from '../components/common/ExportActions';
@@ -110,18 +111,32 @@ export default function SalesHistoryPage() {
         .map((g) => String(g.id))
     );
 
+    const ellaGuideIds = new Set(
+      (guides || [])
+        .filter((g) =>
+          String(g.name || '')
+            .toLowerCase()
+            .includes('ella')
+        )
+        .map((g) => String(g.id))
+    );
+
     const filtered = base.filter((r) => {
       const gid = r.guideId;
       const isMrMoon = gid && mrMoonGuideIds.has(String(gid));
+      const isElla = gid && ellaGuideIds.has(String(gid));
 
       if (filterMode === 'no-guide') {
         return !gid;
       }
       if (filterMode === 'guide') {
-        return gid && !isMrMoon;
+        return gid && !isMrMoon && !isElla;
       }
       if (filterMode === 'mr-moon') {
         return isMrMoon;
+      }
+      if (filterMode === 'ella') {
+        return isElla;
       }
       return true;
     });
@@ -281,6 +296,30 @@ export default function SalesHistoryPage() {
         style={{ minWidth: 90 }}
       >
         No Refund
+      </Button>,
+      <Button
+        key="ella-toggle"
+        type="button"
+        onClick={() => setFilterMode((prev) => (prev === 'ella' ? 'all' : 'ella'))}
+        size="sm"
+        variant={filterMode === 'ella' ? 'primary' : 'outline'}
+        title="Ella Sales"
+        style={{
+          width: '32px',
+          height: '32px',
+          padding: '6px',
+          minWidth: '32px',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img
+          src={ellaIcon}
+          alt="Ella"
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
       </Button>,
     ];
     if (exportActions) {
