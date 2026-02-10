@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../components/common/Button';
 import { CalendarIcon } from '../components/common/Icons';
 import Modal from '../components/common/Modal';
+import { useToast } from '../context/ToastContext';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import {
   useBatchUpdateInventoryStatusMutation,
@@ -15,6 +16,7 @@ import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient'
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
 export default function CheckStockPage() {
+  const { showToast } = useToast();
   const { data: allProducts = [], isLoading } = useProductInventoryList();
   const { mutate: batchUpdateStatus, isPending: isSaving } =
     useBatchUpdateInventoryStatusMutation();
@@ -704,11 +706,19 @@ export default function CheckStockPage() {
                 return (
                   <tr key={item.code} className={isChecked ? 'bg-[rgba(34,197,94,0.10)]' : ''}>
                     <td
-                      className={`font-mono text-[11px] pr-2 pl-2 align-top border-l border-r border-white/20 whitespace-nowrap ${isError ? 'cursor-pointer hover:underline text-red-400 font-bold' : ''}`}
-                      onClick={() => {
+                      className={`font-mono text-[11px] pr-2 pl-2 align-top border-l border-r border-white/20 whitespace-nowrap ${isError ? 'cursor-pointer hover:underline text-red-400 font-bold' : 'cursor-pointer hover:text-green-500 transition-colors duration-200'}`}
+                      title={isError ? 'Edit Error' : 'Click to copy'}
+                      onClick={async () => {
                         if (isError) {
                           setEditingError({ code: item.code, memo: item.error_memo || '' });
                           setErrorModalOpen(true);
+                        } else {
+                          try {
+                            await navigator.clipboard.writeText(item.code);
+                            showToast(`Copied: ${item.code}`, 300);
+                          } catch (err) {
+                            console.error('Failed to copy!', err);
+                          }
                         }
                       }}
                     >
