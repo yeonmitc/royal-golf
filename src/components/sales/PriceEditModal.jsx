@@ -61,6 +61,21 @@ export default function PriceEditModal({ open, onClose, saleItem }) {
     }
   }
 
+  const applyDiscount = (percent) => {
+    if (!saleItem) return;
+    // Always calculate discount based on the original list price
+    // Note: In SalesTable, unitPricePhp is the original price.
+    // If it's a string with commas, we might need to be careful, but normally it's a number or numeric string.
+    // Let's assume unitPricePhp is numeric as seen in useEffect.
+    const original = Number(saleItem.unitPricePhp || 0);
+    if (!original) return;
+
+    const discounted = original * (1 - percent / 100);
+    // Round up to nearest 100 (ceil)
+    const rounded = Math.ceil(discounted / 100) * 100;
+    setPrice(String(rounded));
+  };
+
   return (
     <Modal
       open={open}
@@ -95,6 +110,20 @@ export default function PriceEditModal({ open, onClose, saleItem }) {
           placeholder="0"
           error={err || undefined}
         />
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[5, 10, 15, 20].map((pct) => (
+            <Button
+              key={pct}
+              type="button"
+              variant="outline"
+              size="sm"
+              style={{ flex: 1, fontSize: 12 }}
+              onClick={() => applyDiscount(pct)}
+            >
+              {pct}%
+            </Button>
+          ))}
+        </div>
       </div>
     </Modal>
   );
