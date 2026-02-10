@@ -15,6 +15,42 @@ import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient'
 
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
+const StockCodeCell = ({ item, isError, setEditingError, setErrorModalOpen, showToast }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <span
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        cursor: 'pointer',
+        display: 'inline-block',
+        color: isError ? '#f87171' : isHovered ? '#22c55e' : 'inherit',
+        fontWeight: isError || isHovered ? 'bold' : 'normal',
+        textDecoration: isError && isHovered ? 'underline' : 'none',
+        transition: 'color 0.2s, font-weight 0.2s',
+      }}
+      title={isError ? 'Edit Error' : 'Click to copy'}
+      onClick={async (e) => {
+        e.stopPropagation(); // Prevent row click if any
+        if (isError) {
+          setEditingError({ code: item.code, memo: item.error_memo || '' });
+          setErrorModalOpen(true);
+        } else {
+          try {
+            await navigator.clipboard.writeText(item.code);
+            showToast(`Copied: ${item.code}`, 300);
+          } catch (err) {
+            console.error('Failed to copy!', err);
+          }
+        }
+      }}
+    >
+      {item.code}
+    </span>
+  );
+};
+
 export default function CheckStockPage() {
   const { showToast } = useToast();
   const { data: allProducts = [], isLoading } = useProductInventoryList();
@@ -705,24 +741,14 @@ export default function CheckStockPage() {
 
                 return (
                   <tr key={item.code} className={isChecked ? 'bg-[rgba(34,197,94,0.10)]' : ''}>
-                    <td
-                      className={`font-mono text-[11px] pr-2 pl-2 align-top border-l border-r border-white/20 whitespace-nowrap ${isError ? 'cursor-pointer hover:underline text-red-400 font-bold' : 'cursor-pointer hover:text-green-500 transition-colors duration-200'}`}
-                      title={isError ? 'Edit Error' : 'Click to copy'}
-                      onClick={async () => {
-                        if (isError) {
-                          setEditingError({ code: item.code, memo: item.error_memo || '' });
-                          setErrorModalOpen(true);
-                        } else {
-                          try {
-                            await navigator.clipboard.writeText(item.code);
-                            showToast(`Copied: ${item.code}`, 300);
-                          } catch (err) {
-                            console.error('Failed to copy!', err);
-                          }
-                        }
-                      }}
-                    >
-                      {item.code}
+                    <td className="font-mono text-[11px] pr-2 pl-2 align-top border-l border-r border-white/20 whitespace-nowrap">
+                      <StockCodeCell
+                        item={item}
+                        isError={isError}
+                        setEditingError={setEditingError}
+                        setErrorModalOpen={setErrorModalOpen}
+                        showToast={showToast}
+                      />
                     </td>
                     <td className="text-[11px] text-gray-300 dark:text-gray-400 align-top pl-2">
                       {availableSizes || 'No Stock'}
