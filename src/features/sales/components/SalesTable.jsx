@@ -218,7 +218,12 @@ export default function SalesTable({
       soldAtDate,
       soldAtTime,
       code: row.code,
-      color: row.color || '',
+      color:
+        (row.color || '').trim() === 'Mix' && row.code !== 'GA-OT-EX-MX-02' ? (
+          <span style={{ color: 'red', fontWeight: 'bold' }}>{row.color}</span>
+        ) : (
+          row.color || ''
+        ),
       sizeDisplay: row.sizeDisplay,
       qty: qty,
       brand,

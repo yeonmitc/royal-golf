@@ -304,6 +304,7 @@ export default function SalesHistoryPage() {
         size="sm"
         variant="outline"
         title="No Ella Sales"
+        className="group transition-colors"
         style={{
           width: '32px',
           height: '32px',
@@ -314,17 +315,30 @@ export default function SalesHistoryPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: filterMode === 'no-ella' ? '#FFD700' : 'transparent',
-          borderColor: filterMode === 'no-ella' ? '#FFD700' : 'transparent',
+          backgroundColor: filterMode === 'no-ella' ? 'var(--gold)' : 'transparent',
+          borderColor: filterMode === 'no-ella' ? 'var(--gold)' : 'transparent',
         }}
       >
         <div
+          className="transition-colors"
           style={{
             width: '100%',
             height: '100%',
-            backgroundColor: filterMode === 'no-ella' ? '#000000' : '#FFD700',
+            backgroundColor: filterMode === 'no-ella' ? '#000000' : 'var(--gold)',
             mask: `url(${ellaIcon}) no-repeat center / contain`,
             WebkitMask: `url(${ellaIcon}) no-repeat center / contain`,
+          }}
+          onMouseEnter={(e) => {
+            if (filterMode !== 'no-ella') {
+              e.currentTarget.style.backgroundColor = '#000000';
+              e.currentTarget.parentElement.style.backgroundColor = 'var(--gold)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (filterMode !== 'no-ella') {
+              e.currentTarget.style.backgroundColor = 'var(--gold)';
+              e.currentTarget.parentElement.style.backgroundColor = 'transparent';
+            }
           }}
         />
       </Button>,

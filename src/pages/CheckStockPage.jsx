@@ -24,6 +24,7 @@ export default function CheckStockPage() {
 
   // Local state for pending changes: { [code]: 'checked' | 'error' | 'unchecked' }
   const [pendingChanges, setPendingChanges] = useState({});
+  const dateInputRef = useRef(null);
 
   // Error Modal State
   const [errorModalOpen, setErrorModalOpen] = useState(false);
@@ -398,23 +399,36 @@ export default function CheckStockPage() {
               width: '100%',
             }}
           >
-            <input
-              type="date"
-              value={soldDate}
-              onChange={(e) => setSoldDate(e.target.value)}
+            <div
+              onClick={() => dateInputRef.current?.showPicker()}
               style={{
-                background: 'transparent',
-                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 6,
+                height: '100%',
+                cursor: 'pointer',
                 color: 'white',
                 fontSize: 12,
-                height: '100%',
-                padding: '0 8px 0 12px',
-                outline: 'none',
-                flex: 6, // 60% width
-                textAlign: 'center',
-                minWidth: 0,
+                gap: 4,
               }}
-            />
+            >
+              <span>{soldDate}</span>
+              <CalendarIcon size={12} color="#9ca3af" />
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={soldDate}
+                onChange={(e) => setSoldDate(e.target.value)}
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  pointerEvents: 'none',
+                  width: 0,
+                  height: 0,
+                }}
+              />
+            </div>
             <button
               type="button"
               onClick={handleCheckSoldItems}

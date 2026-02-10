@@ -62,8 +62,15 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                     width: '24px',
                     height: '24px',
                     borderRadius: '50%',
-                    border: '1px solid rgba(0,0,0,0.2)',
+                    border:
+                      c.label === 'Transparent' ? '2px solid #eab308' : '1px solid rgba(0,0,0,0.2)',
                     marginBottom: '8px',
+                    background:
+                      c.label.trim() === 'Mix'
+                        ? 'linear-gradient(135deg, #0b0f36 0%, #6b21a8 40%, #ec4899 70%, #3b82f6 100%)'
+                        : c.label === 'Extra'
+                          ? 'linear-gradient(135deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #a855f7)'
+                          : undefined,
                     backgroundColor:
                       c.label === 'Black'
                         ? '#000'
@@ -84,11 +91,11 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                                       : c.label === 'Gray'
                                         ? '#6b7280'
                                         : c.label === 'Beige'
-                                          ? '#d4d4d8'
+                                          ? '#d4b996'
                                           : c.label === 'Brown'
-                                            ? '#78350f'
+                                            ? '#9c4d1fff'
                                             : c.label === 'DarkBrown'
-                                              ? '#451a03'
+                                              ? '#471d07ff'
                                               : c.label === 'Gold'
                                                 ? '#ffd700'
                                                 : c.label === 'Ivory'
@@ -106,10 +113,17 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                                                             : c.label === 'Khaki'
                                                               ? '#57534e'
                                                               : c.label === 'Mint'
-                                                                ? '#34d399'
+                                                                ? '#6fffcb'
                                                                 : c.label === 'Lavender'
                                                                   ? '#e9d5ff'
-                                                                  : 'transparent',
+                                                                  : c.label === 'Oatmeal'
+                                                                    ? '#e3dac3'
+                                                                    : c.label === 'Transparent'
+                                                                      ? 'transparent'
+                                                                      : c.label.trim() === 'Mix' ||
+                                                                          c.label === 'Extra'
+                                                                        ? undefined
+                                                                        : 'transparent',
                   }}
                 />
                 <span style={{ fontSize: '12px' }}>{c.label}</span>
