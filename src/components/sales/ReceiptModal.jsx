@@ -33,7 +33,7 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
     win.document.write(`
       @page { margin: 0; }
       body { margin: 0; font-family: monospace; font-size: 13px; color: #000; }
-      .receipt-container { width: 57mm; margin: 0 auto; padding: 10px; box-sizing: border-box; }
+      .receipt-container { width: 57mm; margin: 0 auto; padding: 10px 10px 20mm 10px; box-sizing: border-box; }
       .receipt-logo { display: block; margin: 0 auto 5px auto; width: 80px; height: 90px; object-fit: contain; filter: grayscale(100%) brightness(0%); }
       .header { text-align: center; margin-bottom: 5px; }
       .title { font-size: 15px; font-weight: bold; margin-bottom: 0; }
@@ -49,6 +49,8 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
     win.document.write('</style></head><body>');
     win.document.write('<div class="receipt-container">');
     win.document.write(absoluteHtml);
+    // Explicit spacer for bottom margin to ensure cut-off safety
+    win.document.write('<div style="height: 20mm; width: 100%;"></div>');
     win.document.write('</div>');
     win.document.write('</body></html>');
     win.document.close();
