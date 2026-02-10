@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../components/common/Button';
+import { CalendarIcon } from '../components/common/Icons';
 import Modal from '../components/common/Modal';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import {
@@ -411,23 +412,41 @@ export default function CheckStockPage() {
                 color: 'white',
                 fontSize: 12,
                 gap: 4,
+                position: 'relative', // Add relative positioning for child absolute
               }}
             >
               <span>{soldDate}</span>
               <CalendarIcon size={12} color="#9ca3af" />
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={soldDate}
-                onChange={(e) => setSoldDate(e.target.value)}
+              <div
                 style={{
                   position: 'absolute',
-                  opacity: 0,
-                  pointerEvents: 'none',
+                  top: '100%',
+                  left: '50%',
                   width: 0,
                   height: 0,
+                  overflow: 'visible',
                 }}
-              />
+              >
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  value={soldDate}
+                  onChange={(e) => setSoldDate(e.target.value)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0, // Starts at center
+                    transform: 'translateX(-50%)', // Center the input element itself
+                    opacity: 0,
+                    pointerEvents: 'none',
+                    width: '1px', // Give it non-zero size
+                    height: '1px',
+                    border: 'none',
+                    margin: 0,
+                    padding: 0,
+                  }}
+                />
+              </div>
             </div>
             <button
               type="button"

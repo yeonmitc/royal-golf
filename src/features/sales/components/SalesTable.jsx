@@ -219,7 +219,9 @@ export default function SalesTable({
       soldAtTime,
       code: row.code,
       color:
-        (row.color || '').trim() === 'Mix' && row.code !== 'GA-OT-EX-MX-02' ? (
+        (row.color || '').trim() === 'Mix' &&
+        row.code !== 'GA-OT-EX-MX-02' &&
+        !String(row.code || '').startsWith('SU') ? (
           <span style={{ color: 'red', fontWeight: 'bold' }}>{row.color}</span>
         ) : (
           row.color || ''
@@ -435,14 +437,16 @@ export default function SalesTable({
       style: isRefunded
         ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
         : giftChecked
-          ? { backgroundColor: 'rgba(239, 68, 68, 0.20)', color: 'var(--text-main)' }
+          ? { backgroundColor: 'rgba(239, 68, 68, 0.10)', color: 'var(--text-main)' }
           : isMrMoon
             ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
-            : isRental
-              ? { backgroundColor: 'rgba(160, 82, 45, 0.1)', color: 'var(--text-main)' }
-              : row.guideId
-                ? { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
-                : undefined,
+            : isElla
+              ? { backgroundColor: 'rgba(255, 182, 193, 0.2)', color: 'var(--text-main)' }
+              : isRental
+                ? { backgroundColor: 'rgba(255, 165, 0, 0.2)', color: 'var(--text-main)' }
+                : row.guideId
+                  ? { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
+                  : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
