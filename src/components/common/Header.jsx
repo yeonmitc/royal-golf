@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
 import AdminLoginModal from '../admin/AdminLoginModal';
+import AttendanceModal from '../attendance/AttendanceModal';
 import Modal from './Modal';
 
 export default function Header() {
@@ -15,6 +16,7 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
 
   const navItems = [
     { to: '/inventory', label: 'product list', adminOnly: false },
@@ -34,6 +36,23 @@ export default function Header() {
   const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin);
   const adminItems = visibleNavItems.filter((item) => item.adminOnly);
   const publicItems = visibleNavItems.filter((item) => !item.adminOnly);
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const ua = navigator.userAgent;
+      const isMobileUA =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet|Kindle|Silk|PlayBook/i.test(
+          ua
+        );
+      const isIOSDesktop = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+      setIsMobile(isMobileUA || isIOSDesktop);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const el = document.querySelector('main[data-scroll-root="main"]');
@@ -156,6 +175,37 @@ export default function Header() {
                 {item.label}
               </NavLink>
             ))}
+
+            {/* Attendance Stamp Button - PC Only */}
+            {!isMobile && (
+              <button
+                onClick={() => setAttendanceModalOpen(true)}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  borderRadius: 999,
+                  color: 'var(--text-main)',
+                  background: 'transparent',
+                  border: '1px solid var(--border-soft)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--gold)';
+                  e.currentTarget.style.color = 'var(--gold)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-soft)';
+                  e.currentTarget.style.color = 'var(--text-main)';
+                }}
+              >
+                <span>⏰</span> Stamp
+              </button>
+            )}
           </div>
         </nav>
 
@@ -231,6 +281,7 @@ export default function Header() {
         </Modal>
       )}
       <AdminLoginModal open={loginModalOpen} onClose={closeLoginModal} />
+      <AttendanceModal open={attendanceModalOpen} onClose={() => setAttendanceModalOpen(false)} />
     </header>
   );
 }
