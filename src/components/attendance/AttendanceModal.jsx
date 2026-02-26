@@ -32,7 +32,7 @@ const getMoodEmoji = (score) => {
   if (score >= 80) return { emoji: '🙂', label: '미소', color: 'text-yellow-400' };
   if (score >= 70) return { emoji: '😐', label: '보통', color: 'text-gray-400' };
   if (score >= 50) return { emoji: '😖', label: '찡그림', color: 'text-orange-500' };
-  return { emoji: '😡', label: '화남', color: 'text-red-700' };
+  return { emoji: '😭', label: '우는 중', color: 'text-blue-500' };
 };
 
 const formatTimeForDisplay = (date) => {
@@ -114,7 +114,10 @@ const AttendanceCalendar = () => {
     const jLog = dayLogs.find((l) => l.employee_name === 'JESHEICA');
     const bLog = dayLogs.find((l) => l.employee_name === 'BERLYN');
 
-    if (!jLog && !bLog) return result;
+    // Default rule: if no attendance logs for the day (past days only), treat as 100
+    if (!jLog && !bLog) {
+      return { score: 100, isFuture, hasLog: true, details: [] };
+    }
 
     let totalScore = 0;
     const details = [];
