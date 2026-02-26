@@ -119,7 +119,8 @@ const AttendanceCalendar = () => {
       return { score: 100, isFuture, hasLog: true, details: [] };
     }
 
-    let totalScore = 0;
+    // Start from default 100 and subtract each attendee's penalty (half weight per person)
+    let finalScore = 100;
     const details = [];
 
     // ... scoring logic ...
@@ -140,7 +141,8 @@ const AttendanceCalendar = () => {
       else target.setHours(9, 0, 0, 0);
 
       const score = getPunctualityScore(target, checkTime);
-      totalScore += score / 2;
+      // Subtract half of the deficit from 100
+      finalScore -= Math.max(0, 100 - score) / 2;
 
       const diffMs = checkTime - target;
       const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
@@ -173,7 +175,8 @@ const AttendanceCalendar = () => {
       else target.setHours(9, 0, 0, 0);
 
       const score = getPunctualityScore(target, checkTime);
-      totalScore += score / 2;
+      // Subtract half of the deficit from 100
+      finalScore -= Math.max(0, 100 - score) / 2;
 
       const diffMs = checkTime - target;
       const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
@@ -189,7 +192,9 @@ const AttendanceCalendar = () => {
       details.push({ name: 'BERLYN', score: 0, lateMins: 'N/A', time: 'No Show' });
     }
 
-    return { score: Math.round(totalScore), isFuture, hasLog: true, details };
+    // Clamp to [0, 100]
+    finalScore = Math.max(0, Math.min(100, finalScore));
+    return { score: Math.round(finalScore), isFuture, hasLog: true, details };
   };
 
   return (
