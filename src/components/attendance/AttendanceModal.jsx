@@ -119,8 +119,9 @@ const AttendanceCalendar = () => {
       return { score: 100, isFuture, hasLog: true, details: [] };
     }
 
-    // Start from default 100 and subtract each attendee's penalty (half weight per person)
-    let finalScore = 100;
+    // We'll compute individual scores, then combine according to weekday rule
+    let jScoreVal = null;
+    let bScoreVal = null;
     const details = [];
 
     // ... scoring logic ...
@@ -141,8 +142,7 @@ const AttendanceCalendar = () => {
       else target.setHours(9, 0, 0, 0);
 
       const score = getPunctualityScore(target, checkTime);
-      // Subtract half of the deficit from 100
-      finalScore -= Math.max(0, 100 - score) / 2;
+      jScoreVal = score;
 
       const diffMs = checkTime - target;
       const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
@@ -175,8 +175,7 @@ const AttendanceCalendar = () => {
       else target.setHours(9, 0, 0, 0);
 
       const score = getPunctualityScore(target, checkTime);
-      // Subtract half of the deficit from 100
-      finalScore -= Math.max(0, 100 - score) / 2;
+      bScoreVal = score;
 
       const diffMs = checkTime - target;
       const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
@@ -192,7 +191,21 @@ const AttendanceCalendar = () => {
       details.push({ name: 'BERLYN', score: 0, lateMins: 'N/A', time: 'No Show' });
     }
 
-    // Clamp to [0, 100]
+    // Combine scores
+    const dow = new Date(year, month - 1, day).getDay(); // 0 Sun, 1 Mon, 2 Tue
+    const isMonTue = dow === 1 || dow === 2;
+    let finalScore;
+    if (isMonTue) {
+      if (jScoreVal != null && bScoreVal == null) finalScore = jScoreVal;
+      else if (bScoreVal != null && jScoreVal == null) finalScore = bScoreVal;
+      else if (jScoreVal != null && bScoreVal != null) finalScore = (jScoreVal + bScoreVal) / 2;
+      else finalScore = 100;
+    } else {
+      // Default rule from earlier: start at 100 and subtract half deficits
+      finalScore = 100;
+      if (jScoreVal != null) finalScore -= Math.max(0, 100 - jScoreVal) / 2;
+      if (bScoreVal != null) finalScore -= Math.max(0, 100 - bScoreVal) / 2;
+    }
     finalScore = Math.max(0, Math.min(100, finalScore));
     return { score: Math.round(finalScore), isFuture, hasLog: true, details };
   };
