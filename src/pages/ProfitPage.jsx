@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Button from '../components/common/Button';
 import DataTable from '../components/common/DataTable';
 import { sbRpc } from '../db/supabaseRest';
+import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
 
 // Helper for date formatting without date-fns
 function formatDate(dateStr, fmt = 'yyyy-MM-dd') {
@@ -33,8 +34,51 @@ export default function ProfitPage() {
         start_date: startDate || '2025-12-16',
         end_date: endDate || formatDate(new Date(), 'yyyy-MM-dd'),
       });
-      console.log('Profit data:', result);
-      setData(result || []);
+      // Subtract Ella guide sales from revenue (treated as separate category)
+      let adjusted = Array.isArray(result) ? result.slice() : [];
+      try {
+        const hist = await getSalesHistoryFilteredResult({
+          fromDate: startDate || '',
+          toDate: endDate || '',
+          query: '',
+        });
+        const ellaMap = new Map();
+        for (const r of hist.rows || []) {
+          if (r.isElla || String(r?.isElla) === 'true') {
+            const key = String(r.soldAt || '').slice(0, 10);
+            const amt = Number(r.lineTotalPhp || 0) || 0;
+            ellaMap.set(key, (ellaMap.get(key) || 0) + amt);
+          }
+        }
+        adjusted = adjusted.map((row) => {
+          const key = String(row.date || '').slice(0, 10);
+          const sub = Math.round(ellaMap.get(key) || 0);
+          const revenue = Math.max(0, Number(row.daily_revenue_php || 0) - sub);
+          const expense = Number(row.daily_expense_php || 0);
+          return {
+            ...row,
+            daily_revenue_php: revenue,
+            daily_profit_php: revenue - expense,
+          };
+        });
+        // Recompute cumulative profit in date ascending order
+        const asc = adjusted.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        let cum = 0;
+        const cumMap = new Map();
+        for (const r of asc) {
+          const profit = Number(r.daily_profit_php || 0) || 0;
+          cum += profit;
+          cumMap.set(String(r.date), cum);
+        }
+        adjusted = adjusted.map((r) => ({
+          ...r,
+          cumulative_profit_php: cumMap.get(String(r.date)) || 0,
+        }));
+      } catch (e) {
+        // If fetching history fails, fall back to raw result
+        void e;
+      }
+      setData(adjusted || []);
     } catch (err) {
       console.error('Error fetching profit data:', err);
       setError(err.message);

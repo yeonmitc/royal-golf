@@ -166,11 +166,13 @@ export async function checkoutCart(payload) {
   let cartItems = payload;
   let guideId = null;
   let isMrMoon = false;
+  let isPeter = false;
 
   if (!Array.isArray(payload) && payload?.items) {
     cartItems = payload.items;
     guideId = payload.guideId;
     isMrMoon = payload.isMrMoon;
+    isPeter = Boolean(payload.isPeter);
   }
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -235,7 +237,7 @@ export async function checkoutCart(payload) {
 
   // 1. Create a sale group for this transaction
   const saleGroupId = crypto.randomUUID();
-  const guideRate = guideId ? 0.1 : 0; // 10% commission if guide present
+  const guideRate = guideId ? (isPeter ? 0 : 0.1) : 0; // Peter has 0% commission
 
   // Create the group first (parent record)
   // We initialize totals to 0; finalize_sale_group will calculate them
@@ -264,8 +266,11 @@ export async function checkoutCart(payload) {
     const unitPriceOriginal =
       Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
 
-    // Apply Mr. Moon discount logic (Ceiling to nearest 100) if applicable
+    // Apply Mr. Moon/Peter discount logic (Ceiling to nearest 100) if applicable
     let calculatedPrice = unitPriceOriginal;
+    if (isPeter && unitPriceOriginal > 0) {
+      calculatedPrice = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
+    } else
     if (isMrMoon && unitPriceOriginal > 1000) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
     }
@@ -281,7 +286,7 @@ export async function checkoutCart(payload) {
 
     const unitPriceCharged = isExplicitlyFree
       ? 0
-      : isMrMoon
+      : (isPeter || isMrMoon)
         ? calculatedPrice
         : Number.isFinite(unitPriceChargedCandidate)
           ? unitPriceChargedCandidate
@@ -724,6 +729,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
       const isMrMoon = nameLower === 'mrmoon';
       const isElla = nameLower.includes('ella');
+      const isPeter = nameLower === 'peter';
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
 
       return {
@@ -748,10 +754,11 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         saleGroupId: r.sale_group_id,
         isMrMoon,
         isElla,
+        isPeter,
         // If Mr. Moon, commission is 0 (it's a discount). Otherwise 10%.
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
-          guideId && !isMrMoon && !isElla && !isFreeGift
+          guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift
             ? (isRefunded ? 0 : unit) * qtyN * 0.1
             : 0,
       };
@@ -761,7 +768,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
   const withMeta = withMetaRaw.map((r) => ({
     ...r,
-    commission: r.isMrMoon ? 0 : r.commission,
+    commission: r.isMrMoon || r.isPeter ? 0 : r.commission,
   }));
   const q = String(query || '').trim();
   if (!q) return withMeta;
@@ -928,8 +935,19 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     }
   }
 
-  const totalRevenue = analyzedRows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
-  const totalCommission = analyzedRows.reduce(
+  // Annotate rows and EXCLUDE Ella from all profit/revenue metrics
+  const withGuideFlags = analyzedRows.map((r) => {
+    const raw = r.guideId ? String(guideMap.get(String(r.guideId)) || '') : '';
+    const norm = raw.toLowerCase().replace(/[\s.]/g, '');
+    const isMrMoon = norm.includes('mrmoon');
+    const isElla = norm.includes('ella');
+    const isPeter = norm === 'peter';
+    return { ...r, isMrMoon, isElla, isPeter };
+  });
+  const rows = withGuideFlags.filter((r) => !r.isElla);
+
+  const totalRevenue = rows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
+  const totalCommission = rows.reduce(
     (sum, r) => sum + (Number(r.commission || 0) || 0),
     0
   );
@@ -939,20 +957,13 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   let ellaCommission = 0;
   // let ellaRevenue = 0;
   try {
-    analyzedRows.forEach((r) => {
-      const name = r.guideId ? String(guideMap.get(String(r.guideId)) || '').toLowerCase() : '';
-      const nameLower = name.replace(/[\s.]/g, '');
-      const isMrMoon = nameLower.includes('mrmoon');
-      const isElla = nameLower.includes('ella');
-      if (isMrMoon) {
+    rows.forEach((r) => {
+      if (r.isMrMoon) {
         mrMoonCommission += Number(r.commission || 0) || 0;
         mrMoonRevenue += Number(r.lineTotalPhp || 0) || 0;
         mrMoonListRevenue += (Number(r.listPrice || 0) || 0) * (Number(r.qty || 0) || 0);
       }
-      if (isElla) {
-        ellaCommission += Number(r.commission || 0) || 0;
-        // ellaRevenue += Number(r.lineTotalPhp || 0) || 0;
-      }
+      // rows excludes Ella entries by design
     });
   } catch {
     mrMoonCommission = 0;
@@ -963,7 +974,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   }
 
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
-  const transactionKeys = new Set(analyzedRows.map((r) => r.saleGroupId || String(r.soldAt || '')));
+  const transactionKeys = new Set(rows.map((r) => r.saleGroupId || String(r.soldAt || '')));
   const transactionCount = transactionKeys.size;
   const refundAmount = refundedRows.reduce(
     (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
@@ -973,7 +984,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const realTotalSales = totalRevenue - ellaCommission;
 
   const grossAmount =
-    nonRefundedRows.reduce(
+    rows.reduce(
       (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
       0
     ) - ellaCommission;
@@ -987,7 +998,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   const discountRate = 0.1;
 
-  const codesForCost = [...new Set(analyzedRows.map((r) => String(r.code || '').trim()))].filter(
+  const codesForCost = [...new Set(rows.map((r) => String(r.code || '').trim()))].filter(
     Boolean
   );
   let kpriceByCode = new Map();
@@ -1010,7 +1021,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     }
   }
 
-  const costAmount = analyzedRows.reduce((sum, r) => {
+  const costAmount = rows.reduce((sum, r) => {
     const code = String(r.code || '').trim();
     const kprice = kpriceByCode.get(code) ?? 0;
     const costUnitPhp = (Number(kprice || 0) || 0) / 25;
@@ -1049,7 +1060,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     return [...map.values()].sort((a, b) => b.revenue - a.revenue);
   }
 
-  const revenueRows = analyzedRows.filter(
+  const revenueRows = rows.filter(
     (r) => !r.freeGift && Number(r.unitPricePhp || 0) > 0 && Number(r.lineTotalPhp || 0) > 0
   );
   const byCategory = accumulate(
@@ -1068,7 +1079,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     (k) => findLabel('type', k)
   );
   const byColor = accumulate(
-    analyzedRows,
+    rows,
     (r) => {
       const label = String(r.color || '').trim();
       if (label) return `label:${label}`;
@@ -1095,13 +1106,13 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   // Fetch guide names for mapping
   const byGuide = accumulate(
-    analyzedRows.filter((r) => r.guideId),
+    rows.filter((r) => r.guideId && !r.isPeter),
     (r) => r.guideId,
-    (k) => guideMap.get(k) || 'Unknown Guide'
+    (k) => guideMap.get(String(k)) || 'Unknown Guide'
   );
 
   const skuMap = new Map();
-  for (const r of analyzedRows) {
+  for (const r of rows) {
     const key = String(r.code || '');
     if (!key) continue;
     const prev = skuMap.get(key) || { code: key, nameKo: r.nameKo, qty: 0, revenue: 0 };
@@ -1132,7 +1143,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const bestByCategory = [...bestByCategoryMap.values()].sort((a, b) => b.revenue - a.revenue);
 
   const bestColorAgg = new Map();
-  for (const r of analyzedRows) {
+  for (const r of rows) {
     const categoryCode = String(r.code || '').split('-')[0]?.[0] || '';
     if (!categoryCode) continue;
     const colorLabel =
@@ -1164,7 +1175,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   // Color totals grouped by Type
   const colorByTypeAgg = new Map();
-  for (const r of analyzedRows) {
+  for (const r of rows) {
     const typeCode = String(r.code || '').split('-')[1] || '';
     if (!typeCode) continue;
     const typeLabel = findLabel('type', typeCode);
@@ -1216,7 +1227,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const byHourQtyMap = new Map(
     Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }])
   );
-  for (const r of analyzedRows) {
+  for (const r of rows) {
     const dt = new Date(r.soldAt);
     const day = dt.getUTCDay();
     const hour = dt.getUTCHours();

@@ -31,12 +31,22 @@ export default function SellPage() {
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
 
-  const mrMoonGuide = (guides || []).find((g) => String(g.name || '').toLowerCase() === 'mr.moon');
+  const mrMoonGuide = (guides || []).find(
+    (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '') === 'mrmoon'
+  );
+  const peterGuide = (guides || []).find(
+    (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '') === 'peter'
+  );
   const isMrMoonSelected = guideId && mrMoonGuide && String(guideId) === String(mrMoonGuide.id);
+  const isPeterSelected = guideId && peterGuide && String(guideId) === String(peterGuide.id);
 
-  // Calculate item price with Mr. Moon discount logic
+  // Calculate item price with Mr. Moon (10%) or Peter (20%) discount logic
   const calculateItemPrice = (price) => {
     const p = Number(price || 0);
+    if (isPeterSelected && p > 0) {
+      // 20% discount, rounded up to nearest 100
+      return Math.ceil((p * 0.8) / 100) * 100;
+    }
     if (isMrMoonSelected && p > 1000) {
       // 10% discount, rounded up to nearest 100 (Ceiling)
       // e.g., 4900 -> 4410 -> 4500
@@ -68,12 +78,16 @@ export default function SellPage() {
         items: currentItems,
         guideId: currentGuideId,
         isMrMoon: isMrMoonSelected,
+        isPeter: isPeterSelected,
       });
 
       // Prepare receipt data with LOCAL calculation to match DB trigger
       const receiptItems = currentItems.map((item) => {
         const original = Number(item.unitPricePhp || item.price || 0);
         let finalPrice = original;
+        if (isPeterSelected && original > 0) {
+          finalPrice = Math.ceil((original * 0.8) / 100) * 100;
+        } else
         if (isMrMoonSelected && original > 1000) {
           finalPrice = Math.ceil((original * 0.9) / 100) * 100;
         }
