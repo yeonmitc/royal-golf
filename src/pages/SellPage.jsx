@@ -31,14 +31,13 @@ export default function SellPage() {
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
 
-  const mrMoonGuide = (guides || []).find(
-    (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '') === 'mrmoon'
-  );
-  const peterGuide = (guides || []).find(
-    (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '').includes('peter')
-  );
-  const isMrMoonSelected = guideId && mrMoonGuide && String(guideId) === String(mrMoonGuide.id);
-  const isPeterSelected = guideId && peterGuide && String(guideId) === String(peterGuide.id);
+  const selectedGuide = (guides || []).find((g) => String(g.id) === String(guideId));
+  const selectedGuideNameNorm = selectedGuide
+    ? String(selectedGuide.name || '').toLowerCase().replace(/[\s.]/g, '')
+    : '';
+
+  const isMrMoonSelected = selectedGuideNameNorm.includes('mrmoon');
+  const isPeterSelected = selectedGuideNameNorm.includes('peter');
 
   // Calculate item price with Mr. Moon (10%) or Peter (20%) discount logic
   const calculateItemPrice = (price) => {
@@ -49,7 +48,6 @@ export default function SellPage() {
     }
     if (isMrMoonSelected && p > 1000) {
       // 10% discount, rounded up to nearest 100 (Ceiling)
-      // e.g., 4900 -> 4410 -> 4500
       return Math.ceil((p * 0.9) / 100) * 100;
     }
     return p;
