@@ -727,9 +727,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const guideId = groupMap.get(r.sale_group_id) || null;
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
-      const isMrMoon = nameLower === 'mrmoon';
+      const isMrMoon = nameLower.includes('mrmoon');
       const isElla = nameLower.includes('ella');
-      const isPeter = nameLower === 'peter';
+      const isPeter = nameLower.includes('peter');
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
 
       return {
@@ -755,7 +755,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         isMrMoon,
         isElla,
         isPeter,
-        // If Mr. Moon, commission is 0 (it's a discount). Otherwise 10%.
+        // If Mr. Moon or Peter, commission is 0. Otherwise 10%.
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
           guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift
@@ -941,7 +941,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     const norm = raw.toLowerCase().replace(/[\s.]/g, '');
     const isMrMoon = norm.includes('mrmoon');
     const isElla = norm.includes('ella');
-    const isPeter = norm === 'peter';
+    const isPeter = norm.includes('peter');
     return { ...r, isMrMoon, isElla, isPeter };
   });
   const rows = withGuideFlags.filter((r) => !r.isElla);

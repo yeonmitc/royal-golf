@@ -35,7 +35,7 @@ export default function SellPage() {
     (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '') === 'mrmoon'
   );
   const peterGuide = (guides || []).find(
-    (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '') === 'peter'
+    (g) => String(g.name || '').toLowerCase().replace(/[\s.]/g, '').includes('peter')
   );
   const isMrMoonSelected = guideId && mrMoonGuide && String(guideId) === String(mrMoonGuide.id);
   const isPeterSelected = guideId && peterGuide && String(guideId) === String(peterGuide.id);

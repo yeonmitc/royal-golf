@@ -128,6 +128,17 @@ export default function SalesTable({
       .map((g) => String(g.id))
   );
 
+  const peterGuideIds = new Set(
+    (guides || [])
+      .filter((g) =>
+        String(g.name || '')
+          .toLowerCase()
+          .replace(/[\s.]/g, '')
+          .includes('peter')
+      )
+      .map((g) => String(g.id))
+  );
+
   const { totalQty, totalPrice, totalCommission } = visibleRows.reduce(
     (acc, row) => {
       const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
@@ -141,7 +152,8 @@ export default function SalesTable({
       const commission = Number(row.commission || 0);
       const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
       const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
-      const commissionForTotal = isRefunded || isMrMoon || isElla ? 0 : commission;
+      const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
+      const commissionForTotal = isRefunded || isMrMoon || isElla || isPeter ? 0 : commission;
       const lineTotalForTotal = finalUnit * qtyForTotal;
 
       return {
@@ -196,6 +208,7 @@ export default function SalesTable({
     const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
     const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
     const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
+    const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
     const isRental = row.code === 'GA-GC-RT-BK-01';
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
@@ -233,8 +246,34 @@ export default function SalesTable({
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <img src={ellaIcon} alt="Ella" style={{ width: 20, height: 20 }} />
         </div>
-      ) : !isMrMoon && commissionForTotal > 0 ? (
-        commissionForTotal.toLocaleString('en-US')
+      ) : isPeter ? (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            fontWeight: 'bold',
+            color: 'rgba(59, 130, 246, 0.8)',
+            fontSize: '0.75rem',
+           }}
+         >
+           20%
+         </div>
+       ) : isMrMoon ? (
+         <div
+           style={{
+             display: 'flex',
+             justifyContent: 'center',
+             alignItems: 'center',
+             fontWeight: 'bold',
+             color: 'var(--gold-soft)',
+             fontSize: '0.75rem',
+           }}
+         >
+           10%
+         </div>
+       ) : commissionForTotal > 0 ? (
+         commissionForTotal.toLocaleString('en-US')
       ) : (
         '-'
       ),
@@ -445,7 +484,9 @@ export default function SalesTable({
               : isRental
                 ? { backgroundColor: 'rgba(255, 165, 0, 0.2)', color: 'var(--text-main)' }
                 : row.guideId
-                  ? { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
+                  ? isPeter
+                    ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
+                    : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
                   : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
