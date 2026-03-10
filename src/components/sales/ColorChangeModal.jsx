@@ -1,12 +1,36 @@
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
+import { fetchCodePartByType } from '../../features/codes/codeApi';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
 
 export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) {
   const [selectedColor, setSelectedColor] = useState(saleItem?.color || '');
 
-  const colors = codePartsSeed.color || [];
+  // Fetch colors from DB, fallback to seed if empty or error
+  const { data: dbColors = [] } = useQuery({
+    queryKey: ['codeParts', 'color'],
+    queryFn: () => fetchCodePartByType('color'),
+    enabled: isOpen, // Only fetch when modal is open
+  });
+
+  // Merge DB colors with seed colors (or prefer DB colors)
+  // If DB has colors, use them. Otherwise use seed.
+  // Actually, let's combine them to be safe, or just use DB if available.
+  // The user said "I added colors to the DB", so DB is the source of truth.
+  // However, we should ensure we don't break if DB is empty.
+  const unsortedColors = dbColors.length > 0 ? dbColors : codePartsSeed.color || [];
+  const colors = [...unsortedColors].sort((a, b) => 
+    String(a.label || '').localeCompare(String(b.label || ''))
+  );
+
+  // Update selected color when saleItem changes
+  useEffect(() => {
+    if (isOpen && saleItem) {
+      setSelectedColor(saleItem.color || '');
+    }
+  }, [isOpen, saleItem]);
 
   const handleSave = () => {
     onSave(selectedColor);
@@ -70,7 +94,9 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                         ? 'linear-gradient(135deg, #0b0f36 0%, #6b21a8 40%, #ec4899 70%, #3b82f6 100%)'
                         : c.label === 'Extra'
                           ? 'linear-gradient(135deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #a855f7)'
-                          : undefined,
+                          : c.label === 'Military'
+                            ? 'radial-gradient(circle at 30% 40%, #5C6647 35%, transparent 36%), radial-gradient(circle at 80% 70%, #302E26 30%, transparent 31%), radial-gradient(circle at 70% 20%, #5C6647 20%, transparent 21%), #C5CBB2'
+                            : undefined,
                     backgroundColor:
                       c.label === 'Black'
                         ? '#000'
@@ -82,8 +108,8 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                               ? '#3b82f6'
                               : c.label === 'Green'
                                 ? '#22c55e'
-                                : c.label === 'Yellow'
-                                  ? '#eab308'
+                                : c.label === 'Yellow' || c.label === 'Yollow'
+                                  ? '#fed96aff'
                                   : c.label === 'Pink'
                                     ? '#ec4899'
                                     : c.label === 'Purple'
@@ -97,7 +123,7 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                                             : c.label === 'DarkBrown'
                                               ? '#471d07ff'
                                               : c.label === 'Gold'
-                                                ? '#ffd700'
+                                                ? '#d5bb26ff'
                                                 : c.label === 'Ivory'
                                                   ? '#fffff0'
                                                   : c.label === 'Navy'
@@ -119,11 +145,18 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
                                                                   : c.label === 'Oatmeal'
                                                                     ? '#e3dac3'
                                                                     : c.label === 'Transparent'
-                                                                      ? 'transparent'
-                                                                      : c.label.trim() === 'Mix' ||
-                                                                          c.label === 'Extra'
-                                                                        ? undefined
-                                                                        : 'transparent',
+                                                                        ? 'transparent'
+                                                                        : c.label === 'DarkGray'
+                                                                          ? '#333333'
+                                                                          : c.label === 'Skin'
+                                                                            ? '#f2bb90ff' // approximation for skin tone/apricot
+                                                                            : c.label === 'LightGray'
+                                                                              ? '#d1d5db'
+                                                                              : c.label.trim() === 'Mix' ||
+                                                                                  c.label === 'Extra' ||
+                                                                                  c.label === 'Military'
+                                                                                ? undefined
+                                                                                : 'transparent',
                   }}
                 />
                 <span style={{ fontSize: '12px' }}>{c.label}</span>
