@@ -21,9 +21,30 @@ export default function ColorChangeModal({ isOpen, onClose, saleItem, onSave }) 
   // The user said "I added colors to the DB", so DB is the source of truth.
   // However, we should ensure we don't break if DB is empty.
   const unsortedColors = dbColors.length > 0 ? dbColors : codePartsSeed.color || [];
-  const colors = [...unsortedColors].sort((a, b) => 
-    String(a.label || '').localeCompare(String(b.label || ''))
-  );
+  const norm = (s) => String(s || '').toLowerCase().replace(/[\s._-]/g, '');
+  const priority = new Map([
+    ['white', 0],
+    ['black', 1],
+    ['navy', 2],
+    ['beige', 3],
+    ['lightgray', 4],
+    ['darkgray', 5],
+  ]);
+  const lowest = new Map([
+    ['mix', 100],
+    ['military', 101],
+    ['transparent', 102],
+  ]);
+  const colors = [...unsortedColors].sort((a, b) => {
+    const al = String(a.label || '');
+    const bl = String(b.label || '');
+    const ak = norm(al);
+    const bk = norm(bl);
+    const ar = lowest.get(ak) ?? priority.get(ak) ?? 50;
+    const br = lowest.get(bk) ?? priority.get(bk) ?? 50;
+    if (ar !== br) return ar - br;
+    return al.localeCompare(bl);
+  });
 
   // Update selected color when saleItem changes
   useEffect(() => {

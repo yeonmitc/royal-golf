@@ -842,6 +842,7 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
             type="date"
             value={formData.expense_date}
             onChange={(e) => setFormData((p) => ({ ...p, expense_date: e.target.value }))}
+            onClick={(e) => e.target.showPicker && e.target.showPicker()}
             required
             containerStyle={{ marginBottom: 0 }}
           />
