@@ -15,6 +15,57 @@ import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient'
 
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
+const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
+
+function normSize(raw) {
+  const s = String(raw || '').trim();
+  const k = s.toLowerCase().replace(/\s+/g, '');
+  if (k === 's') return 'S';
+  if (k === 'm') return 'M';
+  if (k === 'l') return 'L';
+  if (k === 'xl') return 'XL';
+  if (k === '2xl') return '2XL';
+  if (k === '3xl') return '3XL';
+  if (k === 'free') return 'Free';
+  return s;
+}
+
+function sizesToCounts(sizes) {
+  const base = Object.fromEntries(SIZE_ORDER.map((k) => [k, 0]));
+  (sizes || []).forEach((s) => {
+    const k = normSize(s?.sizeDisplay ?? s?.size);
+    if (!SIZE_ORDER.includes(k)) return;
+    base[k] = Number(s?.stockQty ?? 0) || 0;
+  });
+  return base;
+}
+
+function buildSizeText(counts) {
+  const parts = SIZE_ORDER.map((k) => [k, Number(counts?.[k] ?? 0) || 0]).filter(([, v]) => v > 0);
+  return parts.map(([k, v]) => `${k}(${v})`).join(', ');
+}
+
+function parseMemo(memo) {
+  const m = String(memo || '').trim();
+  const mNorm = m.toLowerCase();
+  const reason =
+    mNorm.startsWith('[missing cnt]') || mNorm.startsWith('missing cnt')
+      ? 'missing_cnt'
+      : mNorm.startsWith('[size error]') || mNorm.startsWith('size error')
+        ? 'size_error'
+        : 'other';
+
+  const counts = {};
+  const re = /\b(2XL|3XL|XL|Free|S|M|L)\((\d+)\)/gi;
+  let match;
+  while ((match = re.exec(m))) {
+    const k = normSize(match[1]);
+    const v = Number(match[2] || 0) || 0;
+    if (SIZE_ORDER.includes(k)) counts[k] = v;
+  }
+  return { reason, otherText: reason === 'other' ? m : '', countsFromMemo: counts };
+}
+
 const StockCodeCell = ({ item, isError, setEditingError, setErrorModalOpen, showToast }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -34,7 +85,7 @@ const StockCodeCell = ({ item, isError, setEditingError, setErrorModalOpen, show
       onClick={async (e) => {
         e.stopPropagation(); // Prevent row click if any
         if (isError) {
-          setEditingError({ code: item.code, memo: item.error_memo || '' });
+          setEditingError({ code: item.code, memo: item.error_memo || '', sizes: item.sizes || [] });
           setErrorModalOpen(true);
         } else {
           try {
@@ -68,6 +119,9 @@ export default function CheckStockPage() {
   // Error Modal State
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [editingError, setEditingError] = useState(null); // { code, memo }
+  const [errorReason, setErrorReason] = useState('missing_cnt');
+  const [errorSizeCounts, setErrorSizeCounts] = useState({});
+  const [errorOtherReason, setErrorOtherReason] = useState('');
 
   const hasChanges = Object.keys(pendingChanges).length > 0;
 
@@ -324,16 +378,8 @@ export default function CheckStockPage() {
 
   const toggleError = (product) => {
     const code = product.code;
-    const currentStatus = pendingChanges[code] ?? product.check_status ?? 'unchecked';
-
-    // Always open modal to allow Edit/Delete
-    let memoToEdit = product.error_memo || '';
-    if (currentStatus !== 'error' && !memoToEdit) {
-      // Generate default memo from sizes for new errors
-      memoToEdit = (product.sizes || []).map((s) => `${s.sizeDisplay}(${s.stockQty})`).join(', ');
-    }
-
-    setEditingError({ code, memo: memoToEdit });
+    const memoToEdit = String(product.error_memo || '').trim();
+    setEditingError({ code, memo: memoToEdit, sizes: product.sizes || [] });
     setErrorModalOpen(true);
   };
 
@@ -345,12 +391,16 @@ export default function CheckStockPage() {
 
     // Optimistic update: Close modal and update local state immediately
     const targetCode = editingError.code;
+    const finalMemo =
+      errorReason === 'other'
+        ? String(errorOtherReason || '').trim()
+        : String(`${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`).trim();
     setPendingChanges((prev) => ({ ...prev, [targetCode]: 'error' }));
     setErrorModalOpen(false);
     setEditingError(null);
 
     // Fire and forget (but handle errors quietly or via toast if needed)
-    upsertErroStock(editingError, {
+    upsertErroStock({ code: targetCode, memo: finalMemo }, {
       onError: (err) => {
         console.error('Save failed:', err);
         // We might want to alert the user or revert the state here
@@ -407,16 +457,28 @@ export default function CheckStockPage() {
   };
 
   const textareaRef = useRef(null);
+  const firstSizeRef = useRef(null);
 
   // Focus textarea when error modal opens
   useEffect(() => {
     if (errorModalOpen && editingError) {
       // Small timeout to override Modal's default focus behavior
       const timer = setTimeout(() => {
-        textareaRef.current?.focus();
+        if (errorReason === 'other') textareaRef.current?.focus();
+        else firstSizeRef.current?.focus();
       }, 50);
       return () => clearTimeout(timer);
     }
+  }, [errorModalOpen, editingError, errorReason]);
+
+  useEffect(() => {
+    if (!errorModalOpen || !editingError) return;
+    const baseCounts = sizesToCounts(editingError?.sizes || []);
+    const parsed = parseMemo(editingError?.memo || '');
+    const merged = { ...baseCounts, ...(parsed.countsFromMemo || {}) };
+    setErrorSizeCounts(merged);
+    setErrorReason(parsed.reason);
+    setErrorOtherReason(parsed.otherText);
   }, [errorModalOpen, editingError]);
 
   if (isLoading) return <div className="p-4">Loading stock data...</div>;
@@ -844,28 +906,103 @@ export default function CheckStockPage() {
       >
         <div className="flex flex-col gap-4 min-w-[300px]">
           <div className="text-sm text-gray-400">
-            Code: <span className="font-mono text-[var(--gold)]">{editingError?.code}</span>
+            Code:{' '}
+            <span
+              className="font-mono text-[var(--gold)]"
+              style={{ cursor: 'pointer' }}
+              title="Click to copy"
+              onClick={async () => {
+                const codeToCopy = editingError?.code;
+                if (!codeToCopy) return;
+                try {
+                  await navigator.clipboard.writeText(codeToCopy);
+                  showToast(`Copied: ${codeToCopy}`, 300);
+                } catch (err) {
+                  console.error('Failed to copy!', err);
+                }
+              }}
+            >
+              {editingError?.code}
+            </span>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Error Memo (Sizes)
-            </label>
-            <textarea
-              ref={textareaRef}
-              className="w-full bg-[#0f0f15] border border-[var(--border-soft)] rounded p-2 text-sm text-white h-24 focus:ring-1 focus:ring-red-500 focus:border-red-500 placeholder-gray-600"
-              value={editingError?.memo || ''}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-              }}
-              onKeyUp={(e) => {
-                e.stopPropagation();
-              }}
-              onChange={(e) =>
-                setEditingError((prev) => ({ ...(prev ?? {}), memo: e.target.value }))
-              }
-              placeholder="Enter details about the stock error..."
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center', overflowX: 'auto' }}>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-300 whitespace-nowrap">
+                  <input
+                    type="radio"
+                    name="error_reason"
+                    value="missing_cnt"
+                    checked={errorReason === 'missing_cnt'}
+                    onChange={() => setErrorReason('missing_cnt')}
+                  />
+                  Missing cnt
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-300 whitespace-nowrap">
+                  <input
+                    type="radio"
+                    name="error_reason"
+                    value="size_error"
+                    checked={errorReason === 'size_error'}
+                    onChange={() => setErrorReason('size_error')}
+                  />
+                  Size error
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-300 whitespace-nowrap">
+                  <input
+                    type="radio"
+                    name="error_reason"
+                    value="other"
+                    checked={errorReason === 'other'}
+                    onChange={() => setErrorReason('other')}
+                  />
+                  Other reason
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+                {SIZE_ORDER.map((k, idx) => (
+                  <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 52 }}>
+                    <div className="text-[11px] text-gray-400 text-center">{k}</div>
+                    <input
+                      ref={idx === 0 ? firstSizeRef : undefined}
+                      type="number"
+                      min={0}
+                      value={errorSizeCounts?.[k] ?? 0}
+                      onChange={(e) => {
+                        const v = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0);
+                        setErrorSizeCounts((p) => ({ ...(p || {}), [k]: v }));
+                      }}
+                      className="bg-[#0f0f15] border border-[var(--border-soft)] rounded px-2 py-2 text-sm text-white text-center focus:ring-1 focus:ring-red-500 focus:border-red-500"
+                      style={{ width: 52 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-300 mb-1">Error Memo</label>
+              <textarea
+                ref={textareaRef}
+                className="w-full bg-[#0f0f15] border border-[var(--border-soft)] rounded p-2 text-sm text-white h-24 focus:ring-1 focus:ring-red-500 focus:border-red-500 placeholder-gray-600"
+                value={
+                  errorReason === 'other'
+                    ? errorOtherReason
+                    : String(`${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`).trim()
+                }
+                readOnly={errorReason !== 'other'}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onKeyUp={(e) => {
+                  e.stopPropagation();
+                }}
+                onChange={(e) => setErrorOtherReason(e.target.value)}
+                placeholder={errorReason === 'other' ? 'Enter other reason...' : ''}
+              />
+            </div>
           </div>
         </div>
       </Modal>

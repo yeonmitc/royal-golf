@@ -84,6 +84,8 @@ function normalizeProductRow(r) {
     salePricePhp: Number(r.salePricePhp ?? r.sale_price_php ?? r.sale_price ?? 0) || 0,
     totalStock: Number(r.totalStock ?? r.total_stock ?? 0) || 0,
     freeGift: Boolean(r.freeGift ?? r.free_gift ?? false),
+    archived: Boolean(r.archived ?? r.is_archived ?? false),
+    archivedAt: r.archivedAt ?? r.archived_at ?? null,
   };
 }
 
@@ -602,14 +604,27 @@ export async function deleteProduct(code) {
   requireAdminOrThrow();
   if (!code) return;
   const c = String(code).trim();
+  await sbDelete('erro_stock', {
+    filters: [{ column: 'code', op: 'eq', value: c }],
+    returning: 'minimal',
+  }).catch(() => null);
   await sbDelete('inventories', {
     filters: [{ column: 'code', op: 'eq', value: c }],
     returning: 'representation',
   });
-  await sbDelete('products', {
-    filters: [{ column: 'code', op: 'eq', value: c }],
-    returning: 'representation',
-  });
+  try {
+    await sbDelete('products', {
+      filters: [{ column: 'code', op: 'eq', value: c }],
+      returning: 'representation',
+    });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    const isSalesFk =
+      msg.includes('sales_code_fkey') ||
+      (msg.includes('violates foreign key constraint') && msg.includes('sales'));
+    if (isSalesFk) throw new Error('DELETE_BLOCKED_BY_SALES_FK');
+    throw e;
+  }
   const stillThere = await sbSelect('products', {
     select: 'code',
     filters: [{ column: 'code', op: 'eq', value: c }],

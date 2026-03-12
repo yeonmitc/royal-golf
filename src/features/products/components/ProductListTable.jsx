@@ -66,6 +66,10 @@ export default function ProductListTable({
         onError: (e) => {
           const msg = String(e?.message || e);
           if (msg === 'ADMIN_REQUIRED') openLoginModal();
+          if (msg === 'DELETE_BLOCKED_BY_SALES_FK') {
+            showToast('삭제 불가: 판매기록(sales)이 참조중입니다. Supabase에서 sales_code_fkey 삭제 SQL 실행하세요.');
+            return;
+          }
           showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Deletion failed: ${msg}`);
         },
       });
