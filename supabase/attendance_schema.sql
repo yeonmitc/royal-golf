@@ -1,7 +1,7 @@
 -- Create attendance_logs table
 CREATE TABLE IF NOT EXISTS public.attendance_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  employee_name TEXT NOT NULL CHECK (employee_name IN ('JESHEICA', 'BERLYN')),
+  employee_name TEXT NOT NULL,
   attendance_time TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
   shift_type TEXT NOT NULL CHECK (shift_type IN ('6AM', '9AM')),
   location JSONB, -- Stores { latitude, longitude, ... }

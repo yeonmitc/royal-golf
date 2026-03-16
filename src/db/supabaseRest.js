@@ -74,6 +74,8 @@ async function request(path, { method = 'GET', query, body, headers } = {}) {
     throw new Error('SUPABASE_CONFIG_MISSING');
   }
 
+  const url = String(path || '').startsWith('http') ? String(path) : buildUrl(path, query);
+
   const baseHeaders = {
     apikey: SUPABASE_ANON_KEY,
     ...(headers || {}),
@@ -83,7 +85,7 @@ async function request(path, { method = 'GET', query, body, headers } = {}) {
     baseHeaders['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(buildUrl(path, query), {
+  const res = await fetch(url, {
     method,
     headers: baseHeaders,
     body: body ? JSON.stringify(body) : undefined,
@@ -162,8 +164,9 @@ export async function sbUpsert(
 ) {
   const query = onConflict ? { on_conflict: onConflict } : undefined;
   const preferParts = [`return=${returning}`, ignoreDuplicates ? 'resolution=ignore-duplicates' : 'resolution=merge-duplicates'];
-  return request(buildUrl(`/rest/v1/${table}`, query), {
+  return request(`/rest/v1/${table}`, {
     method: 'POST',
+    query,
     headers: {
       Prefer: preferParts.join(','),
     },

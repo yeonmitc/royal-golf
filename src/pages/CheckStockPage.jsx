@@ -17,6 +17,10 @@ const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, 
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
 
+function emptyCounts() {
+  return Object.fromEntries(SIZE_ORDER.map((k) => [k, 0]));
+}
+
 function normSize(raw) {
   const s = String(raw || '').trim();
   const k = s.toLowerCase().replace(/\s+/g, '');
@@ -53,6 +57,8 @@ function parseMemo(memo) {
       ? 'missing_cnt'
       : mNorm.startsWith('[size error]') || mNorm.startsWith('size error')
         ? 'size_error'
+        : mNorm.startsWith('[no data]') || mNorm.startsWith('no data')
+          ? 'no_data'
         : 'other';
 
   const counts = {};
@@ -122,6 +128,7 @@ export default function CheckStockPage() {
   const [errorReason, setErrorReason] = useState('missing_cnt');
   const [errorSizeCounts, setErrorSizeCounts] = useState({});
   const [errorOtherReason, setErrorOtherReason] = useState('');
+  const baseErrorCountsRef = useRef(emptyCounts());
 
   const hasChanges = Object.keys(pendingChanges).length > 0;
 
@@ -394,7 +401,11 @@ export default function CheckStockPage() {
     const finalMemo =
       errorReason === 'other'
         ? String(errorOtherReason || '').trim()
-        : String(`${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`).trim();
+        : errorReason === 'no_data'
+          ? '[No Data]'
+          : String(
+              `${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`
+            ).trim();
     setPendingChanges((prev) => ({ ...prev, [targetCode]: 'error' }));
     setErrorModalOpen(false);
     setEditingError(null);
@@ -476,7 +487,8 @@ export default function CheckStockPage() {
     const baseCounts = sizesToCounts(editingError?.sizes || []);
     const parsed = parseMemo(editingError?.memo || '');
     const merged = { ...baseCounts, ...(parsed.countsFromMemo || {}) };
-    setErrorSizeCounts(merged);
+    baseErrorCountsRef.current = merged;
+    setErrorSizeCounts(parsed.reason === 'no_data' ? emptyCounts() : merged);
     setErrorReason(parsed.reason);
     setErrorOtherReason(parsed.otherText);
   }, [errorModalOpen, editingError]);
@@ -935,7 +947,11 @@ export default function CheckStockPage() {
                     name="error_reason"
                     value="missing_cnt"
                     checked={errorReason === 'missing_cnt'}
-                    onChange={() => setErrorReason('missing_cnt')}
+                    onChange={() => {
+                      setErrorReason('missing_cnt');
+                      setErrorOtherReason('');
+                      setErrorSizeCounts(baseErrorCountsRef.current || emptyCounts());
+                    }}
                   />
                   Missing cnt
                 </label>
@@ -945,7 +961,11 @@ export default function CheckStockPage() {
                     name="error_reason"
                     value="size_error"
                     checked={errorReason === 'size_error'}
-                    onChange={() => setErrorReason('size_error')}
+                    onChange={() => {
+                      setErrorReason('size_error');
+                      setErrorOtherReason('');
+                      setErrorSizeCounts(baseErrorCountsRef.current || emptyCounts());
+                    }}
                   />
                   Size error
                 </label>
@@ -955,9 +975,27 @@ export default function CheckStockPage() {
                     name="error_reason"
                     value="other"
                     checked={errorReason === 'other'}
-                    onChange={() => setErrorReason('other')}
+                    onChange={() => {
+                      setErrorReason('other');
+                      setErrorOtherReason('');
+                      setErrorSizeCounts(emptyCounts());
+                    }}
                   />
                   Other reason
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-300 whitespace-nowrap">
+                  <input
+                    type="radio"
+                    name="error_reason"
+                    value="no_data"
+                    checked={errorReason === 'no_data'}
+                    onChange={() => {
+                      setErrorReason('no_data');
+                      setErrorOtherReason('');
+                      setErrorSizeCounts(emptyCounts());
+                    }}
+                  />
+                  No data
                 </label>
               </div>
 
@@ -990,7 +1028,11 @@ export default function CheckStockPage() {
                 value={
                   errorReason === 'other'
                     ? errorOtherReason
-                    : String(`${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`).trim()
+                    : errorReason === 'no_data'
+                      ? '[No Data]'
+                      : String(
+                          `${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`
+                        ).trim()
                 }
                 readOnly={errorReason !== 'other'}
                 onKeyDown={(e) => {

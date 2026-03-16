@@ -15,6 +15,8 @@ export default function Modal({
   align = 'center',
   topOffset = 0,
   className = '',
+  hideCloseButton = false,
+  fullScreen = false,
 }) {
   const overlayRef = useRef(null);
   const containerRef = useRef(null);
@@ -123,6 +125,16 @@ export default function Modal({
           boxShadow: '0 24px 80px rgba(0,0,0,0.85)',
           padding: 16,
           ...(containerStyle || {}),
+          ...(fullScreen
+            ? {
+                width: '100vw',
+                height: '100vh',
+                maxWidth: '100vw',
+                maxHeight: '100vh',
+                borderRadius: 0,
+                overflow: 'auto',
+              }
+            : {}),
         }}
       >
         {title && (
@@ -137,26 +149,28 @@ export default function Modal({
             <div className="page-title" style={{ fontSize: '1.2rem' }}>
               {title}
             </div>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              style={{
-                background: '#b91c1c',
-                color: '#fff',
-                border: 'none',
-                width: 28,
-                height: 28,
-                borderRadius: 999,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 14,
-                boxShadow: '0 0 0 1px rgba(185,28,28,0.6)',
-              }}
-            >
-              ✕
-            </button>
+            {!hideCloseButton && (
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+                style={{
+                  background: '#b91c1c',
+                  color: '#fff',
+                  border: 'none',
+                  width: 28,
+                  height: 28,
+                  borderRadius: 999,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 14,
+                  boxShadow: '0 0 0 1px rgba(185,28,28,0.6)',
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
         )}
 

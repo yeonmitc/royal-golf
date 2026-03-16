@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
-import AdminLoginModal from '../admin/AdminLoginModal';
 import AttendanceModal from '../attendance/AttendanceModal';
+import AdminLoginModal from '../admin/AdminLoginModal';
+import ChecklistModal from '../checklist/ChecklistModal';
+import ChecklistEmployeePickerModal from '../checklist/ChecklistEmployeePickerModal';
 import Modal from './Modal';
 
 export default function Header() {
@@ -17,6 +19,9 @@ export default function Header() {
   const [logoHovered, setLogoHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [checklistPickerOpen, setChecklistPickerOpen] = useState(false);
+  const [checklistEmployeeNames, setChecklistEmployeeNames] = useState('');
 
   const navItems = [
     { to: '/inventory', label: 'product list', adminOnly: false },
@@ -206,6 +211,36 @@ export default function Header() {
                 <span>⏰</span> Stamp
               </button>
             )}
+            {!isMobile && (
+              <button
+                onClick={() => setChecklistPickerOpen(true)}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  borderRadius: 999,
+                  color: 'var(--text-main)',
+                  background: 'transparent',
+                  border: '1px solid var(--border-soft)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.2s ease',
+                  marginLeft: 4,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--gold)';
+                  e.currentTarget.style.color = 'var(--gold)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-soft)';
+                  e.currentTarget.style.color = 'var(--text-main)';
+                }}
+              >
+                <span>✅</span> Checklist
+              </button>
+            )}
           </div>
         </nav>
 
@@ -277,11 +312,49 @@ export default function Header() {
                 {item.label}
               </NavLink>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setChecklistPickerOpen(true);
+              }}
+              style={{
+                padding: '10px 14px',
+                fontSize: 16,
+                fontWeight: 700,
+                borderRadius: 12,
+                color: 'var(--text-main)',
+                background: '#101018',
+                textDecoration: 'none',
+                boxShadow: '0 0 0 1px var(--border-soft)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span>Checklist</span>
+              <span>✅</span>
+            </button>
           </div>
         </Modal>
       )}
       <AdminLoginModal open={loginModalOpen} onClose={closeLoginModal} />
       <AttendanceModal open={attendanceModalOpen} onClose={() => setAttendanceModalOpen(false)} />
+      <ChecklistEmployeePickerModal
+        open={checklistPickerOpen}
+        onClose={() => setChecklistPickerOpen(false)}
+        onSelect={(names) => {
+          setChecklistEmployeeNames(String(names || '').trim());
+          setChecklistPickerOpen(false);
+          setChecklistOpen(true);
+        }}
+      />
+      <ChecklistModal
+        open={checklistOpen}
+        onClose={() => setChecklistOpen(false)}
+        employeeNames={checklistEmployeeNames}
+      />
     </header>
   );
 }

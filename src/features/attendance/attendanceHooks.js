@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { checkDailyAttendance, fetchMonthlyAttendance, recordAttendance } from './attendanceApi';
+import {
+  checkDailyAttendance,
+  deleteAttendanceLog,
+  fetchMonthlyAttendance,
+  recordAttendance,
+  updateAttendanceLog,
+} from './attendanceApi';
 
 export function useCheckDailyAttendance(employeeName) {
   return useQuery({
@@ -26,6 +32,26 @@ export function useRecordAttendanceMutation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['attendance', 'daily', variables.employeeName] });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'monthly'] });
+    },
+  });
+}
+
+export function useUpdateAttendanceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateAttendanceLog,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+    },
+  });
+}
+
+export function useDeleteAttendanceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAttendanceLog,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
     },
   });
 }

@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useToast } from '../../context/ToastContext';
 import {
   useCheckDailyAttendance,
   useMonthlyAttendance,
   useRecordAttendanceMutation,
+  useDeleteAttendanceMutation,
+  useUpdateAttendanceMutation,
 } from '../../features/attendance/attendanceHooks';
+import { useEmployees } from '../../features/employees/employeesHooks';
+import { useAdminStore } from '../../store/adminStore';
 import Modal from '../common/Modal';
 
 // Helper to get score based on time diff with discrete buckets
@@ -45,11 +49,25 @@ const formatTimeForDisplay = (date) => {
   return timeStr;
 };
 
+const toLocalDateKey = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const toUtcDateKey = (d) => {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 const CurrentTimeDisplay = () => {
   const [now, setNow] = useState(new Date());
 
   // Update time every second
-  useState(() => {
+  useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -69,7 +87,7 @@ const CurrentTimeDisplay = () => {
   );
 };
 
-const AttendanceCalendar = () => {
+const AttendanceCalendar = ({ staffingMode }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -111,24 +129,16 @@ const AttendanceCalendar = () => {
       return logDateStr === dateStr;
     });
 
-    const jLog = dayLogs.find((l) => l.employee_name === 'JESHEICA');
-    const bLog = dayLogs.find((l) => l.employee_name === 'BERLYN');
-
-    // Default rule: if no attendance logs for the day (past days only), treat as 100
-    if (!jLog && !bLog) {
+    if (dayLogs.length === 0) {
       return { score: 100, isFuture, hasLog: true, details: [] };
     }
 
-    // We'll compute individual scores, then combine according to weekday rule
-    let jScoreVal = null;
-    let bScoreVal = null;
-    const details = [];
+    const sorted = [...dayLogs].sort(
+      (a, b) => new Date(a.attendance_time).getTime() - new Date(b.attendance_time).getTime()
+    );
 
-    // ... scoring logic ...
-    // Jesheica (50%)
-    if (jLog) {
-      // Parse Local-as-UTC
-      const stored = new Date(jLog.attendance_time);
+    const details = sorted.map((l) => {
+      const stored = new Date(l.attendance_time);
       const checkTime = new Date(
         stored.getUTCFullYear(),
         stored.getUTCMonth(),
@@ -138,74 +148,38 @@ const AttendanceCalendar = () => {
       );
 
       const target = new Date(checkTime);
-      if (jLog.shift_type === '6AM') target.setHours(6, 0, 0, 0);
+      if (l.shift_type === '6AM') target.setHours(6, 0, 0, 0);
       else target.setHours(9, 0, 0, 0);
 
       const score = getPunctualityScore(target, checkTime);
-      jScoreVal = score;
-
       const diffMs = checkTime - target;
       const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
       const timeStr = formatTimeForDisplay(checkTime);
 
-      details.push({
-        name: 'JESHEICA',
+      return {
+        id: l.id,
+        name: String(l.employee_name || '').trim(),
         score,
         lateMins,
         time: timeStr,
-      });
+        shiftType: l.shift_type,
+      };
+    });
+
+    const scores = details.map((d) => Number(d.score ?? 0) || 0);
+    let finalScore = 100;
+    if (staffingMode === 'one') {
+      finalScore = scores.length > 0 ? scores[0] : 100;
     } else {
-      details.push({ name: 'JESHEICA', score: 0, lateMins: 'N/A', time: 'No Show' });
+      if (scores.length > 0) {
+        const avgDeficit =
+          scores.reduce((sum, s) => sum + (100 - (Number(s) || 0)), 0) / scores.length;
+        finalScore = 100 - avgDeficit;
+      } else {
+        finalScore = 100;
+      }
     }
 
-    // Berlin (50%)
-    if (bLog) {
-      // Parse Local-as-UTC
-      const stored = new Date(bLog.attendance_time);
-      const checkTime = new Date(
-        stored.getUTCFullYear(),
-        stored.getUTCMonth(),
-        stored.getUTCDate(),
-        stored.getUTCHours(),
-        stored.getUTCMinutes()
-      );
-
-      const target = new Date(checkTime);
-      if (bLog.shift_type === '6AM') target.setHours(6, 0, 0, 0);
-      else target.setHours(9, 0, 0, 0);
-
-      const score = getPunctualityScore(target, checkTime);
-      bScoreVal = score;
-
-      const diffMs = checkTime - target;
-      const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
-      const timeStr = formatTimeForDisplay(checkTime);
-
-      details.push({
-        name: 'BEN',
-        score,
-        lateMins,
-        time: timeStr,
-      });
-    } else {
-      details.push({ name: 'BERLYN', score: 0, lateMins: 'N/A', time: 'No Show' });
-    }
-
-    // Combine scores
-    const dow = new Date(year, month - 1, day).getDay(); // 0 Sun, 1 Mon, 2 Tue
-    const isMonTue = dow === 1 || dow === 2;
-    let finalScore;
-    if (isMonTue) {
-      if (jScoreVal != null && bScoreVal == null) finalScore = jScoreVal;
-      else if (bScoreVal != null && jScoreVal == null) finalScore = bScoreVal;
-      else if (jScoreVal != null && bScoreVal != null) finalScore = (jScoreVal + bScoreVal) / 2;
-      else finalScore = 100;
-    } else {
-      // Default rule from earlier: start at 100 and subtract half deficits
-      finalScore = 100;
-      if (jScoreVal != null) finalScore -= Math.max(0, 100 - jScoreVal) / 2;
-      if (bScoreVal != null) finalScore -= Math.max(0, 100 - bScoreVal) / 2;
-    }
     finalScore = Math.max(0, Math.min(100, finalScore));
     return { score: Math.round(finalScore), isFuture, hasLog: true, details };
   };
@@ -230,6 +204,7 @@ const AttendanceCalendar = () => {
             fontSize: '3rem',
             cursor: 'pointer',
             lineHeight: '1',
+            marginBottom: 2,
           }}
         >
           &lt;
@@ -246,6 +221,7 @@ const AttendanceCalendar = () => {
             fontSize: '3rem',
             cursor: 'pointer',
             lineHeight: '1',
+            marginBottom: 2,
           }}
         >
           &gt;
@@ -366,8 +342,7 @@ const AttendanceCalendar = () => {
             <div className="text-sm font-medium text-gray-200 whitespace-nowrap">
               {selectedDateLogs.details
                 .map((d) => {
-                  const shortName = d.name.charAt(0);
-                  return `${shortName} : ${d.time}`;
+                  return `${d.name} : ${d.time}`;
                 })
                 .join(' / ')}
             </div>
@@ -385,7 +360,11 @@ const AttendanceCalendar = () => {
 export default function AttendanceModal({ open, onClose }) {
   const [selectedShift, setSelectedShift] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [staffingMode, setStaffingMode] = useState('one');
   const { showToast } = useToast();
+  const isAdmin = useAdminStore((s) => s.isAuthorized());
+  const openLoginModal = useAdminStore((s) => s.openLoginModal);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -414,13 +393,31 @@ export default function AttendanceModal({ open, onClose }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, [open, onClose, showToast]);
 
-  // Check attendance status for both employees
-  const { data: jesheicaLog, isLoading: jLoading } = useCheckDailyAttendance('JESHEICA');
-  const { data: berlynLog, isLoading: bLoading } = useCheckDailyAttendance('BERLYN');
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+
+  const { data: monthLogs = [] } = useMonthlyAttendance(year, month);
+  const { data: employees = [] } = useEmployees();
+
+  const staffOptions = (() => {
+    const emp = (employees || [])
+      .map((e) => String(e?.english_name || '').trim())
+      .filter(Boolean);
+    if (emp.length > 0) return emp;
+    return Array.from(
+      new Set((monthLogs || []).map((l) => String(l?.employee_name || '').trim()).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+  })();
+
+  const { data: selectedStaffLog, isLoading: staffCheckLoading } = useCheckDailyAttendance(
+    selectedStaff || ''
+  );
 
   const { mutate: recordAttendance, isPending } = useRecordAttendanceMutation();
+  const { mutate: updateAttendance, isPending: isUpdating } = useUpdateAttendanceMutation();
+  const { mutate: deleteAttendance, isPending: isDeleting } = useDeleteAttendanceMutation();
 
-  // Get time strings for buttons
   const parseLogTime = (log) => {
     if (!log) return null;
     const storedDate = new Date(log.attendance_time);
@@ -434,11 +431,8 @@ export default function AttendanceModal({ open, onClose }) {
     );
   };
 
-  const jDate = parseLogTime(jesheicaLog);
-  const bDate = parseLogTime(berlynLog);
-
-  const jTime = formatTimeForDisplay(jDate);
-  const bTime = formatTimeForDisplay(bDate);
+  const toTimeInput = (d) =>
+    d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
 
   const handleShiftChange = (shift) => {
     if (selectedShift === shift) {
@@ -449,73 +443,173 @@ export default function AttendanceModal({ open, onClose }) {
   };
 
   const handleStaffChange = (staff) => {
-    // If already checked in, don't allow selection (or maybe just show status)
-    if (staff === 'JESHEICA' && jesheicaLog) return;
-    if (staff === 'BERLYN' && berlynLog) return;
-
-    if (selectedStaff === staff) {
-      setSelectedStaff(null);
-    } else {
-      setSelectedStaff(staff);
-    }
+    const next = String(staff || '').trim();
+    if (!next) return;
+    if (selectedStaff === next) setSelectedStaff(null);
+    else setSelectedStaff(next);
   };
 
-  const handleSave = () => {
-    if (!selectedShift) {
-      showToast('Please select a shift time.');
+  useEffect(() => {
+    if (!open) return;
+    if (!selectedShift || !selectedStaff) return;
+    if (savingRef.current) return;
+    if (isPending) return;
+    if (staffCheckLoading) return;
+    if (selectedStaffLog) {
+      const d = parseLogTime(selectedStaffLog);
+      showToast(`Already checked: ${selectedStaff} (${formatTimeForDisplay(d)})`);
+      setSelectedStaff(null);
+      setSelectedShift(null);
+      savingRef.current = false;
       return;
     }
-    if (!selectedStaff) {
-      showToast('Please select a staff member.');
-      return;
-    }
+    savingRef.current = true;
 
-    if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser.');
-      return;
-    }
+    const now = new Date();
+    const shiftStart = new Date(now);
+    if (selectedShift === '6AM') shiftStart.setHours(6, 0, 0, 0);
+    else shiftStart.setHours(9, 0, 0, 0);
+    const lateMins = Math.max(0, Math.floor((now.getTime() - shiftStart.getTime()) / 60000));
+    const isTardy = lateMins >= 15;
 
-    // Request location
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        const location = { latitude, longitude };
+    const finish = (location) => {
+      recordAttendance(
+        {
+          employeeName: selectedStaff,
+          shiftType: selectedShift,
+          location: location || {},
+          isTardy,
+          attendanceTime: now,
+        },
+        {
+          onSuccess: (res) => {
+            showToast(`${selectedStaff} checked in successfully!`);
+            setSelectedStaff(null);
+            setSelectedShift(null);
+            savingRef.current = false;
+            onClose();
 
-        // Tardiness check logic
-        const now = new Date();
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-
-        let isTardy = false;
-        if (selectedShift === '6AM') {
-          if (hours > 6 || (hours === 6 && minutes >= 15)) {
-            isTardy = true;
-          }
-        } else if (selectedShift === '9AM') {
-          if (hours > 9 || (hours === 9 && minutes >= 15)) {
-            isTardy = true;
-          }
+            const id = Array.isArray(res) ? res?.[0]?.id : res?.id;
+            if (!id) return;
+            if (!location || !location.latitude) return;
+            updateAttendance({ id, location }, { onError: () => null });
+          },
+          onError: (err) => {
+            savingRef.current = false;
+            showToast(err?.message || 'Failed to check in.');
+          },
         }
+      );
+    };
 
-        recordAttendance(
-          { employeeName: selectedStaff, shiftType: selectedShift, location, isTardy },
-          {
-            onSuccess: () => {
-              showToast(`${selectedStaff} checked in successfully!`);
-              // Reset selection
-              setSelectedStaff(null);
-              setSelectedShift(null);
-              onClose(); // Close modal on success
-            },
-            onError: (err) => {
-              showToast(err.message || 'Failed to check in.');
-            },
-          }
+    if (!navigator.geolocation || !navigator.permissions?.query) {
+      finish(null);
+      return;
+    }
+
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((perm) => {
+        if (perm?.state !== 'granted') {
+          finish(null);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            finish({ latitude, longitude });
+          },
+          () => finish(null),
+          { enableHighAccuracy: false, timeout: 1200, maximumAge: 5 * 60 * 1000 }
         );
-      },
-      (error) => {
-        showToast('Unable to retrieve your location. Please allow location access.');
-        console.error(error);
+      })
+      .catch(() => finish(null));
+  }, [
+    open,
+    onClose,
+    recordAttendance,
+    selectedShift,
+    selectedStaff,
+    showToast,
+    isPending,
+    updateAttendance,
+    staffCheckLoading,
+    selectedStaffLog,
+  ]);
+
+  const [adminDate, setAdminDate] = useState(() => toLocalDateKey(today));
+  const adminLogs = (monthLogs || []).filter((l) => {
+    const stored = new Date(l.attendance_time);
+    return toUtcDateKey(stored) === adminDate;
+  });
+
+  const [adminLogId, setAdminLogId] = useState('');
+  const [adminShiftType, setAdminShiftType] = useState('6AM');
+  const [adminTimeStr, setAdminTimeStr] = useState('06:00');
+
+  useEffect(() => {
+    if (!open) return;
+    if (!isAdmin) return;
+    if (adminLogId && adminLogs.some((l) => l.id === adminLogId)) return;
+    const first = adminLogs?.[0];
+    if (!first) return;
+    setAdminLogId(first.id);
+  }, [open, isAdmin, adminDate, adminLogs, adminLogId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const row = adminLogs.find((l) => l.id === adminLogId);
+    if (!row) return;
+    setAdminShiftType(String(row.shift_type || '6AM'));
+    const d = parseLogTime(row);
+    setAdminTimeStr(toTimeInput(d) || (row.shift_type === '9AM' ? '09:00' : '06:00'));
+  }, [isAdmin, adminLogId, adminLogs]);
+
+  const applyAdminEdit = () => {
+    if (!isAdmin) {
+      openLoginModal();
+      return;
+    }
+    if (!adminLogId) return;
+    const row = adminLogs.find((l) => l.id === adminLogId);
+    const name = String(row?.employee_name || '').trim();
+    if (!name) return;
+    const [hh, mm] = String(adminTimeStr || '').split(':');
+    const h = Math.min(23, Math.max(0, Number(hh) || 0));
+    const m = Math.min(59, Math.max(0, Number(mm) || 0));
+    const base = new Date(`${adminDate}T00:00:00`);
+    base.setHours(h, m, 0, 0);
+
+    updateAttendance(
+      { id: adminLogId, employeeName: name, shiftType: adminShiftType, attendanceTime: base },
+      {
+        onSuccess: () => {
+          showToast('Attendance updated.');
+        },
+        onError: (err) => {
+          showToast(err?.message || 'Failed to update attendance.');
+        },
+      }
+    );
+  };
+
+  const deleteAdminLog = () => {
+    if (!isAdmin) {
+      openLoginModal();
+      return;
+    }
+    if (!adminLogId) return;
+    if (!window.confirm('Delete this attendance record?')) return;
+    deleteAttendance(
+      { id: adminLogId },
+      {
+        onSuccess: () => {
+          showToast('Attendance deleted.');
+          setAdminLogId('');
+        },
+        onError: (err) => {
+          showToast(err?.message || 'Failed to delete attendance.');
+        },
       }
     );
   };
@@ -545,7 +639,55 @@ export default function AttendanceModal({ open, onClose }) {
     >
       <div className="flex flex-col items-center gap-6 w-fit mx-auto text-center">
         {/* Attendance Calendar (Top) */}
-        <AttendanceCalendar />
+        <div className="flex flex-col items-center gap-3">
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setStaffingMode('one')}
+              style={{
+                height: 44,
+                width: 180,
+                borderRadius: 22,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: staffingMode === 'one' ? '#FACC15' : 'rgba(255,255,255,0.10)',
+                color: staffingMode === 'one' ? '#000' : '#fff',
+                fontWeight: 900,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                marginBottom: 2,
+              }}
+            >
+              One person
+            </button>
+            <button
+              type="button"
+              onClick={() => setStaffingMode('two')}
+              style={{
+                height: 44,
+                width: 180,
+                borderRadius: 22,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: staffingMode === 'two' ? '#FACC15' : 'rgba(255,255,255,0.10)',
+                color: staffingMode === 'two' ? '#000' : '#fff',
+                fontWeight: 900,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                marginBottom: 2,
+              }}
+            >
+              Two person
+            </button>
+          </div>
+          <AttendanceCalendar staffingMode={staffingMode} />
+        </div>
 
         <div className="flex flex-col gap-4 w-fit items-center justify-center text-center mx-auto">
           <CurrentTimeDisplay />
@@ -584,6 +726,7 @@ export default function AttendanceModal({ open, onClose }) {
                 border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '30px',
                 cursor: 'pointer',
+                marginBottom: 2,
               }}
             >
               6 AM
@@ -609,122 +752,202 @@ export default function AttendanceModal({ open, onClose }) {
                 border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '30px',
                 cursor: 'pointer',
+                marginBottom: 2,
               }}
             >
               9 AM
             </button>
 
-            {/* JESHEICA Button */}
-            <button
-              onClick={() => handleStaffChange('JESHEICA')}
-              disabled={!!jesheicaLog || isPending || jLoading}
-              className={`
-                flex items-center justify-center font-black transition-all duration-300 transform relative overflow-hidden
-                ${
-                  jesheicaLog
-                    ? 'text-white cursor-default shadow-none opacity-80'
-                    : selectedStaff === 'JESHEICA'
-                      ? 'text-white scale-105 ring-4 ring-orange-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(249,115,22,0.5)]'
-                      : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
-                }
-              `}
-              style={{
-                height: '60px',
-                fontSize: jesheicaLog ? '1.2rem' : '1.5rem',
-                backgroundColor: jesheicaLog
-                  ? '#22c55e'
-                  : selectedStaff === 'JESHEICA'
-                    ? '#F97316'
-                    : 'rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
-                width: '100%',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '30px',
-                cursor: 'pointer',
-              }}
-            >
-              {jesheicaLog ? (
-                <div className="text-center leading-tight">
-                  JESHEICA
-                  <br />
-                  <span className="text-sm font-medium opacity-90">{jTime}</span>
-                </div>
-              ) : (
-                'JESHEICA'
-              )}
-            </button>
+          </div>
 
-            {/* BERLYN Button */}
-            <button
-              onClick={() => handleStaffChange('BERLYN')}
-              disabled={!!berlynLog || isPending || bLoading}
-              className={`
-                flex items-center justify-center font-black transition-all duration-300 transform relative overflow-hidden
-                ${
-                  berlynLog
-                    ? 'text-white cursor-default shadow-none opacity-80'
-                    : selectedStaff === 'BERLYN'
-                      ? 'text-white scale-105 ring-4 ring-orange-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(249,115,22,0.5)]'
-                      : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
-                }
-              `}
-              style={{
-                height: '60px',
-                fontSize: berlynLog ? '1.2rem' : '1.5rem',
-                backgroundColor: berlynLog
-                  ? '#22c55e'
-                  : selectedStaff === 'BERLYN'
-                    ? '#F97316'
-                    : 'rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
-                width: '100%',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '30px',
-                cursor: 'pointer',
-              }}
-            >
-              {berlynLog ? (
-                <div className="text-center leading-tight">
-                  BERLYN
-                  <br />
-                  <span className="text-sm font-medium opacity-90">{bTime}</span>
-                </div>
-              ) : (
-                'BERLYN'
-              )}
-            </button>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 10,
+              justifyContent: 'center',
+              alignItems: 'center',
+              width: '100%',
+              maxWidth: 380,
+            }}
+          >
+            {staffOptions.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => handleStaffChange(name)}
+                disabled={isPending || staffCheckLoading}
+                style={{
+                  height: '60px',
+                  fontSize: '1.5rem',
+                  borderRadius: '30px',
+                  border: '1px solid rgba(255,255,255,0.20)',
+                  background:
+                    selectedStaff === name ? '#F97316' : 'rgba(255, 255, 255, 0.10)',
+                  color: 'white',
+                  fontWeight: 900,
+                  cursor: isPending ? 'not-allowed' : 'pointer',
+                  opacity: isPending ? 0.7 : 1,
+                  padding: '0 22px',
+                  marginBottom: 2,
+                }}
+              >
+                {name}
+              </button>
+            ))}
           </div>
 
           <div className="text-red-300 text-lg font-bold bg-red-900/40 px-6 py-2 rounded-full border border-red-500/30 text-center w-fit mx-auto shadow-lg">
             ⚠️ Attendance score will be 0 if late by more than 15 minutes.
           </div>
 
-          {/* SAVE Button */}
-          <button
-            onClick={handleSave}
-            disabled={!selectedShift || !selectedStaff || isPending}
-            className={`
-                w-full mt-4 font-black tracking-widest uppercase transition-all duration-300
-                ${
-                  !selectedShift || !selectedStaff
-                    ? 'text-gray-400 cursor-not-allowed shadow-none bg-black/20'
-                    : 'text-white bg-[#10B981] hover:bg-white hover:text-[#10B981] hover:scale-[1.02] shadow-[0_10px_30px_rgba(16,185,129,0.4)] hover:shadow-[0_15px_35px_rgba(16,185,129,0.6)] active:scale-95'
-                }
-              `}
-            style={{
-              height: '60px',
-              fontSize: '1.5rem',
-              fontWeight: '900',
-              maxWidth: '100%',
-              margin: '20px auto 5px auto',
-              border: !selectedShift || !selectedStaff ? '1px solid rgba(255,255,255,0.1)' : 'none',
-              borderRadius: '30px',
-              cursor: !selectedShift || !selectedStaff ? 'not-allowed' : 'pointer',
-              display: 'block', // Ensure block display for margin auto to work
-            }}
-          >
-            {isPending ? 'Saving...' : 'SAVE ATTENDANCE'}
-          </button>
+          {isPending && (
+            <div className="text-white/80 text-sm font-bold mt-2">Saving…</div>
+          )}
+
+          {isAdmin && (
+            <div
+              className="mt-4 w-full"
+              style={{
+                maxWidth: 380,
+                background: 'rgba(0,0,0,0.25)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 18,
+                padding: 14,
+              }}
+            >
+              <div className="text-white font-black tracking-widest uppercase text-sm mb-3">
+                Admin Edit
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <input
+                  type="date"
+                  value={adminDate}
+                  onChange={(e) => setAdminDate(e.target.value)}
+                  style={{
+                    height: 40,
+                    borderRadius: 12,
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: 'white',
+                    padding: '0 10px',
+                    fontWeight: 800,
+                  }}
+                />
+                <select
+                  value={adminLogId}
+                  onChange={(e) => setAdminLogId(e.target.value)}
+                  style={{
+                    height: 40,
+                    borderRadius: 12,
+                    background: '#ffffff',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#000000',
+                    padding: '0 10px',
+                    fontWeight: 800,
+                  }}
+                >
+                  <option value="" style={{ color: '#000000', background: '#ffffff' }}>
+                    Select log
+                  </option>
+                  {adminLogs.map((l) => {
+                    const d = parseLogTime(l);
+                    const t = formatTimeForDisplay(d) || '';
+                    const n = String(l.employee_name || '').trim();
+                    return (
+                      <option key={l.id} value={l.id} style={{ color: '#000000', background: '#ffffff' }}>
+                        {n} {t}
+                      </option>
+                    );
+                  })}
+                </select>
+                <input
+                  type="time"
+                  value={adminTimeStr}
+                  onChange={(e) => setAdminTimeStr(e.target.value)}
+                  style={{
+                    height: 40,
+                    borderRadius: 12,
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: 'white',
+                    padding: '0 10px',
+                    fontWeight: 800,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setAdminShiftType('6AM')}
+                  style={{
+                    height: 40,
+                    borderRadius: 12,
+                    background: adminShiftType === '6AM' ? '#FACC15' : 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: adminShiftType === '6AM' ? '#000' : '#fff',
+                    fontWeight: 900,
+                    marginBottom: 2,
+                  }}
+                >
+                  6AM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdminShiftType('9AM')}
+                  style={{
+                    height: 40,
+                    borderRadius: 12,
+                    background: adminShiftType === '9AM' ? '#FACC15' : 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: adminShiftType === '9AM' ? '#000' : '#fff',
+                    fontWeight: 900,
+                    marginBottom: 2,
+                  }}
+                >
+                  9AM
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={applyAdminEdit}
+                  disabled={isUpdating || !adminLogId}
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 14,
+                    background: isUpdating ? 'rgba(59,130,246,0.45)' : '#2563eb',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    color: 'white',
+                    fontWeight: 900,
+                    cursor: isUpdating ? 'not-allowed' : 'pointer',
+                    opacity: adminLogId ? 1 : 0.6,
+                    marginBottom: 2,
+                  }}
+                >
+                  {isUpdating ? 'Updating…' : 'Update'}
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteAdminLog}
+                  disabled={isDeleting || !adminLogId}
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 14,
+                    background: isDeleting ? 'rgba(239,68,68,0.45)' : '#ef4444',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    color: 'white',
+                    fontWeight: 900,
+                    cursor: isDeleting ? 'not-allowed' : 'pointer',
+                    opacity: adminLogId ? 1 : 0.6,
+                    marginBottom: 2,
+                  }}
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Modal>
