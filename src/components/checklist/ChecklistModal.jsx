@@ -528,7 +528,8 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
                 key={idx}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '44px 1fr auto',
+                  gridTemplateColumns: isMobile ? '44px 1fr' : '44px 1fr auto',
+                  gridTemplateRows: isMobile ? 'auto auto' : 'auto',
                   alignItems: 'center',
                   columnGap: 12,
                   background: checked ? 'rgba(250,204,21,0.10)' : 'rgba(255,255,255,0.05)',
@@ -562,8 +563,8 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
                 <div
                   style={{
                     color: checked ? 'rgba(255,255,255,0.65)' : 'var(--text-main)',
-                    fontSize: 15,
-                    lineHeight: 1.35,
+                    fontSize: isMobile ? 16 : 15,
+                    lineHeight: isMobile ? 1.4 : 1.35,
                     textAlign: 'left',
                     textDecoration: checked ? 'line-through' : 'none',
                     textDecorationThickness: checked ? '2px' : undefined,
@@ -575,12 +576,15 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
 
                 <div
                   style={{
-                    minWidth: 160,
-                    textAlign: 'right',
+                    gridColumn: isMobile ? '2 / -1' : 'auto',
+                    gridRow: isMobile ? 2 : 'auto',
+                    justifySelf: isMobile ? 'start' : 'end',
+                    marginTop: isMobile ? 6 : 0,
+                    textAlign: isMobile ? 'left' : 'right',
                     color: checked ? '#FACC15' : 'transparent',
                     fontSize: 12,
                     whiteSpace: 'nowrap',
-                    paddingLeft: 10,
+                    paddingLeft: isMobile ? 0 : 10,
                   }}
                 >
                   {checked ? `${meta?.by || employeeKey} : ${meta?.time || ''}` : '-'}

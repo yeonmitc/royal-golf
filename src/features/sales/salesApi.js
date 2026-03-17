@@ -582,7 +582,12 @@ export async function getSalesHistoryFilteredResult({
   return { hasAnySales, rows };
 }
 
-export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
+export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onSummary, mode = 'full' } = {}) {
+  const report =
+    typeof onProgress === 'function'
+      ? (pct, label) => onProgress({ pct, label })
+      : () => {};
+  report(10, '판매 데이터 조회 중…');
   const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' });
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
@@ -600,7 +605,9 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
         })
       : refundsAll;
   if (!rows.length) {
+    report(100, '완료');
     return {
+      __partial: false,
       summary: {
         grossAmount: 0,
         netAmount: 0,
@@ -631,6 +638,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     };
   }
 
+  report(60, '요약 계산 중…');
   const totalRevenue = rows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
   const saleIds = [...new Set(rows.map((r) => r.saleId))];
   const transactionCount = saleIds.length;
@@ -660,6 +668,47 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     refundCount,
     refundAmount,
   };
+
+  if (typeof onSummary === 'function') {
+    onSummary({
+      __partial: true,
+      summary,
+      best: [],
+      worst: [],
+      sku: [],
+      byCategory: [],
+      byBrand: [],
+      byGender: [],
+      bySize: [],
+      byColor: [],
+      bestByCategory: [],
+      bestColorByCategory: [],
+      discountShare: { discountedTransactions: 0, totalTransactions: transactionCount },
+      weeklyRevenue: [],
+      monthlyRevenue: [],
+    });
+  }
+
+  if (String(mode || 'full').toLowerCase() === 'summary') {
+    report(100, '완료');
+    return {
+      __partial: false,
+      summary,
+      best: [],
+      worst: [],
+      sku: [],
+      byCategory: [],
+      byBrand: [],
+      byGender: [],
+      bySize: [],
+      byColor: [],
+      bestByCategory: [],
+      bestColorByCategory: [],
+      discountShare: { discountedTransactions: 0, totalTransactions: transactionCount },
+      weeklyRevenue: [],
+      monthlyRevenue: [],
+    };
+  }
 
   const byCode = new Map();
   for (const r of rows) {
@@ -848,7 +897,9 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const bestWeekday = byWeekdayQty.slice().sort((a, b) => b.qty - a.qty)[0] || { key: '', qty: 0 };
   const bestHour = byHourQty.slice().sort((a, b) => b.qty - a.qty)[0] || { hour: 0, qty: 0 };
 
+  report(100, '완료');
   return {
+    __partial: false,
     summary,
     best,
     worst,

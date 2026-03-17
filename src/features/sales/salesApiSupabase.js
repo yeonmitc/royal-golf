@@ -120,11 +120,18 @@ async function attachLocalProductMeta(items) {
   const productCodes = [...new Set(items.map((i) => i.code))].filter(Boolean);
   if (!productCodes.length) return items;
 
-  const inList = buildInList(productCodes);
-  const products = await sbSelect('products', {
-    select: 'code,name,sale_price,free_gift,no,kprice,p1price',
-    filters: [{ column: 'code', op: 'in', value: inList }],
-  });
+  const products = [];
+  const chunkSize = 200;
+  for (let i = 0; i < productCodes.length; i += chunkSize) {
+    const chunk = productCodes.slice(i, i + chunkSize);
+    const inList = buildInList(chunk);
+    if (inList === '()') continue;
+    const page = await sbSelect('products', {
+      select: 'code,name,sale_price,free_gift,no,kprice,p1price',
+      filters: [{ column: 'code', op: 'in', value: inList }],
+    });
+    if (Array.isArray(page) && page.length) products.push(...page);
+  }
 
   const productMap = new Map(
     (products || []).map((p) => [
@@ -173,6 +180,24 @@ export async function checkoutCart(payload) {
     guideId = payload.guideId;
     isMrMoon = payload.isMrMoon;
     isPeter = Boolean(payload.isPeter);
+  }
+
+  if (guideId) {
+    try {
+      const gids = await sbSelect('guides', {
+        select: 'id,name',
+        filters: [{ column: 'id', op: 'eq', value: guideId }],
+        limit: 1,
+      });
+      const g = Array.isArray(gids) && gids.length ? gids[0] : null;
+      const norm = String(g?.name || '')
+        .toLowerCase()
+        .replace(/[\s.]/g, '');
+      if (norm.includes('mrmoon')) isMrMoon = true;
+      if (norm.includes('peter')) isPeter = true;
+    } catch {
+      // ignore
+    }
   }
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -800,7 +825,11 @@ export async function getSalesHistoryFilteredResult({
   return { hasAnySales, rows };
 }
 
-export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
+export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onSummary, mode = 'full' } = {}) {
+  const report =
+    typeof onProgress === 'function'
+      ? (pct, label) => onProgress({ pct, label })
+      : () => {};
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
   const fromKey = String(fromDate || '').trim();
@@ -808,15 +837,25 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
 
   let sales;
   try {
+    const filters = [];
+    if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey });
+    if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: `${toKey}T23:59:59.999Z` });
+    report(10, '판매 데이터 조회 중…');
     sales = await sbSelectAll('sales', {
       select: 'id,sold_at,code,color,size_std,qty,price,refunded_at,sale_group_id',
+      filters,
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
     const msg = String(e?.message || '').toLowerCase();
     if (msg.includes('color')) {
+      const filters = [];
+      if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey });
+      if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: `${toKey}T23:59:59.999Z` });
+      report(10, '판매 데이터 조회 중…');
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,sale_group_id',
+        filters,
         order: { column: 'sold_at', ascending: false },
       });
     } else {
@@ -824,47 +863,45 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     }
   }
 
-  const inRange =
-    hasFrom || hasTo
-      ? (sales || []).filter((s) => {
-          const key = String(s?.sold_at || '').slice(0, 10);
-          if (!key) return false;
-          if (hasFrom && key < fromKey) return false;
-          if (hasTo && key > toKey) return false;
-          return true;
-        })
-      : sales || [];
+  const inRange = sales || [];
 
   // Manual join for sale_groups
+  report(25, '영수증/가이드 매핑 중…');
   const groupIds = [...new Set(inRange.map((r) => r.sale_group_id).filter(Boolean))];
   const groupMap = new Map();
   if (groupIds.length > 0) {
-    const inList = buildInList(groupIds);
-    if (inList !== '()') {
-      try {
-        const groups = await sbSelectAll('sale_groups', {
-          select: 'id,guide_id',
-          filters: [{ column: 'id', op: 'in', value: inList }],
-        });
-        groups.forEach((g) => groupMap.set(g.id, g.guide_id));
-      } catch {
-        // Fallback: fetch all if IN list fails
-        const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
-        groups.forEach((g) => groupMap.set(g.id, g.guide_id));
-      }
+    const chunkSize = 200;
+    const groups = [];
+    for (let i = 0; i < groupIds.length; i += chunkSize) {
+      const chunk = groupIds.slice(i, i + chunkSize);
+      const inList = buildInList(chunk);
+      if (inList === '()') continue;
+      const page = await sbSelect('sale_groups', {
+        select: 'id,guide_id,guide_commission',
+        filters: [{ column: 'id', op: 'in', value: inList }],
+      });
+      if (Array.isArray(page) && page.length) groups.push(...page);
     }
+    groups.forEach((g) =>
+      groupMap.set(String(g.id), {
+        guideId: g.guide_id ?? null,
+        guideCommission: Number(g.guide_commission ?? 0) || 0,
+      })
+    );
   }
 
   const refundedRows = (inRange || []).filter((r) => toMsFromIso(r?.refunded_at));
   const nonRefundedRows = (inRange || []).filter((r) => !toMsFromIso(r?.refunded_at));
 
+  report(45, '상품 메타 결합 중…');
   const analyzedRows = await attachLocalProductMeta(
     withNormalizedNameFallback(
       nonRefundedRows.map((r) => {
         const qtyN = Number(r.qty ?? 0) || 0;
         const unit = Number(r.price ?? 0) || 0;
         const sizeKey = normalizeSizeKey(r.size_std);
-        const guideId = groupMap.get(r.sale_group_id) || null;
+        const g = groupMap.get(String(r.sale_group_id));
+        const guideId = g?.guideId ?? null;
         return {
           saleId: r.id,
           soldAt: r.sold_at,
@@ -887,7 +924,9 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   );
 
   if (!analyzedRows.length) {
+    report(100, '완료');
     return {
+      __partial: false,
       summary: {
         grossAmount: 0,
         netAmount: 0,
@@ -924,6 +963,7 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   }
 
   // Fetch guide names for mapping
+  report(60, '가이드 이름 매핑 중…');
   let guideMap = new Map();
   const guideIds = [...new Set(analyzedRows.map((r) => r.guideId).filter(Boolean))];
   if (guideIds.length > 0) {
@@ -944,13 +984,48 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
     const isPeter = norm.includes('peter');
     return { ...r, isMrMoon, isElla, isPeter };
   });
-  const rows = withGuideFlags.filter((r) => !r.isElla);
+  let rows = withGuideFlags.filter((r) => !r.isElla);
+
+  const groupSubtotalMap = new Map();
+  const groupCommissionMap = new Map();
+  for (const r of rows) {
+    const gid = String(r.saleGroupId || '').trim();
+    if (!gid) continue;
+    if (r.freeGift) continue;
+    const prev = groupSubtotalMap.get(gid) || 0;
+    groupSubtotalMap.set(gid, prev + (Number(r.lineTotalPhp || 0) || 0));
+  }
+  for (const [gid, subtotal] of groupSubtotalMap.entries()) {
+    const info = groupMap.get(gid);
+    const guideId = info?.guideId ?? null;
+    const rawName = guideId ? String(guideMap.get(String(guideId)) || '') : '';
+    const norm = rawName.toLowerCase().replace(/[\s.]/g, '');
+    const isMrMoon = norm.includes('mrmoon');
+    const isPeter = norm.includes('peter');
+    const isElla = norm.includes('ella');
+    if (!guideId || isMrMoon || isPeter || isElla) {
+      groupCommissionMap.set(gid, 0);
+      continue;
+    }
+    const stored = Number(info?.guideCommission ?? 0) || 0;
+    const fallback = subtotal * 0.1;
+    groupCommissionMap.set(gid, stored > 0 ? stored : fallback);
+  }
+  const rowsWithCommission = rows.map((r) => {
+    const gid = String(r.saleGroupId || '').trim();
+    if (!gid || r.freeGift) return { ...r, commission: 0 };
+    const subtotal = Number(groupSubtotalMap.get(gid) || 0) || 0;
+    const gcomm = Number(groupCommissionMap.get(gid) || 0) || 0;
+    if (!subtotal || !gcomm) return { ...r, commission: 0 };
+    const share = (Number(r.lineTotalPhp || 0) || 0) / subtotal;
+    return { ...r, commission: gcomm * share };
+  });
+  rows = rowsWithCommission;
 
   const totalRevenue = rows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
-  const totalCommission = rows.reduce(
-    (sum, r) => sum + (Number(r.commission || 0) || 0),
-    0
-  );
+  const totalCommission = [...new Set(rows.map((r) => String(r.saleGroupId || '').trim()))]
+    .filter(Boolean)
+    .reduce((sum, gid) => sum + (Number(groupCommissionMap.get(gid) || 0) || 0), 0);
   let mrMoonCommission = 0;
   let mrMoonRevenue = 0;
   let mrMoonListRevenue = 0;
@@ -976,7 +1051,18 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
   const transactionKeys = new Set(rows.map((r) => r.saleGroupId || String(r.soldAt || '')));
   const transactionCount = transactionKeys.size;
-  const refundAmount = refundedRows.reduce(
+
+  const refundedNonElla = refundedRows.filter((r) => {
+    const gid = String(r.sale_group_id || '').trim();
+    const info = gid ? groupMap.get(gid) : null;
+    const guideId = info?.guideId ?? null;
+    if (!guideId) return true;
+    const raw = String(guideMap.get(String(guideId)) || '');
+    const norm = raw.toLowerCase().replace(/[\s.]/g, '');
+    return !norm.includes('ella');
+  });
+
+  const refundAmount = refundedNonElla.reduce(
     (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
     0
   );
@@ -1003,17 +1089,21 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   );
   let kpriceByCode = new Map();
   if (codesForCost.length) {
-    const inList = buildInList(codesForCost);
     try {
-      const productsForCost = await sbSelect('products', {
-        select: 'code,kprice',
-        filters: [{ column: 'code', op: 'in', value: inList }],
-      });
+      const productsForCost = [];
+      const chunkSize = 200;
+      for (let i = 0; i < codesForCost.length; i += chunkSize) {
+        const chunk = codesForCost.slice(i, i + chunkSize);
+        const inList = buildInList(chunk);
+        if (inList === '()') continue;
+        const page = await sbSelect('products', {
+          select: 'code,kprice',
+          filters: [{ column: 'code', op: 'in', value: inList }],
+        });
+        if (Array.isArray(page) && page.length) productsForCost.push(...page);
+      }
       kpriceByCode = new Map(
-        (productsForCost || []).map((p) => [
-          String(p.code || '').trim(),
-          Number(p.kprice ?? 0) || 0,
-        ])
+        productsForCost.map((p) => [String(p.code || '').trim(), Number(p.kprice ?? 0) || 0])
       );
     } catch (_e) {
       void _e;
@@ -1044,6 +1134,84 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const mrMoonDiscount = mrMoonListRevenue * 0.1;
 
   const ownerProfit = netTotalSales - totalRent - costAmount;
+
+  const summary = {
+    grossAmount,
+    realTotalSales,
+    netAmount,
+    costAmount,
+    grossProfit,
+    rentAmount: normalRent,
+    ownerProfit,
+    totalCommission: realTotalCommission,
+    transactionCount,
+    aov,
+    discountAmount: mrMoonDiscount,
+    mrMoonRevenue: mrMoonListRevenue,
+    mrMoonRent,
+    discountRate,
+    refundCount: refundedNonElla.length,
+    refundAmount,
+  };
+
+  if (typeof onSummary === 'function') {
+    onSummary({
+      __partial: true,
+      summary,
+      best: [],
+      worst: [],
+      sku: [],
+      byCategory: [],
+      byBrand: [],
+      byType: [],
+      byGender: [],
+      bySize: [],
+      byColor: [],
+      byGuide: [],
+      bestByCategory: [],
+      bestColorByCategory: [],
+      colorByType: [],
+      colorTypePivotColumns: [],
+      colorTypePivotRows: [],
+      byWeekdayQty: [],
+      byHourQty: [],
+      bestWeekday: { key: '', qty: 0 },
+      bestHour: { hour: 0, qty: 0 },
+      discountShare: { discountedTransactions: 0, totalTransactions: transactionCount },
+      weeklyRevenue: [],
+      monthlyRevenue: [],
+    });
+  }
+
+  if (String(mode || 'full').toLowerCase() === 'summary') {
+    report(100, '완료');
+    return {
+      __partial: false,
+      summary,
+      best: [],
+      worst: [],
+      sku: [],
+      byCategory: [],
+      byBrand: [],
+      byType: [],
+      byGender: [],
+      bySize: [],
+      byColor: [],
+      byGuide: [],
+      bestByCategory: [],
+      bestColorByCategory: [],
+      colorByType: [],
+      colorTypePivotColumns: [],
+      colorTypePivotRows: [],
+      byWeekdayQty: [],
+      byHourQty: [],
+      bestWeekday: { key: '', qty: 0 },
+      bestHour: { hour: 0, qty: 0 },
+      discountShare: { discountedTransactions: 0, totalTransactions: transactionCount },
+      weeklyRevenue: [],
+      monthlyRevenue: [],
+    };
+  }
 
   function accumulate(list, keyFn, labelFn) {
     const map = new Map();
@@ -1244,25 +1412,11 @@ export async function getAnalytics({ fromDate = '', toDate = '' } = {}) {
   const bestWeekday = byWeekdayQty.slice().sort((a, b) => b.qty - a.qty)[0] || { key: '', qty: 0 };
   const bestHour = byHourQty.slice().sort((a, b) => b.qty - a.qty)[0] || { hour: 0, qty: 0 };
 
+  report(95, '테이블 생성 중…');
+  report(100, '완료');
   return {
-    summary: {
-      grossAmount,
-      realTotalSales,
-      netAmount,
-      costAmount,
-      grossProfit,
-      rentAmount: normalRent,
-      ownerProfit,
-      totalCommission: realTotalCommission,
-      transactionCount,
-      aov,
-      discountAmount: mrMoonDiscount,
-      mrMoonRevenue: mrMoonListRevenue,
-      mrMoonRent,
-      discountRate,
-      refundCount: refundedRows.length,
-      refundAmount,
-    },
+    __partial: false,
+    summary,
     best,
     worst,
     sku,

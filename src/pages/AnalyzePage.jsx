@@ -18,14 +18,33 @@ export default function AnalyzePage() {
   const [toDate, setToDate] = useState(toInputDate(today));
   const [data, setData] = useState(null);
   const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState(null);
 
   async function load() {
     setPending(true);
+    setProgress({ pct: 5, label: '판매 데이터 조회 중…' });
+    setData(null);
     try {
-      const res = await getAnalytics({ fromDate, toDate });
+      const res = await getAnalytics({
+        fromDate,
+        toDate,
+        onProgress: (p) => {
+          if (!p) return;
+          const pct = Number(p.pct);
+          setProgress({
+            pct: Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0,
+            label: String(p.label || ''),
+          });
+        },
+        onSummary: (partial) => {
+          if (partial) setData(partial);
+        },
+      });
       setData(res);
+      setProgress({ pct: 100, label: '완료' });
     } finally {
       setPending(false);
+      window.setTimeout(() => setProgress(null), 1200);
     }
   }
 
@@ -110,10 +129,38 @@ export default function AnalyzePage() {
             30D
           </Button>
           <Button variant="primary" size="sm" onClick={load} disabled={pending}>
-            {pending ? 'Loading…' : 'Analyze'}
+            {pending ? `Loading…${progress?.pct != null ? ` ${progress.pct}%` : ''}` : 'Analyze'}
           </Button>
         </div>
       </div>
+
+      {progress && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            border: '1px solid var(--border-soft)',
+            borderRadius: 12,
+            background: 'rgba(255,255,255,0.03)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-main)' }}>{progress.label || 'Loading…'}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{progress.pct}%</div>
+          </div>
+          <div style={{ height: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 999 }}>
+            <div
+              style={{
+                height: 10,
+                width: `${progress.pct}%`,
+                background: 'linear-gradient(90deg, rgba(34,197,94,0.9), rgba(250,204,21,0.9))',
+                borderRadius: 999,
+                transition: 'width 120ms linear',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <Card title={`Sales Summary (${fromDate} ~ ${toDate})`}>
         {!data ? (
@@ -222,7 +269,17 @@ export default function AnalyzePage() {
         )}
       </Card>
 
-      <Card
+      {data && data.__partial ? (
+        <Card title="Detail Analysis">
+          <div className="text-sm text-[var(--text-muted)]">
+            요약 먼저 표시했습니다. 상세 테이블 계산 중…
+          </div>
+        </Card>
+      ) : null}
+
+      {data && data.__partial ? null : (
+        <>
+          <Card
         title="Color × Type (Qty)"
         actions={
           data
@@ -748,6 +805,8 @@ export default function AnalyzePage() {
           </div>
         )}
       </Card>
+        </>
+      )}
     </div>
   );
 }
