@@ -257,9 +257,6 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
         const copy = { ...t };
         if (next[idx]) copy[idx] = { by: employeeKey, time: timeStr };
         else delete copy[idx];
-        const copy = { ...t };
-        if (next[idx]) copy[idx] = { by: employeeKey, time: timeStr };
-        else delete copy[idx];
         return copy;
       });
       return next;
