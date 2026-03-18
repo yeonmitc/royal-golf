@@ -1,7 +1,6 @@
 // src/features/sales/components/SalesTable.jsx
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import ellaIcon from '../../../assets/ella.svg';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
@@ -242,41 +241,13 @@ export default function SalesTable({
       sizeDisplay: row.sizeDisplay,
       qty: qty,
       brand,
-      commission: isElla ? (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <img src={ellaIcon} alt="Ella" style={{ width: 20, height: 20 }} />
-        </div>
-      ) : isPeter ? (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            fontWeight: 'bold',
-            color: 'rgba(59, 130, 246, 0.8)',
-            fontSize: '0.75rem',
-           }}
-         >
-           20%
-         </div>
-       ) : isMrMoon ? (
-         <div
-           style={{
-             display: 'flex',
-             justifyContent: 'center',
-             alignItems: 'center',
-             fontWeight: 'bold',
-             color: 'var(--gold-soft)',
-             fontSize: '0.75rem',
-           }}
-         >
-           10%
-         </div>
-       ) : commissionForTotal > 0 ? (
+      commission: isElla || isPeter || isMrMoon
+        ? '-'
+        : commissionForTotal > 0 ? (
          commissionForTotal.toLocaleString('en-US')
-      ) : (
+        ) : (
         '-'
-      ),
+        ),
       unitPricePhp: (
         <div
           style={{
