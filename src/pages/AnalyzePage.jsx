@@ -19,15 +19,16 @@ export default function AnalyzePage() {
   const [data, setData] = useState(null);
   const [pending, setPending] = useState(false);
   const [progress, setProgress] = useState(null);
+  const OPEN_DATE = '2025-12-17';
 
-  async function load() {
+  async function load(nextFrom = fromDate, nextTo = toDate) {
     setPending(true);
     setProgress({ pct: 5, label: '판매 데이터 조회 중…' });
     setData(null);
     try {
       const res = await getAnalytics({
-        fromDate,
-        toDate,
+        fromDate: nextFrom,
+        toDate: nextTo,
         onProgress: (p) => {
           if (!p) return;
           const pct = Number(p.pct);
@@ -82,6 +83,13 @@ export default function AnalyzePage() {
     setToDate(toInputDate(end));
   }
 
+  function analyzeAll() {
+    const t = toInputDate(new Date());
+    setFromDate(OPEN_DATE);
+    setToDate(t);
+    load(OPEN_DATE, t);
+  }
+
   return (
     <div className="page-root">
       <div className="page-header">
@@ -127,6 +135,9 @@ export default function AnalyzePage() {
           </Button>
           <Button variant="outline" size="sm" onClick={setMonth}>
             30D
+          </Button>
+          <Button variant="outline" size="sm" onClick={analyzeAll} disabled={pending}>
+            Total Analyze
           </Button>
           <Button variant="primary" size="sm" onClick={load} disabled={pending}>
             {pending ? `Loading…${progress?.pct != null ? ` ${progress.pct}%` : ''}` : 'Analyze'}
@@ -206,13 +217,13 @@ export default function AnalyzePage() {
               </div>
             </div>
             <div className="page-card">
-              <div>Rent (10%)</div>
+              <div>Total Expense</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.rentAmount || 0).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.expenseAmount || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>My Profit (90%)</div>
+              <div>Net Profit</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(data.summary.ownerProfit || 0).toLocaleString('en-PH')} PHP
               </div>
@@ -237,12 +248,6 @@ export default function AnalyzePage() {
               <div>Mr. Moon Sales</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.mrMoonRevenue || 0).toLocaleString('en-PH')} PHP
-              </div>
-            </div>
-            <div className="page-card">
-              <div>Rent (5%)</div>
-              <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.mrMoonRent || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">

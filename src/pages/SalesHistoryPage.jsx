@@ -22,6 +22,7 @@ function toInputDate(d) {
 export default function SalesHistoryPage() {
   // UI 입력값
   const today = toInputDate(new Date());
+  const OPEN_DATE = '2025-12-17';
   const [fromInput, setFromInput] = useState(today);
   const [toInput, setToInput] = useState(today);
   const [qInput, setQInput] = useState('');
@@ -79,6 +80,14 @@ export default function SalesHistoryPage() {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const from = toInputDate(start);
     const to = toInputDate(now);
+    setFromInput(from);
+    setToInput(to);
+    setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
+  };
+
+  const setTotalRange = () => {
+    const to = toInputDate(new Date());
+    const from = OPEN_DATE;
     setFromInput(from);
     setToInput(to);
     setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
@@ -474,6 +483,16 @@ export default function SalesHistoryPage() {
               justifyContent: 'center',
             }}
           />
+          <Button
+            type="button"
+            onClick={setTotalRange}
+            size="sm"
+            variant="outline"
+            title="Total (Since Open)"
+            style={{ height: 30, padding: '0 8px', fontSize: 11, minWidth: 'unset', width: 'fit-content' }}
+          >
+            Total
+          </Button>
           <Button
             type="button"
             onClick={resetSearch}

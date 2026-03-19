@@ -151,7 +151,7 @@ async function attachLocalProductMeta(items) {
   return items.map((i) => {
     const product = productMap.get(i.code);
     const qtyN = Number(i.qty || 0) || 0;
-    const listUnit = Number((product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
+    const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
     const isFreeGift = Boolean(i.freeGift ?? false) || i.unitPricePhp === 0;
     const commission = i.guideId && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
     return {
@@ -337,6 +337,7 @@ export async function checkoutCart(payload) {
       size_std: sizeKey,
       color: colorLabel,
       qty: Number(qty || 0) || 0,
+      list_price: unitPriceOriginal,
       price: unitPriceCharged,
       free_gift: isFreeGift,
       // guide_id removed as it's now in sale_groups
@@ -359,6 +360,7 @@ export async function checkoutCart(payload) {
       const before = removed.size;
       if (msg.includes('free_gift')) removed.add('free_gift');
       if (msg.includes('color')) removed.add('color');
+      if (msg.includes('list_price')) removed.add('list_price');
       if (removed.size === before) throw e;
       rowsToInsert = salesToInsert.map((row) => {
         const next = { ...row };
@@ -643,6 +645,23 @@ export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
   // and are not used in the main checkoutCart flow (which uses 'price').
   await sbUpdate('sales', { price: p }, { filters, returning: 'minimal' });
 
+  try {
+    let groupId = gid;
+    if (!groupId && sid) {
+      const rows = await sbSelect('sales', {
+        select: 'sale_group_id',
+        filters: [{ column: 'id', op: 'eq', value: sid }],
+        limit: 1,
+      });
+      groupId = String(rows?.[0]?.sale_group_id || '').trim();
+    }
+    if (groupId) {
+      await sbRpc('finalize_sale_group', { p_group_id: groupId });
+    }
+  } catch {
+    // ignore
+  }
+
   return { ok: true };
 }
 
@@ -656,12 +675,12 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   try {
     sales = await sbSelectAll('sales', {
       select:
-        'id,sold_at,code,color,size_std,qty,price,free_gift,refunded_at,refund_reason,sale_group_id',
+        'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,refunded_at,refund_reason,sale_group_id',
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
     const msg = String(e?.message || '').toLowerCase();
-    if (msg.includes('free_gift') || msg.includes('color')) {
+    if (msg.includes('free_gift') || msg.includes('color') || msg.includes('list_price')) {
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason,sale_group_id',
         order: { column: 'sold_at', ascending: false },
@@ -746,6 +765,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     .map((r) => {
       const qtyN = Number(r.qty ?? 0) || 0;
       const unit = Number(r.price ?? 0) || 0;
+      const listUnit = Number(r.list_price ?? 0) || 0;
       const sizeKey = normalizeSizeKey(r.size_std);
       const refundedAt = r?.refunded_at || null;
       const isRefunded = Boolean(toMsFromIso(refundedAt));
@@ -767,8 +787,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         size: sizeKey,
         sizeDisplay: sizeKey,
         qty: qtyN,
-        unitPricePhp: isRefunded ? 0 : unit,
-        discountUnitPricePhp: undefined,
+        listPricePhp: listUnit || undefined,
+        unitPricePhp: isRefunded ? 0 : listUnit || unit,
+        discountUnitPricePhp:
+          !isRefunded && listUnit > 0 && unit > 0 && unit !== listUnit ? unit : undefined,
         lineTotalPhp: (isRefunded ? 0 : unit) * qtyN,
         freeGift: isFreeGift,
         refundedAt,
@@ -793,7 +815,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
   const withMeta = withMetaRaw.map((r) => ({
     ...r,
-    commission: r.isMrMoon || r.isPeter ? 0 : r.commission,
+    commission: r.isMrMoon || r.isPeter || r.isElla ? 0 : r.commission,
   }));
   const q = String(query || '').trim();
   if (!q) return withMeta;
@@ -842,7 +864,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: `${toKey}T23:59:59.999Z` });
     report(10, '판매 데이터 조회 중…');
     sales = await sbSelectAll('sales', {
-      select: 'id,sold_at,code,color,size_std,qty,price,refunded_at,sale_group_id',
+      select: 'id,sold_at,code,color,size_std,qty,list_price,price,refunded_at,sale_group_id',
       filters,
       order: { column: 'sold_at', ascending: false },
     });
@@ -899,6 +921,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
       nonRefundedRows.map((r) => {
         const qtyN = Number(r.qty ?? 0) || 0;
         const unit = Number(r.price ?? 0) || 0;
+        const listUnit = Number(r.list_price ?? 0) || 0;
         const sizeKey = normalizeSizeKey(r.size_std);
         const g = groupMap.get(String(r.sale_group_id));
         const guideId = g?.guideId ?? null;
@@ -911,6 +934,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
           sizeDisplay: sizeKey,
           qty: qtyN,
           unitPricePhp: unit,
+          listPricePhp: listUnit || undefined,
           discountUnitPricePhp: undefined,
           lineTotalPhp: unit * qtyN,
           freeGift: Boolean(r.free_gift ?? false) || unit === 0,
@@ -1121,19 +1145,32 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   // Gross Profit is now based on Real Total Sales
   const grossProfit = realTotalSales - costAmount;
 
-  // Rent calculation based on Net Sales (after commission)
-  // Mr.Moon Rent is calculated on his Sales (List Price) as per user request
-
   const netTotalSales = realTotalSales - realTotalCommission;
-  // To get "Others Net Sales", we subtract Mr. Moon's ACTUAL revenue (discounted) from Total Net Sales
-  const netOtherSales = netTotalSales - mrMoonRevenue;
+  report(70, '지출 합산 중…');
+  let expenseAmount = 0;
+  try {
+    const expenseFilters = [];
+    if (hasFrom) expenseFilters.push({ column: 'expense_date', op: 'gte', value: fromKey });
+    if (hasTo) expenseFilters.push({ column: 'expense_date', op: 'lte', value: toKey });
+    const expenses = await sbSelectAll('expenses', {
+      select: 'amount_php,amount_krw,expense_date',
+      filters: expenseFilters,
+      order: { column: 'expense_date', ascending: false },
+    });
+    expenseAmount =
+      (expenses || []).reduce((sum, e) => {
+        const php = Number(e?.amount_php || 0) || 0;
+        const krw = Number(e?.amount_krw || 0) || 0;
+        const krwPhp = krw > 0 ? Math.ceil(krw / 25) : 0;
+        return sum + php + krwPhp;
+      }, 0) || 0;
+  } catch {
+    expenseAmount = 0;
+  }
 
-  const normalRent = netOtherSales * 0.1;
-  const mrMoonRent = mrMoonListRevenue * 0.05;
-  const totalRent = normalRent + mrMoonRent;
   const mrMoonDiscount = mrMoonListRevenue * 0.1;
 
-  const ownerProfit = netTotalSales - totalRent - costAmount;
+  const ownerProfit = netTotalSales - expenseAmount - costAmount;
 
   const summary = {
     grossAmount,
@@ -1141,14 +1178,13 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     netAmount,
     costAmount,
     grossProfit,
-    rentAmount: normalRent,
+    expenseAmount,
     ownerProfit,
     totalCommission: realTotalCommission,
     transactionCount,
     aov,
     discountAmount: mrMoonDiscount,
-    mrMoonRevenue: mrMoonListRevenue,
-    mrMoonRent,
+    mrMoonRevenue,
     discountRate,
     refundCount: refundedNonElla.length,
     refundAmount,

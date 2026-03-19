@@ -19,9 +19,25 @@ CREATE POLICY "Enable insert for all users" ON public.attendance_logs FOR INSERT
 -- Create policy to allow reading own logs or admin reading all
 CREATE POLICY "Enable read for all users" ON public.attendance_logs FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Enable update for all users" ON public.attendance_logs;
+CREATE POLICY "Enable update for all users"
+ON public.attendance_logs
+FOR UPDATE
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Enable delete for all users" ON public.attendance_logs;
+CREATE POLICY "Enable delete for all users"
+ON public.attendance_logs
+FOR DELETE
+USING (true);
+
 -- Create index to ensure one attendance per employee per day
 -- Using UTC+8 (Philippines Time) to determine "Daily" uniqueness
 -- 6AM and 9AM shifts must fall on the same day.
 -- (attendance_time AT TIME ZONE 'UTC' + interval '8 hours')::date is immutable.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_daily_unique 
 ON public.attendance_logs (employee_name, ((attendance_time AT TIME ZONE 'UTC' + interval '8 hours')::date));
+
+ALTER TABLE public.attendance_logs
+DROP CONSTRAINT IF EXISTS attendance_logs_employee_name_check;

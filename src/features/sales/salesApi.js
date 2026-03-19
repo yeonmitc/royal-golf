@@ -650,15 +650,15 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   const costAmount = 0;
   const grossProfit = totalRevenue - costAmount;
   const netAmount = totalRevenue - refundAmount;
-  const rentAmount = netAmount * 0.1;
-  const ownerProfit = netAmount - rentAmount - costAmount;
+  const expenseAmount = 0;
+  const ownerProfit = netAmount - expenseAmount - costAmount;
 
   const summary = {
     grossAmount: totalRevenue,
     netAmount,
     costAmount,
     grossProfit,
-    rentAmount,
+    expenseAmount,
     ownerProfit,
     totalCommission: 0,
     transactionCount,

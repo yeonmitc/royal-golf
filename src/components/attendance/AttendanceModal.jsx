@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../../context/ToastContext';
 import {
   useCheckDailyAttendance,
@@ -10,6 +10,7 @@ import {
 import { useEmployees } from '../../features/employees/employeesHooks';
 import { useAdminStore } from '../../store/adminStore';
 import Modal from '../common/Modal';
+import Button from '../common/Button';
 
 // Helper to get score based on time diff with discrete buckets
 // Rules:
@@ -22,9 +23,9 @@ import Modal from '../common/Modal';
 const getPunctualityScore = (targetTime, checkTime) => {
   const diffMs = checkTime - targetTime;
   const lateMins = Math.max(0, Math.floor(diffMs / 60000));
-  if (lateMins <= 3) return 100;
-  if (lateMins <= 6) return 90;
-  if (lateMins <= 10) return 80;
+  if (lateMins <= 5) return 100;
+  if (lateMins <= 8) return 90;
+  if (lateMins <= 11) return 80;
   if (lateMins <= 13) return 70;
   if (lateMins <= 15) return 60;
   return 0;
@@ -365,6 +366,11 @@ export default function AttendanceModal({ open, onClose }) {
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const savingRef = useRef(false);
+  const [isCompact, setIsCompact] = useState(false);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertTone, setAlertTone] = useState('info');
 
   useEffect(() => {
     const checkMobile = () => {
@@ -381,17 +387,16 @@ export default function AttendanceModal({ open, onClose }) {
       // For now, relying on OS/UA detection is safer to avoid blocking touch laptops.
 
       const mobile = isMobileUA || isIOSDesktop;
-
-      // Force close if open on mobile/tablet
-      if (open && mobile) {
-        onClose();
-        showToast('Attendance check is only available on PC.');
-      }
+      const coarsePointer =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(pointer: coarse)').matches;
+      setIsCompact(Boolean(mobile || coarsePointer || window.innerWidth < 900));
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [open, onClose, showToast]);
+  }, []);
 
   const today = new Date();
   const year = today.getFullYear();
@@ -399,6 +404,29 @@ export default function AttendanceModal({ open, onClose }) {
 
   const { data: monthLogs = [] } = useMonthlyAttendance(year, month);
   const { data: employees = [] } = useEmployees();
+
+  const todayKey = toLocalDateKey(today);
+  const [justCheckedSet, setJustCheckedSet] = useState(() => new Set());
+
+  useEffect(() => {
+    if (!open) return;
+    setJustCheckedSet(new Set());
+  }, [open, todayKey]);
+
+  const checkedTodaySet = useMemo(() => {
+    const set = new Set();
+    (monthLogs || []).forEach((l) => {
+      const stored = new Date(l.attendance_time);
+      const logKey = toLocalDateKey(
+        new Date(stored.getUTCFullYear(), stored.getUTCMonth(), stored.getUTCDate())
+      );
+      if (logKey !== todayKey) return;
+      const name = String(l?.employee_name || '').trim();
+      if (name) set.add(name);
+    });
+    justCheckedSet.forEach((n) => set.add(n));
+    return set;
+  }, [monthLogs, todayKey, justCheckedSet]);
 
   const staffOptions = (() => {
     const emp = (employees || [])
@@ -445,6 +473,18 @@ export default function AttendanceModal({ open, onClose }) {
   const handleStaffChange = (staff) => {
     const next = String(staff || '').trim();
     if (!next) return;
+    if (checkedTodaySet.has(next)) {
+      const msg = `Already checked in today: ${next}`;
+      if (isCompact) {
+        setAlertTone('info');
+        setAlertTitle('Attendance');
+        setAlertMessage(msg);
+        setAlertOpen(true);
+      } else {
+        showToast(msg);
+      }
+      return;
+    }
     if (selectedStaff === next) setSelectedStaff(null);
     else setSelectedStaff(next);
   };
@@ -457,7 +497,15 @@ export default function AttendanceModal({ open, onClose }) {
     if (staffCheckLoading) return;
     if (selectedStaffLog) {
       const d = parseLogTime(selectedStaffLog);
-      showToast(`Already checked: ${selectedStaff} (${formatTimeForDisplay(d)})`);
+      const msg = `Already checked: ${selectedStaff} (${formatTimeForDisplay(d)})`;
+      if (isCompact) {
+        setAlertTone('info');
+        setAlertTitle('Attendance');
+        setAlertMessage(msg);
+        setAlertOpen(true);
+      } else {
+        showToast(msg);
+      }
       setSelectedStaff(null);
       setSelectedShift(null);
       savingRef.current = false;
@@ -483,7 +531,21 @@ export default function AttendanceModal({ open, onClose }) {
         },
         {
           onSuccess: (res) => {
-            showToast(`${selectedStaff} checked in successfully!`);
+            const base = `${selectedStaff} checked in successfully!`;
+            const extra = `${selectedShift}${isTardy ? ' (Late)' : ''} / ${formatTimeForDisplay(now)}`;
+            if (isCompact) {
+              setAlertTone('success');
+              setAlertTitle('Attendance Saved');
+              setAlertMessage(`${base}\n${extra}`);
+              setAlertOpen(true);
+            } else {
+              showToast(base);
+            }
+            setJustCheckedSet((prev) => {
+              const next = new Set(prev);
+              next.add(selectedStaff);
+              return next;
+            });
             setSelectedStaff(null);
             setSelectedShift(null);
             savingRef.current = false;
@@ -496,7 +558,19 @@ export default function AttendanceModal({ open, onClose }) {
           },
           onError: (err) => {
             savingRef.current = false;
-            showToast(err?.message || 'Failed to check in.');
+            const raw = String(err?.message || 'Failed to check in.');
+            const nameConstraintHit = raw.includes('attendance_logs_employee_name_check');
+            const msg = nameConstraintHit
+              ? 'Attendance failed because the employee name is restricted by a DB constraint.\nRun attendance_remove_employee_name_check.sql in Supabase SQL Editor to fix it.'
+              : raw;
+            if (isCompact) {
+              setAlertTone('error');
+              setAlertTitle('Attendance Failed');
+              setAlertMessage(msg);
+              setAlertOpen(true);
+            } else {
+              showToast(msg);
+            }
           },
         }
       );
@@ -535,17 +609,21 @@ export default function AttendanceModal({ open, onClose }) {
     updateAttendance,
     staffCheckLoading,
     selectedStaffLog,
+    isCompact,
   ]);
 
   const [adminDate, setAdminDate] = useState(() => toLocalDateKey(today));
-  const adminLogs = (monthLogs || []).filter((l) => {
-    const stored = new Date(l.attendance_time);
-    return toUtcDateKey(stored) === adminDate;
-  });
+  const adminLogs = useMemo(() => {
+    return (monthLogs || []).filter((l) => {
+      const stored = new Date(l.attendance_time);
+      return toUtcDateKey(stored) === adminDate;
+    });
+  }, [monthLogs, adminDate]);
 
   const [adminLogId, setAdminLogId] = useState('');
   const [adminShiftType, setAdminShiftType] = useState('6AM');
   const [adminTimeStr, setAdminTimeStr] = useState('06:00');
+  const adminLoadedKeyRef = useRef('');
 
   useEffect(() => {
     if (!open) return;
@@ -557,13 +635,18 @@ export default function AttendanceModal({ open, onClose }) {
   }, [open, isAdmin, adminDate, adminLogs, adminLogId]);
 
   useEffect(() => {
+    if (!open) return;
     if (!isAdmin) return;
+    if (!adminLogId) return;
+    const key = `${adminDate}:${adminLogId}`;
+    if (adminLoadedKeyRef.current === key) return;
     const row = adminLogs.find((l) => l.id === adminLogId);
     if (!row) return;
     setAdminShiftType(String(row.shift_type || '6AM'));
     const d = parseLogTime(row);
     setAdminTimeStr(toTimeInput(d) || (row.shift_type === '9AM' ? '09:00' : '06:00'));
-  }, [isAdmin, adminLogId, adminLogs]);
+    adminLoadedKeyRef.current = key;
+  }, [open, isAdmin, adminDate, adminLogId, adminLogs]);
 
   const applyAdminEdit = () => {
     if (!isAdmin) {
@@ -584,10 +667,35 @@ export default function AttendanceModal({ open, onClose }) {
       { id: adminLogId, employeeName: name, shiftType: adminShiftType, attendanceTime: base },
       {
         onSuccess: () => {
-          showToast('Attendance updated.');
+          const msg = 'Attendance updated.';
+          if (isCompact) {
+            setAlertTone('success');
+            setAlertTitle('Admin Edit');
+            setAlertMessage(msg);
+            setAlertOpen(true);
+          } else {
+            showToast(msg);
+          }
         },
         onError: (err) => {
-          showToast(err?.message || 'Failed to update attendance.');
+          const raw = String(err?.message || 'Failed to update attendance.');
+          const isPolicy =
+            raw.toLowerCase().includes('row level security') ||
+            raw.toLowerCase().includes('permission') ||
+            raw.toLowerCase().includes('policy') ||
+            raw.toLowerCase().includes('supabase_http_401') ||
+            raw.toLowerCase().includes('supabase_http_403');
+          const msg = isPolicy
+            ? 'Admin edit requires UPDATE policy on attendance_logs.\nRun attendance_enable_update_delete_policies.sql in Supabase SQL Editor.'
+            : raw;
+          if (isCompact) {
+            setAlertTone('error');
+            setAlertTitle('Admin Edit Failed');
+            setAlertMessage(msg);
+            setAlertOpen(true);
+          } else {
+            showToast(msg);
+          }
         },
       }
     );
@@ -604,18 +712,44 @@ export default function AttendanceModal({ open, onClose }) {
       { id: adminLogId },
       {
         onSuccess: () => {
-          showToast('Attendance deleted.');
+          const msg = 'Attendance deleted.';
+          if (isCompact) {
+            setAlertTone('success');
+            setAlertTitle('Admin Edit');
+            setAlertMessage(msg);
+            setAlertOpen(true);
+          } else {
+            showToast(msg);
+          }
           setAdminLogId('');
         },
         onError: (err) => {
-          showToast(err?.message || 'Failed to delete attendance.');
+          const raw = String(err?.message || 'Failed to delete attendance.');
+          const isPolicy =
+            raw.toLowerCase().includes('row level security') ||
+            raw.toLowerCase().includes('permission') ||
+            raw.toLowerCase().includes('policy') ||
+            raw.toLowerCase().includes('supabase_http_401') ||
+            raw.toLowerCase().includes('supabase_http_403');
+          const msg = isPolicy
+            ? 'Admin delete requires DELETE policy on attendance_logs.\nRun attendance_enable_update_delete_policies.sql in Supabase SQL Editor.'
+            : raw;
+          if (isCompact) {
+            setAlertTone('error');
+            setAlertTitle('Admin Delete Failed');
+            setAlertMessage(msg);
+            setAlertOpen(true);
+          } else {
+            showToast(msg);
+          }
         },
       }
     );
   };
 
   return (
-    <Modal
+    <>
+      <Modal
       open={open}
       onClose={onClose}
       title={
@@ -625,6 +759,7 @@ export default function AttendanceModal({ open, onClose }) {
       }
       align="center"
       size="content"
+      fullScreen={isCompact}
       containerStyle={{
         backgroundColor: '#5b21b6', // Deep purple (violet-800) for better contrast
         backgroundImage: 'linear-gradient(to bottom right, #6d28d9, #4c1d95)', // Gradient for "prettier" look
@@ -708,6 +843,7 @@ export default function AttendanceModal({ open, onClose }) {
           >
             {/* 6AM Button */}
             <button
+              disabled={isPending || staffCheckLoading}
               onClick={() => handleShiftChange('6AM')}
               className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
@@ -725,7 +861,8 @@ export default function AttendanceModal({ open, onClose }) {
                 width: '100%',
                 border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '30px',
-                cursor: 'pointer',
+                cursor: isPending || staffCheckLoading ? 'not-allowed' : 'pointer',
+                opacity: isPending || staffCheckLoading ? 0.65 : 1,
                 marginBottom: 2,
               }}
             >
@@ -734,6 +871,7 @@ export default function AttendanceModal({ open, onClose }) {
 
             {/* 9AM Button */}
             <button
+              disabled={isPending || staffCheckLoading}
               onClick={() => handleShiftChange('9AM')}
               className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
@@ -751,7 +889,8 @@ export default function AttendanceModal({ open, onClose }) {
                 width: '100%',
                 border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '30px',
-                cursor: 'pointer',
+                cursor: isPending || staffCheckLoading ? 'not-allowed' : 'pointer',
+                opacity: isPending || staffCheckLoading ? 0.65 : 1,
                 marginBottom: 2,
               }}
             >
@@ -772,28 +911,38 @@ export default function AttendanceModal({ open, onClose }) {
             }}
           >
             {staffOptions.map((name) => (
+              (() => {
+                const isCheckedToday = checkedTodaySet.has(name);
+                const disabled = isPending || staffCheckLoading || isCheckedToday;
+                return (
               <button
                 key={name}
                 type="button"
                 onClick={() => handleStaffChange(name)}
-                disabled={isPending || staffCheckLoading}
+                disabled={disabled}
                 style={{
                   height: '60px',
                   fontSize: '1.5rem',
                   borderRadius: '30px',
                   border: '1px solid rgba(255,255,255,0.20)',
                   background:
-                    selectedStaff === name ? '#F97316' : 'rgba(255, 255, 255, 0.10)',
-                  color: 'white',
+                    isCheckedToday
+                      ? '#FACC15'
+                      : selectedStaff === name
+                        ? '#FACC15'
+                        : 'rgba(255, 255, 255, 0.10)',
+                  color: isCheckedToday || selectedStaff === name ? '#000' : 'white',
                   fontWeight: 900,
-                  cursor: isPending ? 'not-allowed' : 'pointer',
-                  opacity: isPending ? 0.7 : 1,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: isCheckedToday ? 0.75 : isPending ? 0.7 : 1,
                   padding: '0 22px',
                   marginBottom: 2,
                 }}
               >
                 {name}
               </button>
+                );
+              })()
             ))}
           </div>
 
@@ -950,6 +1099,39 @@ export default function AttendanceModal({ open, onClose }) {
           )}
         </div>
       </div>
-    </Modal>
+      </Modal>
+
+      <Modal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        title={alertTitle || 'Attendance'}
+        size="content"
+        fullScreen={isCompact}
+        footer={<></>}
+      >
+        <div style={{ display: 'grid', gap: 12, width: isCompact ? '100%' : 'min(520px, 90vw)' }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 800,
+              color:
+                alertTone === 'success'
+                  ? 'rgba(34,197,94,0.95)'
+                  : alertTone === 'error'
+                    ? 'rgba(248,113,113,0.95)'
+                    : 'var(--text-main)',
+              whiteSpace: 'pre-line',
+            }}
+          >
+            {alertMessage}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button variant="primary" size="sm" onClick={() => setAlertOpen(false)}>
+              OK
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }

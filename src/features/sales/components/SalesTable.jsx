@@ -219,6 +219,7 @@ export default function SalesTable({
 
     const brand = brandFromCode(row.code);
     const refundReason = String(row?.refundReason || '').trim();
+    const isManualPriceLike = row.guideId == null && isDiscounted && !giftChecked && !isRefunded;
 
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
@@ -458,7 +459,9 @@ export default function SalesTable({
                   ? isPeter
                     ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
                     : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
-                  : undefined,
+                  : isManualPriceLike
+                    ? { backgroundColor: 'rgba(139, 92, 246, 0.18)', color: 'var(--text-main)' }
+                    : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
