@@ -32,7 +32,7 @@ const getPunctualityScore = (targetTime, checkTime) => {
 };
 
 const getMoodEmoji = (score) => {
-  if (score === 100) return { emoji: '❤️', label: '아주 좋음', color: 'text-red-500' };
+  if (score === 100) return { emoji: '🥰', label: 'Perfect', color: 'text-red-500' };
   if (score >= 90) return { emoji: '😄', label: '좋음', color: 'text-green-500' };
   if (score >= 80) return { emoji: '🙂', label: '미소', color: 'text-yellow-400' };
   if (score >= 70) return { emoji: '😐', label: '보통', color: 'text-gray-400' };
@@ -88,7 +88,7 @@ const CurrentTimeDisplay = () => {
   );
 };
 
-const AttendanceCalendar = ({ staffingMode }) => {
+const AttendanceCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -113,7 +113,7 @@ const AttendanceCalendar = ({ staffingMode }) => {
     const isFuture = targetDate.setHours(0, 0, 0, 0) > now.setHours(0, 0, 0, 0);
 
     // Default return for rendering logic
-    const result = { score: null, isFuture, hasLog: false, details: [] };
+    const result = { score: null, isFuture, hasLog: false, details: [], noAttendance: false };
 
     if (isFuture) return result;
 
@@ -131,7 +131,7 @@ const AttendanceCalendar = ({ staffingMode }) => {
     });
 
     if (dayLogs.length === 0) {
-      return { score: 100, isFuture, hasLog: true, details: [] };
+      return { score: null, isFuture, hasLog: true, details: [], noAttendance: true };
     }
 
     const sorted = [...dayLogs].sort(
@@ -168,21 +168,9 @@ const AttendanceCalendar = ({ staffingMode }) => {
     });
 
     const scores = details.map((d) => Number(d.score ?? 0) || 0);
-    let finalScore = 100;
-    if (staffingMode === 'one') {
-      finalScore = scores.length > 0 ? scores[0] : 100;
-    } else {
-      if (scores.length > 0) {
-        const avgDeficit =
-          scores.reduce((sum, s) => sum + (100 - (Number(s) || 0)), 0) / scores.length;
-        finalScore = 100 - avgDeficit;
-      } else {
-        finalScore = 100;
-      }
-    }
-
-    finalScore = Math.max(0, Math.min(100, finalScore));
-    return { score: Math.round(finalScore), isFuture, hasLog: true, details };
+    const avg = scores.length ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 100;
+    const finalScore = Math.max(0, Math.min(100, avg));
+    return { score: Math.round(finalScore), isFuture, hasLog: true, details, noAttendance: false };
   };
 
   return (
@@ -253,7 +241,7 @@ const AttendanceCalendar = ({ staffingMode }) => {
         ))}
 
         {days.map((day) => {
-          const { score, hasLog, details } = getDayScore(day);
+          const { score, hasLog, details, noAttendance } = getDayScore(day);
           const isToday =
             day === new Date().getDate() &&
             month === new Date().getMonth() + 1 &&
@@ -278,6 +266,28 @@ const AttendanceCalendar = ({ staffingMode }) => {
             </div>
           );
 
+          if (hasLog && score === null && noAttendance) {
+            const isSelected = selectedDateLogs?.dateStr === `${year}-${month}-${day}`;
+            faceContent = (
+              <div
+                className={`bg-[#F87171] text-gray-800 transition-transform duration-300 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 ${isSelected ? 'scale-[1.4]' : 'hover:scale-[1.4]'}`}
+                style={{ ...emojiStyle, cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isSelected) {
+                    setSelectedDateLogs(null);
+                  } else {
+                    setSelectedDateLogs({
+                      dateStr: `${year}-${month}-${day}`,
+                      details,
+                    });
+                  }
+                }}
+              >
+                ❤️
+              </div>
+            );
+          } else
           if (hasLog && score !== null) {
             const emojiData = getMoodEmoji(score);
             // Custom colors based on score to match image style
@@ -361,7 +371,6 @@ const AttendanceCalendar = ({ staffingMode }) => {
 export default function AttendanceModal({ open, onClose }) {
   const [selectedShift, setSelectedShift] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
-  const [staffingMode, setStaffingMode] = useState('one');
   const { showToast } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
@@ -441,6 +450,13 @@ export default function AttendanceModal({ open, onClose }) {
   const { data: selectedStaffLog, isLoading: staffCheckLoading } = useCheckDailyAttendance(
     selectedStaff || ''
   );
+  const normalizeShiftType = (s) =>
+    String(s || '')
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '');
+  const checkedShiftType = selectedStaffLog ? normalizeShiftType(selectedStaffLog.shift_type) : '';
+  const isAlreadyChecked = Boolean(selectedStaffLog);
 
   const { mutate: recordAttendance, isPending } = useRecordAttendanceMutation();
   const { mutate: updateAttendance, isPending: isUpdating } = useUpdateAttendanceMutation();
@@ -463,31 +479,39 @@ export default function AttendanceModal({ open, onClose }) {
     d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
 
   const handleShiftChange = (shift) => {
-    if (selectedShift === shift) {
-      setSelectedShift(null);
-    } else {
-      setSelectedShift(shift);
-    }
+    if (selectedShift === shift) return;
+    setSelectedShift(shift);
   };
 
   const handleStaffChange = (staff) => {
     const next = String(staff || '').trim();
     if (!next) return;
-    if (checkedTodaySet.has(next)) {
-      const msg = `Already checked in today: ${next}`;
-      if (isCompact) {
-        setAlertTone('info');
-        setAlertTitle('Attendance');
-        setAlertMessage(msg);
-        setAlertOpen(true);
-      } else {
-        showToast(msg);
-      }
+    if (selectedStaff === next) {
+      setSelectedStaff(null);
+      setSelectedShift(null);
       return;
     }
-    if (selectedStaff === next) setSelectedStaff(null);
-    else setSelectedStaff(next);
+    setSelectedStaff(next);
+    setSelectedShift(null);
+    if (!checkedTodaySet.has(next)) return;
+    const msg = `Already checked in today: ${next}`;
+    if (isCompact) {
+      setAlertTone('info');
+      setAlertTitle('Attendance');
+      setAlertMessage(msg);
+      setAlertOpen(true);
+    } else {
+      showToast(msg);
+    }
   };
+
+  useEffect(() => {
+    if (!open) return;
+    if (!selectedStaff) return;
+    if (staffCheckLoading) return;
+    if (!selectedStaffLog) return;
+    setSelectedShift(checkedShiftType || null);
+  }, [open, selectedStaff, selectedStaffLog, checkedShiftType, staffCheckLoading]);
 
   useEffect(() => {
     if (!open) return;
@@ -506,8 +530,6 @@ export default function AttendanceModal({ open, onClose }) {
       } else {
         showToast(msg);
       }
-      setSelectedStaff(null);
-      setSelectedShift(null);
       savingRef.current = false;
       return;
     }
@@ -775,53 +797,7 @@ export default function AttendanceModal({ open, onClose }) {
       <div className="flex flex-col items-center gap-6 w-fit mx-auto text-center">
         {/* Attendance Calendar (Top) */}
         <div className="flex flex-col items-center gap-3">
-          <div
-            style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setStaffingMode('one')}
-              style={{
-                height: 44,
-                width: 180,
-                borderRadius: 22,
-                border: '1px solid rgba(255,255,255,0.2)',
-                background: staffingMode === 'one' ? '#FACC15' : 'rgba(255,255,255,0.10)',
-                color: staffingMode === 'one' ? '#000' : '#fff',
-                fontWeight: 900,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                marginBottom: 2,
-              }}
-            >
-              One person
-            </button>
-            <button
-              type="button"
-              onClick={() => setStaffingMode('two')}
-              style={{
-                height: 44,
-                width: 180,
-                borderRadius: 22,
-                border: '1px solid rgba(255,255,255,0.2)',
-                background: staffingMode === 'two' ? '#FACC15' : 'rgba(255,255,255,0.10)',
-                color: staffingMode === 'two' ? '#000' : '#fff',
-                fontWeight: 900,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                marginBottom: 2,
-              }}
-            >
-              Two person
-            </button>
-          </div>
-          <AttendanceCalendar staffingMode={staffingMode} />
+          <AttendanceCalendar />
         </div>
 
         <div className="flex flex-col gap-4 w-fit items-center justify-center text-center mx-auto">
@@ -843,12 +819,12 @@ export default function AttendanceModal({ open, onClose }) {
           >
             {/* 6AM Button */}
             <button
-              disabled={isPending || staffCheckLoading}
+              disabled={isPending || isAlreadyChecked}
               onClick={() => handleShiftChange('6AM')}
               className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
                 ${
-                  selectedShift === '6AM'
+                  selectedShift === '6AM' || (isAlreadyChecked && checkedShiftType === '6AM')
                     ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
                     : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
                 }
@@ -856,13 +832,16 @@ export default function AttendanceModal({ open, onClose }) {
               style={{
                 height: '60px',
                 fontSize: '1.5rem',
-                backgroundColor: selectedShift === '6AM' ? '#FACC15' : 'rgba(255, 255, 255, 0.1)',
+                backgroundColor:
+                  selectedShift === '6AM' || (isAlreadyChecked && checkedShiftType === '6AM')
+                    ? '#FACC15'
+                    : 'rgba(255, 255, 255, 0.1)',
                 backdropFilter: 'blur(10px)',
                 width: '100%',
                 border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '30px',
-                cursor: isPending || staffCheckLoading ? 'not-allowed' : 'pointer',
-                opacity: isPending || staffCheckLoading ? 0.65 : 1,
+                cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
+                opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
                 marginBottom: 2,
               }}
             >
@@ -871,12 +850,12 @@ export default function AttendanceModal({ open, onClose }) {
 
             {/* 9AM Button */}
             <button
-              disabled={isPending || staffCheckLoading}
+              disabled={isPending || isAlreadyChecked}
               onClick={() => handleShiftChange('9AM')}
               className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
                 ${
-                  selectedShift === '9AM'
+                  selectedShift === '9AM' || (isAlreadyChecked && checkedShiftType === '9AM')
                     ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
                     : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
                 }
@@ -884,13 +863,16 @@ export default function AttendanceModal({ open, onClose }) {
               style={{
                 height: '60px',
                 fontSize: '1.5rem',
-                backgroundColor: selectedShift === '9AM' ? '#FACC15' : 'rgba(255, 255, 255, 0.1)',
+                backgroundColor:
+                  selectedShift === '9AM' || (isAlreadyChecked && checkedShiftType === '9AM')
+                    ? '#FACC15'
+                    : 'rgba(255, 255, 255, 0.1)',
                 backdropFilter: 'blur(10px)',
                 width: '100%',
                 border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '30px',
-                cursor: isPending || staffCheckLoading ? 'not-allowed' : 'pointer',
-                opacity: isPending || staffCheckLoading ? 0.65 : 1,
+                cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
+                opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
                 marginBottom: 2,
               }}
             >
@@ -913,7 +895,7 @@ export default function AttendanceModal({ open, onClose }) {
             {staffOptions.map((name) => (
               (() => {
                 const isCheckedToday = checkedTodaySet.has(name);
-                const disabled = isPending || staffCheckLoading || isCheckedToday;
+                const disabled = isPending || staffCheckLoading;
                 return (
               <button
                 key={name}
