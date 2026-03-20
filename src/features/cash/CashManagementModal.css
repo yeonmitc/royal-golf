@@ -1,8 +1,8 @@
 .cash-management-modal {
   /* Desktop: Width 80vw (from lg), Height Content (Auto) */
-  width: 80vw !important;
+  width: 75vw !important;
   height: auto !important;
-  max-height: 85vh !important; /* Limit height to viewport */
+  max-height: 75vh !important; /* Limit height to viewport */
   overflow-y: auto !important;
 }
 

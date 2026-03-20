@@ -4,6 +4,7 @@ import {
   deleteCashTransaction,
   getCashBalances,
   getCashTransactions,
+  updateCashTransactionAmount,
 } from './cashApi';
 
 export const CASH_KEYS = {
@@ -19,10 +20,10 @@ export function useCashBalances() {
   });
 }
 
-export function useCashTransactions() {
+export function useCashTransactions(limit = 200) {
   return useQuery({
-    queryKey: CASH_KEYS.transactions(),
-    queryFn: () => getCashTransactions(10),
+    queryKey: [...CASH_KEYS.transactions(), limit],
+    queryFn: () => getCashTransactions(limit),
   });
 }
 
@@ -43,6 +44,16 @@ export function useDeleteCashTransactionMutation() {
     mutationFn: deleteCashTransaction,
     onSuccess: () => {
       // Invalidate both balances and transactions to refresh UI
+      queryClient.invalidateQueries({ queryKey: CASH_KEYS.all });
+    },
+  });
+}
+
+export function useUpdateCashTransactionAmountMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateCashTransactionAmount,
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CASH_KEYS.all });
     },
   });

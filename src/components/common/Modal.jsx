@@ -20,6 +20,11 @@ export default function Modal({
 }) {
   const overlayRef = useRef(null);
   const containerRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const isTypingElement = (el) => {
     if (!el) return false;
@@ -37,7 +42,7 @@ export default function Modal({
 
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (e.key === 'Tab') {
@@ -69,9 +74,12 @@ export default function Modal({
     setTimeout(() => {
       const root = containerRef.current;
       if (!root) return;
-      const focusTarget = root.querySelector(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      const inputFirst = root.querySelector(
+        'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable="true"]'
       );
+      const focusTarget =
+        inputFirst ||
+        root.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
       focusTarget?.focus();
     }, 0);
 
@@ -79,7 +87,7 @@ export default function Modal({
       document.body.style.overflow = prevOverflow || '';
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
