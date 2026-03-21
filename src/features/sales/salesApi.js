@@ -43,11 +43,21 @@ function includesIgnoreCase(hay, needle) {
  * =========================
  */
 export async function checkoutCart(cartItems) {
-  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+  let itemsPayload = cartItems;
+  let isMrMoon = false;
+  let isPeter = false;
+
+  if (!Array.isArray(cartItems) && cartItems?.items) {
+    itemsPayload = cartItems.items;
+    isMrMoon = Boolean(cartItems.isMrMoon);
+    isPeter = Boolean(cartItems.isPeter);
+  }
+
+  if (!Array.isArray(itemsPayload) || itemsPayload.length === 0) {
     throw new Error('장바구니가 비어 있습니다.');
   }
 
-  const items = cartItems.filter((i) => (i.qty ?? 0) > 0);
+  const items = itemsPayload.filter((i) => (i.qty ?? 0) > 0);
   if (items.length === 0) {
     throw new Error('수량이 0 이하인 상품만 있습니다.');
   }
@@ -85,9 +95,19 @@ export async function checkoutCart(cartItems) {
       const unitPriceOriginal =
         Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePricePhp ?? 0) || 0;
       const unitPriceChargedCandidate = Number(item.unitPricePhp ?? unitPriceOriginal);
-      const unitPriceCharged = Number.isFinite(unitPriceChargedCandidate)
+      const isExplicitlyFree = item.unitPricePhp === 0;
+      let unitPriceCharged = Number.isFinite(unitPriceChargedCandidate)
         ? unitPriceChargedCandidate
         : unitPriceOriginal;
+      if (!isExplicitlyFree) {
+        if (isPeter && unitPriceOriginal > 1000) {
+          unitPriceCharged = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
+        } else if (isMrMoon && unitPriceOriginal > 1000) {
+          unitPriceCharged = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
+        }
+      } else {
+        unitPriceCharged = 0;
+      }
       const lineTotal = unitPriceCharged * qty;
       const freeGift = unitPriceCharged === 0;
 

@@ -138,6 +138,10 @@ export default function SalesTable({
       .map((g) => String(g.id))
   );
 
+  const guideNameById = new Map(
+    (guides || []).map((g) => [String(g.id), String(g.name || '').trim()])
+  );
+
   const { totalQty, totalPrice, totalCommission } = visibleRows.reduce(
     (acc, row) => {
       const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
@@ -147,10 +151,10 @@ export default function SalesTable({
       const finalUnitRaw = isDiscounted ? discounted : original;
       const finalUnit = isRefunded ? 0 : finalUnitRaw;
       const qty = Number(row.qty || 0) || 0;
-      const qtyForTotal = isRefunded ? 0 : qty;
+      const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
+      const qtyForTotal = isRefunded || isElla ? 0 : qty;
       const commission = Number(row.commission || 0);
       const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
-      const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
       const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
       const commissionForTotal = isRefunded || isMrMoon || isElla || isPeter ? 0 : commission;
       const lineTotalForTotal = finalUnit * qtyForTotal;
@@ -208,14 +212,14 @@ export default function SalesTable({
     const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
     const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
     const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
+    const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
     const isRental = row.code === 'GA-GC-RT-BK-01';
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
-    const qtyForTotal = isRefunded ? 0 : qty;
-    const lineTotal = finalUnit * qtyForTotal;
-    const priceForCopy = lineTotal.toLocaleString('en-US');
-    const commission = Number(row.commission || 0);
-    const commissionForTotal = isRefunded ? 0 : commission;
+    const qtyForDisplay = isRefunded ? 0 : qty;
+    const lineTotalDisplay = finalUnit * qtyForDisplay;
+    const qtyForTotal = isRefunded || isElla ? 0 : qty;
+    const priceForCopy = lineTotalDisplay.toLocaleString('en-US');
 
     const brand = brandFromCode(row.code);
     const refundReason = String(row?.refundReason || '').trim();
@@ -242,13 +246,7 @@ export default function SalesTable({
       sizeDisplay: row.sizeDisplay,
       qty: qty,
       brand,
-      commission: isElla || isPeter || isMrMoon
-        ? '-'
-        : commissionForTotal > 0 ? (
-         commissionForTotal.toLocaleString('en-US')
-        ) : (
-        '-'
-        ),
+      commission: isElla ? '-' : guideName || '-',
       unitPricePhp: (
         <div
           style={{
@@ -260,7 +258,7 @@ export default function SalesTable({
             padding: '8px',
           }}
         >
-          <span>{lineTotal.toLocaleString('en-US')}</span>
+          <span>{lineTotalDisplay.toLocaleString('en-US')}</span>
           {isRefunded && refundReason ? (
             <span
               style={{

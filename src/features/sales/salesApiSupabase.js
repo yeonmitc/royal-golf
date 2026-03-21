@@ -262,7 +262,7 @@ export async function checkoutCart(payload) {
 
   // 1. Create a sale group for this transaction
   const saleGroupId = crypto.randomUUID();
-  const guideRate = guideId ? (isPeter ? 0 : 0.1) : 0; // Peter has 0% commission
+  const guideRate = guideId ? (isPeter || isMrMoon ? 0 : 0.1) : 0; // Mr.Moon/Peter have 0% commission
 
   // Create the group first (parent record)
   // We initialize totals to 0; finalize_sale_group will calculate them
@@ -293,7 +293,7 @@ export async function checkoutCart(payload) {
 
     // Apply Mr. Moon/Peter discount logic (Ceiling to nearest 100) if applicable
     let calculatedPrice = unitPriceOriginal;
-    if (isPeter && unitPriceOriginal > 0) {
+    if (isPeter && unitPriceOriginal > 1000) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
     } else
     if (isMrMoon && unitPriceOriginal > 1000) {
@@ -565,11 +565,75 @@ export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 
   const gid = String(saleGroupId || '').trim();
   if (!gid) throw new Error('INVALID_SALE_GROUP_ID');
   const guide = guideId ? Number(guideId) : null;
+
+  let guideNameNorm = '';
+  if (guide) {
+    try {
+      const rows = await sbSelect('guides', {
+        select: 'id,name',
+        filters: [{ column: 'id', op: 'eq', value: guide }],
+        limit: 1,
+      });
+      const g = Array.isArray(rows) && rows.length ? rows[0] : null;
+      guideNameNorm = String(g?.name || '')
+        .toLowerCase()
+        .replace(/[\s.]/g, '');
+    } catch {
+      guideNameNorm = '';
+    }
+  }
+
+  const isPeter = guideNameNorm.includes('peter');
+  const isMrMoon = guideNameNorm.includes('mrmoon');
+  const finalGuideRate = guide ? (isPeter || isMrMoon ? 0 : Number(guideRate || 0.1)) : 0;
   await sbUpdate(
     'sale_groups',
-    { guide_id: guide, guide_rate: guide ? Number(guideRate || 0.1) : 0 },
+    { guide_id: guide, guide_rate: finalGuideRate },
     { filters: [{ column: 'id', op: 'eq', value: gid }], returning: 'minimal' }
   );
+
+  try {
+    const sales = await sbSelect('sales', {
+      select: 'id,price,list_price,free_gift',
+      filters: [{ column: 'sale_group_id', op: 'eq', value: gid }],
+      order: { column: 'id', ascending: true },
+      limit: 1000,
+    });
+
+    for (const s of sales || []) {
+      const sid = Number(s?.id || 0);
+      if (!sid) continue;
+      const isFreeGift = Boolean(s?.free_gift);
+      const storedList = Number(s?.list_price ?? 0) || 0;
+      const currentPrice = Number(s?.price ?? 0) || 0;
+      const base = storedList > 0 ? storedList : currentPrice;
+
+      let nextList = storedList;
+      if (!nextList && base > 0) nextList = base;
+
+      let nextPrice = base;
+      if (!isFreeGift && base > 0) {
+        if (isPeter) {
+          if (base > 1000) nextPrice = Math.ceil((base * 0.8) / 100) * 100;
+        } else if (isMrMoon && base > 1000) {
+          nextPrice = Math.ceil((base * 0.9) / 100) * 100;
+        }
+      }
+
+      const patch = {};
+      if (nextList > 0 && storedList !== nextList) patch.list_price = nextList;
+      if (currentPrice !== nextPrice) patch.price = nextPrice;
+      if (Object.keys(patch).length === 0) continue;
+
+      await sbUpdate('sales', patch, {
+        filters: [{ column: 'id', op: 'eq', value: sid }],
+        returning: 'minimal',
+      });
+    }
+  } catch {
+    // ignore
+  }
+
   try {
     await sbRpc('finalize_sale_group', { p_group_id: gid });
   } catch {

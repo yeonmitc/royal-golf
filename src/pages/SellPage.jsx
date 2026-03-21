@@ -42,7 +42,7 @@ export default function SellPage() {
   // Calculate item price with Mr. Moon (10%) or Peter (20%) discount logic
   const calculateItemPrice = (price) => {
     const p = Number(price || 0);
-    if (isPeterSelected && p > 0) {
+    if (isPeterSelected && p > 1000) {
       // 20% discount, rounded up to nearest 100
       return Math.ceil((p * 0.8) / 100) * 100;
     }
@@ -83,7 +83,7 @@ export default function SellPage() {
       const receiptItems = currentItems.map((item) => {
         const original = Number(item.unitPricePhp || item.price || 0);
         let finalPrice = original;
-        if (isPeterSelected && original > 0) {
+        if (isPeterSelected && original > 1000) {
           finalPrice = Math.ceil((original * 0.8) / 100) * 100;
         } else
         if (isMrMoonSelected && original > 1000) {
