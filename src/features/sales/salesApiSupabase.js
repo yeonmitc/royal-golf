@@ -154,6 +154,7 @@ async function attachLocalProductMeta(items) {
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
     const isFreeGift = Boolean(i.freeGift ?? false) || i.unitPricePhp === 0;
     const commission = i.guideId && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
+    const unitForTotal = Number(i.discountUnitPricePhp ?? i.unitPricePhp ?? 0) || 0;
     return {
       ...i,
       productNo: product?.no ?? i.productNo ?? 0,
@@ -164,7 +165,7 @@ async function attachLocalProductMeta(items) {
       sizeDisplay: i.sizeDisplay ?? i.size,
       commission,
       listPrice: listUnit,
-      lineTotalPhp: Number(i.unitPricePhp || 0) * Number(i.qty || 0),
+      lineTotalPhp: unitForTotal * qtyN,
     };
   });
 }
