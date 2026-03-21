@@ -244,15 +244,37 @@ export default function SalesHistoryPage() {
   const summary = useMemo(() => {
     const rows = visibleRows || [];
     const count = rows.length;
-    const totalQty = rows.reduce((acc, r) => acc + (Number(r.qty) || 0), 0);
-    const totalAmount = rows.reduce((acc, r) => {
-      if (typeof r.lineTotalPhp === 'number') return acc + r.lineTotalPhp;
-      const price = Number(r.price ?? r.unitPricePhp ?? 0);
-      const qty = Number(r.qty ?? 0);
-      return acc + price * qty;
-    }, 0);
+    const ellaGuideIds = new Set(
+      (guides || [])
+        .filter((g) =>
+          String(g.name || '')
+            .toLowerCase()
+            .includes('ella')
+        )
+        .map((g) => String(g.id))
+    );
+
+    const { totalQty, totalAmount } = rows.reduce(
+      (acc, r) => {
+        const isRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
+        const original = Number(r?.unitPricePhp || 0) || 0;
+        const discounted = r?.discountUnitPricePhp != null ? Number(r.discountUnitPricePhp) : null;
+        const isDiscounted = discounted !== null && discounted !== original;
+        const finalUnitRaw = isDiscounted ? discounted : original;
+        const finalUnit = isRefunded ? 0 : finalUnitRaw;
+        const qty = Number(r?.qty || 0) || 0;
+        const isElla = r?.guideId != null && ellaGuideIds.has(String(r.guideId));
+        const qtyForTotal = isRefunded || isElla ? 0 : qty;
+        return {
+          totalQty: acc.totalQty + qtyForTotal,
+          totalAmount: acc.totalAmount + finalUnit * qtyForTotal,
+        };
+      },
+      { totalQty: 0, totalAmount: 0 }
+    );
+
     return { count, totalQty, totalAmount };
-  }, [visibleRows]);
+  }, [visibleRows, guides]);
 
   const cardActions = useMemo(() => {
     const actions = [
