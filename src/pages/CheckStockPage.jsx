@@ -72,7 +72,7 @@ function parseMemo(memo) {
   return { reason, otherText: reason === 'other' ? m : '', countsFromMemo: counts };
 }
 
-const StockCodeCell = ({ item, isError, setEditingError, setErrorModalOpen, showToast }) => {
+const StockCodeCell = ({ item, isError, isSold, setEditingError, setErrorModalOpen, showToast }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -82,7 +82,7 @@ const StockCodeCell = ({ item, isError, setEditingError, setErrorModalOpen, show
       style={{
         cursor: 'pointer',
         display: 'inline-block',
-        color: isError ? '#f87171' : isHovered ? '#22c55e' : 'inherit',
+        color: isError ? '#f87171' : isHovered ? '#22c55e' : isSold ? 'var(--gold-soft)' : 'inherit',
         fontWeight: isError || isHovered ? 'bold' : 'normal',
         textDecoration: isError && isHovered ? 'underline' : 'none',
         transition: 'color 0.2s, font-weight 0.2s',
@@ -122,6 +122,28 @@ export default function CheckStockPage() {
   const [pendingChanges, setPendingChanges] = useState({});
   const dateInputRef = useRef(null);
 
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('Alert');
+  const [alertMessage, setAlertMessage] = useState('');
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState('Confirm');
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const confirmActionRef = useRef(null);
+
+  const showAlert = ({ title, message } = {}) => {
+    setAlertTitle(title || 'Alert');
+    setAlertMessage(String(message || '').trim());
+    setAlertOpen(true);
+  };
+
+  const requestConfirm = ({ title, message, onConfirm } = {}) => {
+    setConfirmTitle(title || 'Confirm');
+    setConfirmMessage(String(message || '').trim());
+    confirmActionRef.current = typeof onConfirm === 'function' ? onConfirm : null;
+    setConfirmOpen(true);
+  };
+
   // Error Modal State
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [editingError, setEditingError] = useState(null); // { code, memo }
@@ -134,31 +156,43 @@ export default function CheckStockPage() {
 
   const handleSaveAll = () => {
     if (!hasChanges) return;
-    if (!window.confirm(`Save ${Object.keys(pendingChanges).length} changes?`)) return;
-
-    batchUpdateStatus(pendingChanges, {
-      onSuccess: () => {
-        setPendingChanges({});
-        alert('Saved successfully!');
-      },
-      onError: (err) => {
-        console.error(err);
-        alert(`Failed to save: ${err.message}`);
+    const n = Object.keys(pendingChanges).length;
+    requestConfirm({
+      title: 'Save Changes',
+      message: `Save ${n} changes?`,
+      onConfirm: () => {
+        batchUpdateStatus(pendingChanges, {
+          onSuccess: () => {
+            setPendingChanges({});
+            showAlert({ title: 'Saved', message: 'Changes saved successfully.' });
+          },
+          onError: (err) => {
+            console.error(err);
+            showAlert({ title: 'Save Failed', message: String(err?.message || 'Failed to save.') });
+          },
+        });
       },
     });
   };
 
   const handleResetAll = () => {
-    if (!window.confirm('Are you sure you want to reset ALL check statuses to Unchecked?')) {
-      return;
-    }
-    resetAllStatus(null, {
-      onSuccess: () => {
-        setPendingChanges({}); // Clear local changes too
-      },
-      onError: (err) => {
-        console.error(err);
-        alert(`Failed to reset statuses: ${err.message}`);
+    requestConfirm({
+      title: 'Reset All',
+      message: 'Reset ALL check statuses to Unchecked?',
+      onConfirm: () => {
+        resetAllStatus(null, {
+          onSuccess: () => {
+            setPendingChanges({});
+            showAlert({ title: 'Reset', message: 'All statuses were reset.' });
+          },
+          onError: (err) => {
+            console.error(err);
+            showAlert({
+              title: 'Reset Failed',
+              message: String(err?.message || 'Failed to reset statuses.'),
+            });
+          },
+        });
       },
     });
   };
@@ -176,81 +210,119 @@ export default function CheckStockPage() {
     return d.toISOString().slice(0, 10);
   });
   const [soldProductCodes, setSoldProductCodes] = useState(null);
+  const [soldOnlyView, setSoldOnlyView] = useState(false);
   const [isLoadingSold, setIsLoadingSold] = useState(false);
 
-  const handleCheckSoldItems = async () => {
-    if (!soldDate) return;
-    if (
-      !window.confirm(
-        'This will reset current filters, show ONLY items sold on the selected date, and auto-mark other items as CHECKED. Continue?'
-      )
-    )
-      return;
-
+  const runSoldCheck = async (dateStr, { showOnly = false } = {}) => {
+    const dateKey = String(dateStr || soldDate || '').trim();
+    if (!dateKey) return;
     setIsLoadingSold(true);
     try {
       // Fetch sales for that date (fromDate = toDate = soldDate)
       const result = await getSalesHistoryFilteredResult({
-        fromDate: soldDate,
-        toDate: soldDate,
+        fromDate: dateKey,
+        toDate: dateKey,
       });
 
       if (!result.rows || result.rows.length === 0) {
-        alert('No sales found for this date.');
+        showAlert({ title: 'Sold Check', message: 'No sales found for the selected date.' });
         setSoldProductCodes(null);
+        setSoldOnlyView(false);
         setIsLoadingSold(false);
         return;
       }
 
       const codes = new Set(result.rows.map((r) => r.code));
       setSoldProductCodes(codes);
+      setSoldOnlyView(Boolean(showOnly));
 
-      // Auto-Check Logic:
-      // - If code is in sold list -> Status = 'unchecked' (so user can verify)
-      // - If code is NOT in sold list -> Status = 'checked' (assumed safe)
-      // Apply this to ALL stocked products
-      const newPendingChanges = {};
-      allProducts.forEach((p) => {
-        // Only consider products with stock > 0 for "checking"
-        if ((p.totalStock || 0) > 0) {
-          if (codes.has(p.code)) {
-            newPendingChanges[p.code] = 'unchecked';
+      const allSold = Array.from(codes);
+      const soldInStock = new Set(
+        allProducts.filter((p) => (p.totalStock || 0) > 0 && codes.has(p.code)).map((p) => p.code)
+      );
+      const missing = allSold.filter((c) => !soldInStock.has(c));
+      if (missing.length) {
+        showToast(`Sold codes not in stock list: ${missing.length}`, 900);
+      }
+
+      setPendingChanges((prev) => {
+        const next = { ...prev };
+        allProducts.forEach((p) => {
+          if (!codes.has(p.code)) return;
+          if ((p.totalStock || 0) <= 0) return;
+          const dbStatus = p.check_status ?? 'unchecked';
+          const effective = prev[p.code] ?? dbStatus;
+          if (effective !== 'checked') return;
+          if (dbStatus === 'unchecked') {
+            delete next[p.code];
           } else {
-            newPendingChanges[p.code] = 'checked';
+            next[p.code] = 'unchecked';
           }
-        }
+        });
+        return next;
       });
-      setPendingChanges(newPendingChanges);
-
-      // Reset other filters
-      setSelectedType(null);
-      setFilterLine(null);
-      setFilterGender(null);
-      setFilterBrand(null);
-      setShowCheckedOnly(false);
-      setShowErrorOnly(false);
-      setShowUncheckedOnly(true); // Auto-show unchecked items (which are the sold items)
     } catch (err) {
       console.error(err);
-      alert('Failed to fetch sales data.');
+      showAlert({ title: 'Sold Check Failed', message: 'Failed to fetch sales data.' });
     } finally {
       setIsLoadingSold(false);
     }
   };
 
+  const handleCheckSoldItems = () => {
+    if (!soldDate) return;
+    requestConfirm({
+      title: 'Sold Check',
+      message:
+        "This will highlight sold codes in yellow, and reset only the sold codes that are currently CHECKED back to UNCHECKED. Continue?",
+      onConfirm: () => runSoldCheck(soldDate, { showOnly: false }),
+    });
+  };
+
   const clearSoldFilter = () => {
     setSoldProductCodes(null);
+    setSoldOnlyView(false);
     setShowUncheckedOnly(false); // Reset view when filter is cleared
     // Don't reset soldDate, keep last selection
   };
 
+  const handleYesterdayFilter = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.toISOString().slice(0, 10);
+    setSelectedType(null);
+    setFilterLine(null);
+    setFilterGender(null);
+    setFilterBrand(null);
+    setShowCheckedOnly(false);
+    setShowUncheckedOnly(false);
+    setShowErrorOnly(false);
+    setSoldDate(y);
+    runSoldCheck(y, { showOnly: true });
+  };
+
   // 1. Filter products that have at least 1 stock OR are in the sold list
   const stockedProducts = useMemo(() => {
-    if (soldProductCodes) {
+    if (soldOnlyView && soldProductCodes) {
       return allProducts.filter((p) => soldProductCodes.has(p.code));
     }
     return allProducts.filter((p) => (p.totalStock || 0) > 0);
-  }, [allProducts, soldProductCodes]);
+  }, [allProducts, soldOnlyView, soldProductCodes]);
+
+  const progress = useMemo(() => {
+    const all = allProducts.filter((p) => (p.totalStock || 0) > 0);
+    const total = all.length;
+    let checked = 0;
+    let error = 0;
+    all.forEach((p) => {
+      const s = pendingChanges[p.code] ?? p.check_status ?? 'unchecked';
+      if (s === 'checked') checked += 1;
+      else if (s === 'error') error += 1;
+    });
+    const done = checked + error;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return { total, checked, error, done, pct };
+  }, [allProducts, pendingChanges]);
 
   // Filter states
   const [filterLine, setFilterLine] = useState(null); // 'G' or 'L'
@@ -351,7 +423,9 @@ export default function CheckStockPage() {
     // Helper to get effective status (pending > db)
     const getStatus = (p) => pendingChanges[p.code] ?? p.check_status ?? 'unchecked';
 
-    if (showCheckedOnly) {
+    if (soldOnlyView && soldProductCodes) {
+      base = brandFilteredProducts;
+    } else if (showCheckedOnly) {
       base = brandFilteredProducts.filter((p) => getStatus(p) === 'checked');
     } else if (showErrorOnly) {
       base = brandFilteredProducts.filter((p) => getStatus(p) === 'error');
@@ -372,6 +446,8 @@ export default function CheckStockPage() {
   }, [
     typeFilteredProducts,
     brandFilteredProducts,
+    soldOnlyView,
+    soldProductCodes,
     showCheckedOnly,
     showErrorOnly,
     showUncheckedOnly,
@@ -415,7 +491,10 @@ export default function CheckStockPage() {
       onError: (err) => {
         console.error('Save failed:', err);
         // We might want to alert the user or revert the state here
-        alert(`Failed to save error memo for ${targetCode}: ${err.message}`);
+        showAlert({
+          title: 'Save Failed',
+          message: `Failed to save error memo for ${targetCode}: ${String(err?.message || '')}`,
+        });
       },
     });
   };
@@ -433,14 +512,17 @@ export default function CheckStockPage() {
     deleteErroStock(targetCode, {
       onError: (err) => {
         console.error(err);
-        alert(`Failed to delete error for ${targetCode}: ${err.message}`);
+        showAlert({
+          title: 'Delete Failed',
+          message: `Failed to delete error for ${targetCode}: ${String(err?.message || '')}`,
+        });
       },
     });
   };
 
   const handleDownloadTsv = () => {
     if (finalRows.length === 0) {
-      alert('No data to download.');
+      showAlert({ title: 'Export', message: 'No data to download.' });
       return;
     }
 
@@ -587,30 +669,81 @@ export default function CheckStockPage() {
               {isLoadingSold ? '...' : 'Sold Check'}
             </button>
             {soldProductCodes && (
-              <button
-                onClick={clearSoldFilter}
-                style={{
-                  height: '100%',
-                  border: 'none',
-                  backgroundColor: '#dc2626', // Red background
-                  color: 'white',
-                  fontSize: 11,
-                  fontWeight: 'bold',
-                  padding: '0 4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderLeft: '1px solid var(--gold)',
-                  flex: 1.5, // Remaining space for Reset
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                Reset ({soldProductCodes.size})
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleYesterdayFilter}
+                  disabled={isLoadingSold}
+                  style={{
+                    height: '100%',
+                    border: 'none',
+                    backgroundColor: 'rgba(212,175,55,0.95)',
+                    color: '#000',
+                    fontSize: 11,
+                    fontWeight: 900,
+                    padding: '0 6px',
+                    cursor: 'pointer',
+                    borderLeft: '1px solid var(--gold)',
+                    flex: 2,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Yesterday
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSoldFilter}
+                  style={{
+                    height: '100%',
+                    border: 'none',
+                    backgroundColor: '#dc2626',
+                    color: 'white',
+                    fontSize: 11,
+                    fontWeight: 900,
+                    padding: '0 4px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderLeft: '1px solid var(--gold)',
+                    flex: 1.5,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  Reset ({soldProductCodes.size})
+                </button>
+              </>
             )}
+          </div>
+        </div>
+
+        <div style={{ width: '100%', padding: '0 6px', marginTop: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+            <span>
+              Progress: {progress.done.toLocaleString()} / {progress.total.toLocaleString()}
+              {progress.error ? ` (Err ${progress.error.toLocaleString()})` : ''}
+            </span>
+            <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{progress.pct}%</span>
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              height: 11,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.08)',
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.10)',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${progress.pct}%`,
+                background: 'linear-gradient(90deg, var(--gold) 0%, #22c55e 100%)',
+              }}
+            />
           </div>
         </div>
 
@@ -808,6 +941,7 @@ export default function CheckStockPage() {
               {finalRows.map((item) => {
                 const isChecked = item.check_status === 'checked';
                 const isError = item.check_status === 'error';
+                const isSold = soldProductCodes ? soldProductCodes.has(item.code) : false;
                 const availableSizes = (item.sizes || [])
                   .filter((s) => s.stockQty > 0)
                   .map((s) => `${s.size}(${s.stockQty})`)
@@ -819,6 +953,7 @@ export default function CheckStockPage() {
                       <StockCodeCell
                         item={item}
                         isError={isError}
+                        isSold={isSold}
                         setEditingError={setEditingError}
                         setErrorModalOpen={setErrorModalOpen}
                         showToast={showToast}
@@ -1046,6 +1181,56 @@ export default function CheckStockPage() {
               />
             </div>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title={confirmTitle}
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
+            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={async () => {
+                const fn = confirmActionRef.current;
+                setConfirmOpen(false);
+                confirmActionRef.current = null;
+                if (typeof fn === 'function') {
+                  await fn();
+                }
+              }}
+            >
+              OK
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ width: 'min(520px, 90vw)', whiteSpace: 'pre-line', fontWeight: 700 }}>
+          {confirmMessage}
+        </div>
+      </Modal>
+
+      <Modal
+        open={alertOpen}
+        onClose={() => setAlertOpen(false)}
+        title={alertTitle}
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="primary" size="sm" onClick={() => setAlertOpen(false)}>
+              OK
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ width: 'min(520px, 90vw)', whiteSpace: 'pre-line', fontWeight: 700 }}>
+          {alertMessage}
         </div>
       </Modal>
     </div>
