@@ -14,6 +14,12 @@ import { getGuides } from '../features/guides/guideApi';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
 import { useCartStore } from '../store/cartStore';
+import {
+  buildRentalSig,
+  formatRentalLabel,
+  RENTAL_CODE,
+  saveRentalMetaForSoldAt,
+} from '../utils/rentalMeta';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -28,6 +34,7 @@ export default function SellPage() {
   const togglePromo = useCartStore((s) => s.togglePromo);
   const setItemColor = useCartStore((s) => s.setItemColor);
   const removeItem = useCartStore((s) => s.removeItem);
+  const setRentalInfo = useCartStore((s) => s.setRentalInfo);
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
 
@@ -100,6 +107,29 @@ export default function SellPage() {
       });
 
       const receiptTotal = receiptItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+      const rentalEntries = receiptItems
+        .filter((i) => i.code === RENTAL_CODE)
+        .map((i) => {
+          const src = currentItems.find(
+            (c) => c.code === i.code && String(c.sizeDisplay || c.size) === String(i.size)
+          );
+          const sig = buildRentalSig({
+            soldAt: result.soldAt,
+            code: i.code,
+            size: i.size,
+            qty: i.qty,
+            unitPrice: i.price,
+          });
+          return {
+            sig,
+            rentalNo: src?.rentalNo || '',
+            customerName: src?.rentalCustomerName || '',
+            customerContact: src?.rentalCustomerContact || '',
+          };
+        });
+      if (rentalEntries.length) {
+        saveRentalMetaForSoldAt(result.soldAt, rentalEntries);
+      }
 
       setReceiptData({
         id: result.saleId.toString(),
@@ -185,48 +215,126 @@ export default function SellPage() {
                   ]}
                   rows={cartItems.map((item, idx) => {
                     const isFree = item.unitPricePhp === 0;
+                    const isRental = item.code === RENTAL_CODE;
+                    const rentalLabel = formatRentalLabel({
+                      rentalNo: item.rentalNo,
+                      customerName: item.rentalCustomerName,
+                      customerContact: item.rentalCustomerContact,
+                    });
                     return {
                       id: `${item.code}-${item.size}-${idx}`,
                       name: (
-                        <div className="flex items-center gap-2">
-                          <span>{item.nameKo || item.code}</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              togglePromo(item.code, item.size);
-                            }}
-                            className="heart-toggle-btn"
-                            style={{
-                              margin: '0 5px',
-                              background: 'transparent',
-                              border: 'none',
-                              padding: 0,
-                              lineHeight: 1,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                            title="Toggle Free Gift"
-                          >
-                            <span
-                              style={{
-                                color: isFree ? 'var(--gold-soft)' : '#ef4444',
-                                lineHeight: 0,
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          <div className="flex items-center gap-2">
+                            <span>{item.nameKo || item.code}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePromo(item.code, item.size);
                               }}
+                              className="heart-toggle-btn"
+                              style={{
+                                margin: '0 5px',
+                                background: 'transparent',
+                                border: 'none',
+                                padding: 0,
+                                lineHeight: 1,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                              title="Toggle Free Gift"
                             >
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                                aria-hidden="true"
-                                focusable="false"
-                                style={{ display: 'block' }}
+                              <span
+                                style={{
+                                  color: isFree ? 'var(--gold-soft)' : '#ef4444',
+                                  lineHeight: 0,
+                                }}
                               >
-                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                              </svg>
-                            </span>
-                          </button>
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="currentColor"
+                                  aria-hidden="true"
+                                  focusable="false"
+                                  style={{ display: 'block' }}
+                                >
+                                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                </svg>
+                              </span>
+                            </button>
+                          </div>
+
+                          {isRental ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: '88px 1fr', gap: 8 }}>
+                              <select
+                                className="select-gold"
+                                value={item.rentalNo || ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setRentalInfo(item.code, item.size, { rentalNo: e.target.value });
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                }}
+                              >
+                                <option value="">Rental #</option>
+                                {[1, 2, 3, 4, 5, 6].map((n) => (
+                                  <option key={n} value={String(n)}>
+                                    #{n}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                className="input-field"
+                                value={item.rentalCustomerName || ''}
+                                placeholder="Customer name"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  setRentalInfo(item.code, item.size, {
+                                    rentalCustomerName: e.target.value,
+                                  });
+                                }}
+                                style={{ height: 30, padding: '0 10px', borderRadius: 10 }}
+                              />
+                              <div />
+                              <input
+                                className="input-field"
+                                value={item.rentalCustomerContact || ''}
+                                placeholder="Contact"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  setRentalInfo(item.code, item.size, {
+                                    rentalCustomerContact: e.target.value,
+                                  });
+                                }}
+                                style={{ height: 30, padding: '0 10px', borderRadius: 10 }}
+                              />
+                              {rentalLabel ? (
+                                <>
+                                  <div />
+                                  <div
+                                    style={{
+                                      color: 'var(--gold-soft)',
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                    title={rentalLabel}
+                                  >
+                                    {rentalLabel}
+                                  </div>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       ),
                       size: item.sizeDisplay || item.size,

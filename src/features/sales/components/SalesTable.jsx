@@ -11,6 +11,7 @@ import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
+import { formatRentalName, getRentalMetaForRow, RENTAL_CODE } from '../../../utils/rentalMeta';
 import { getGuides } from '../../guides/guideApi';
 import {
   useSetSaleGroupGuideMutation,
@@ -44,6 +45,8 @@ export default function SalesTable({
   const [timeError, setTimeError] = useState('');
   const [colorEditOpen, setColorEditOpen] = useState(false);
   const [colorEditTarget, setColorEditTarget] = useState(null);
+  const [rentalContactOpen, setRentalContactOpen] = useState(false);
+  const [rentalContact, setRentalContact] = useState(null);
   const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
   const { mutateAsync: updateColor } = useUpdateSaleItemColorMutation();
@@ -201,6 +204,7 @@ export default function SalesTable({
     }
   }
 
+  const rentalSeqMap = new Map();
   const tableRows = visibleRows.map((row, index) => {
     const isRefunded = Boolean(row?.isRefunded) || Boolean(row?.refundedAt);
     const original = Number(row.unitPricePhp || 0);
@@ -213,7 +217,7 @@ export default function SalesTable({
     const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
     const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
     const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
-    const isRental = row.code === 'GA-GC-RT-BK-01';
+    const isRental = row.code === RENTAL_CODE;
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
     const qtyForDisplay = isRefunded ? 0 : qty;
@@ -222,6 +226,16 @@ export default function SalesTable({
     const priceForCopy = lineTotalDisplay.toLocaleString('en-US');
 
     const brand = brandFromCode(row.code);
+    let rentalIndex = 0;
+    if (isRental) {
+      const k = `${soldAtDate}|${soldAtTime}`;
+      const prev = rentalSeqMap.get(k) || 0;
+      rentalIndex = prev;
+      rentalSeqMap.set(k, prev + 1);
+    }
+    const rentalMeta = isRental ? getRentalMetaForRow(row, { timeIndex: rentalIndex }) : null;
+    const rentalName = rentalMeta ? formatRentalName(rentalMeta) : '';
+    const rentalNo = rentalMeta ? String(rentalMeta.rentalNo || '').trim() : '';
     const refundReason = String(row?.refundReason || '').trim();
     const isManualPriceLike = row.guideId == null && isDiscounted && !giftChecked && !isRefunded;
 
@@ -245,7 +259,65 @@ export default function SalesTable({
         ),
       sizeDisplay: row.sizeDisplay,
       qty: qty,
-      brand,
+      brand:
+        isRental && (rentalName || rentalNo) ? (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              maxWidth: 220,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {rentalNo ? (
+              <span style={{ color: 'var(--gold-soft)', fontWeight: 900, flex: '0 0 auto' }}>
+                #{rentalNo}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!rentalMeta) return;
+                setRentalContact({
+                  name: rentalName,
+                  contact: String(rentalMeta.customerContact || '').trim(),
+                });
+                setRentalContactOpen(true);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer',
+                color: 'var(--gold-soft)',
+                fontWeight: 800,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: '1 1 auto',
+                display: 'inline-block',
+                transformOrigin: 'left center',
+                transition: 'transform 120ms ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+              title={rentalName || ''}
+            >
+              {rentalName || 'Customer'}
+            </button>
+          </div>
+        ) : (
+          brand
+        ),
       commission: isElla ? '-' : guideName || '-',
       unitPricePhp: (
         <div
@@ -580,6 +652,29 @@ export default function SalesTable({
           setReceiptData(null);
         }}
       />
+      <Modal
+        open={rentalContactOpen}
+        onClose={() => {
+          setRentalContactOpen(false);
+          setRentalContact(null);
+        }}
+        title="Rental Info"
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="primary" size="sm" onClick={() => setRentalContactOpen(false)}>
+              OK
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ width: 'min(520px, 90vw)', display: 'grid', gap: 10 }}>
+          <div style={{ fontWeight: 900 }}>{String(rentalContact?.name || '').trim() || '-'}</div>
+          <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>
+            {String(rentalContact?.contact || '').trim() || '-'}
+          </div>
+        </div>
+      </Modal>
       <Modal
         open={timeOpen}
         onClose={() => {

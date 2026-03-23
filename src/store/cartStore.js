@@ -131,6 +131,29 @@ export const useCartStore = create((set, get) => ({
     set({ items: updatedItems, totalQty, totalPrice });
   },
 
+  setRentalInfo: (code, size, patch) => {
+    const id = makeCartItemId(code, size);
+    const p = patch && typeof patch === 'object' ? patch : {};
+    const currentItems = get().items;
+    const updatedItems = currentItems.map((i) =>
+      i.id === id
+        ? {
+            ...i,
+            rentalNo: p.rentalNo != null ? String(p.rentalNo).trim() : i.rentalNo,
+            rentalCustomerName:
+              p.rentalCustomerName != null ? String(p.rentalCustomerName) : i.rentalCustomerName,
+            rentalCustomerContact:
+              p.rentalCustomerContact != null
+                ? String(p.rentalCustomerContact)
+                : i.rentalCustomerContact,
+          }
+        : i
+    );
+    const totalQty = updatedItems.reduce((sum, i) => sum + i.qty, 0);
+    const totalPrice = updatedItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    set({ items: updatedItems, totalQty, totalPrice });
+  },
+
   /**
    * 프로모션 적용/해제 (가격 0원 토글)
    */
