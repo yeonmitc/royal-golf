@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import {
   useCheckDailyAttendance,
@@ -372,6 +373,7 @@ export default function AttendanceModal({ open, onClose }) {
   const [selectedShift, setSelectedShift] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const savingRef = useRef(false);
@@ -572,6 +574,15 @@ export default function AttendanceModal({ open, onClose }) {
             setSelectedShift(null);
             savingRef.current = false;
             onClose();
+            try {
+              const d = new Date();
+              d.setDate(d.getDate() - 1);
+              const y = toLocalDateKey(d);
+              localStorage.setItem('__checkstock_autorun_v1', JSON.stringify({ date: y, at: Date.now() }));
+            } catch {
+              void 0;
+            }
+            navigate('/check-stock');
 
             const id = Array.isArray(res) ? res?.[0]?.id : res?.id;
             if (!id) return;
@@ -624,6 +635,7 @@ export default function AttendanceModal({ open, onClose }) {
     open,
     onClose,
     recordAttendance,
+    navigate,
     selectedShift,
     selectedStaff,
     showToast,

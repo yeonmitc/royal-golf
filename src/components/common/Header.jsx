@@ -22,10 +22,77 @@ export default function Header() {
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [checklistPickerOpen, setChecklistPickerOpen] = useState(false);
   const [checklistEmployeeNames, setChecklistEmployeeNames] = useState('');
+  const [checkStockDone, setCheckStockDone] = useState(false);
+  const [stockReminderOpen, setStockReminderOpen] = useState(false);
+
+  const getYesterdayKey = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  useEffect(() => {
+    const y = getYesterdayKey();
+    const doneKey = `checkstock_yesterday_done_v1:${y}`;
+    const lastKey = `checkstock_reminder_last_v1:${y}`;
+
+    const refresh = () => {
+      try {
+        setCheckStockDone(localStorage.getItem(doneKey) === '1');
+      } catch {
+        setCheckStockDone(false);
+      }
+    };
+
+    const maybeRemind = () => {
+      let done = false;
+      try {
+        done = localStorage.getItem(doneKey) === '1';
+      } catch {
+        done = false;
+      }
+      if (done) return;
+      if (stockReminderOpen) return;
+      let last = 0;
+      try {
+        last = Number(localStorage.getItem(lastKey) || 0) || 0;
+      } catch {
+        last = 0;
+      }
+      if (Date.now() - last < 60 * 60 * 1000) return;
+      try {
+        localStorage.setItem(lastKey, String(Date.now()));
+      } catch {
+        void 0;
+      }
+      setStockReminderOpen(true);
+    };
+
+    refresh();
+    maybeRemind();
+
+    const onStorage = (e) => {
+      if (!e?.key) return;
+      if (e.key === doneKey) refresh();
+    };
+    window.addEventListener('storage', onStorage);
+
+    const timer = setInterval(() => {
+      refresh();
+      maybeRemind();
+    }, 60 * 1000);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [stockReminderOpen]);
 
   const navItems = [
     { to: '/inventory', label: 'product list', adminOnly: false },
-    { to: '/check-stock', label: 'check stock', adminOnly: false },
     { to: '/sell', label: 'sell product', adminOnly: false },
     { to: '/sales', label: 'sell list', adminOnly: false },
     { to: '/staff-sold', label: 'sold', adminOnly: false },
@@ -241,6 +308,32 @@ export default function Header() {
                 <span>✅</span> Checklist
               </button>
             )}
+            {!isMobile && (
+              <NavLink
+                to="/check-stock"
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 16,
+                  fontWeight: 800,
+                  borderRadius: 999,
+                  color: checkStockDone ? '#22c55e' : '#ef4444',
+                  background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
+                  border: `1px solid ${
+                    checkStockDone ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)'
+                  }`,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  textDecoration: 'none',
+                  transition: 'all 0.2s ease',
+                  marginLeft: 4,
+                }}
+                end
+              >
+                <span>📦</span> Check Stock
+              </NavLink>
+            )}
           </div>
         </nav>
 
@@ -336,6 +429,30 @@ export default function Header() {
               <span>Checklist</span>
               <span>✅</span>
             </button>
+            <NavLink
+              to="/check-stock"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                padding: '10px 14px',
+                fontSize: 16,
+                fontWeight: 800,
+                borderRadius: 12,
+                color: checkStockDone ? '#22c55e' : '#ef4444',
+                background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
+                textDecoration: 'none',
+                boxShadow: `0 0 0 1px ${
+                  checkStockDone ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)'
+                }`,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+              end
+            >
+              <span>Check Stock</span>
+              <span>📦</span>
+            </NavLink>
           </div>
         </Modal>
       )}
@@ -355,6 +472,53 @@ export default function Header() {
         onClose={() => setChecklistOpen(false)}
         employeeNames={checklistEmployeeNames}
       />
+      <Modal
+        open={stockReminderOpen}
+        title="Stock Check Reminder"
+        onClose={() => setStockReminderOpen(false)}
+        size="content"
+      >
+        <div style={{ display: 'grid', gap: 12, width: 'min(420px, 90vw)' }}>
+          <div style={{ fontWeight: 800 }}>
+            Please check yesterday&apos;s sold items stock.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <NavLink
+              to="/check-stock"
+              onClick={() => setStockReminderOpen(false)}
+              style={{
+                padding: '8px 12px',
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                color: 'var(--text-main)',
+                background: '#141420',
+                textDecoration: 'none',
+                boxShadow: '0 0 0 1px rgba(212,175,55,0.45)',
+              }}
+              end
+            >
+              Open Check Stock
+            </NavLink>
+            <button
+              type="button"
+              onClick={() => setStockReminderOpen(false)}
+              style={{
+                padding: '8px 12px',
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 10,
+                color: 'var(--text-main)',
+                background: '#101018',
+                border: '1px solid var(--border-soft)',
+                cursor: 'pointer',
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </Modal>
     </header>
   );
 }

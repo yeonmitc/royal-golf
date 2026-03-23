@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../components/common/Button';
 import { CalendarIcon } from '../components/common/Icons';
 import Modal from '../components/common/Modal';
@@ -16,6 +16,13 @@ import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient'
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
+
+function toLocalDateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 function emptyCounts() {
   return Object.fromEntries(SIZE_ORDER.map((k) => [k, 0]));
@@ -131,18 +138,18 @@ export default function CheckStockPage() {
   const [confirmMessage, setConfirmMessage] = useState('');
   const confirmActionRef = useRef(null);
 
-  const showAlert = ({ title, message } = {}) => {
+  const showAlert = useCallback(({ title, message } = {}) => {
     setAlertTitle(title || 'Alert');
     setAlertMessage(String(message || '').trim());
     setAlertOpen(true);
-  };
+  }, []);
 
-  const requestConfirm = ({ title, message, onConfirm } = {}) => {
+  const requestConfirm = useCallback(({ title, message, onConfirm } = {}) => {
     setConfirmTitle(title || 'Confirm');
     setConfirmMessage(String(message || '').trim());
     confirmActionRef.current = typeof onConfirm === 'function' ? onConfirm : null;
     setConfirmOpen(true);
-  };
+  }, []);
 
   // Error Modal State
   const [errorModalOpen, setErrorModalOpen] = useState(false);
@@ -207,13 +214,13 @@ export default function CheckStockPage() {
     // Default to yesterday
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    return toLocalDateKey(d);
   });
   const [soldProductCodes, setSoldProductCodes] = useState(null);
   const [soldOnlyView, setSoldOnlyView] = useState(false);
   const [isLoadingSold, setIsLoadingSold] = useState(false);
 
-  const runSoldCheck = async (dateStr, { showOnly = false } = {}) => {
+  const runSoldCheck = useCallback(async (dateStr, { showOnly = false } = {}) => {
     const dateKey = String(dateStr || soldDate || '').trim();
     if (!dateKey) return;
     setIsLoadingSold(true);
@@ -267,7 +274,7 @@ export default function CheckStockPage() {
     } finally {
       setIsLoadingSold(false);
     }
-  };
+  }, [allProducts, showAlert, showToast, soldDate]);
 
   const handleCheckSoldItems = () => {
     if (!soldDate) return;
@@ -286,10 +293,10 @@ export default function CheckStockPage() {
     // Don't reset soldDate, keep last selection
   };
 
-  const handleYesterdayFilter = () => {
+  const handleYesterdayFilter = useCallback(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    const y = d.toISOString().slice(0, 10);
+    const y = toLocalDateKey(d);
     setSelectedType(null);
     setFilterLine(null);
     setFilterGender(null);
@@ -299,7 +306,7 @@ export default function CheckStockPage() {
     setShowErrorOnly(false);
     setSoldDate(y);
     runSoldCheck(y, { showOnly: true });
-  };
+  }, [runSoldCheck]);
 
   // 1. Filter products that have at least 1 stock OR are in the sold list
   const stockedProducts = useMemo(() => {
@@ -323,6 +330,90 @@ export default function CheckStockPage() {
     const pct = total ? Math.round((done / total) * 100) : 0;
     return { total, checked, error, done, pct };
   }, [allProducts, pendingChanges]);
+
+  const yesterdayKey = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return toLocalDateKey(d);
+  }, []);
+
+  const yesterdayCheck = useMemo(() => {
+    if (!soldProductCodes || soldDate !== yesterdayKey) return null;
+    const byCode = new Map(allProducts.map((p) => [p.code, p]));
+    let total = 0;
+    let remaining = 0;
+    soldProductCodes.forEach((code) => {
+      const p = byCode.get(code);
+      if (!p) return;
+      if ((p.totalStock || 0) <= 0) return;
+      total += 1;
+      const s = pendingChanges[code] ?? p.check_status ?? 'unchecked';
+      if (s !== 'checked' && s !== 'error') remaining += 1;
+    });
+    return { total, remaining, done: total > 0 && remaining === 0 };
+  }, [allProducts, pendingChanges, soldDate, soldProductCodes, yesterdayKey]);
+
+  const yesterdayDoneVisual = useMemo(() => {
+    if (yesterdayCheck) return yesterdayCheck.done;
+    try {
+      return localStorage.getItem(`checkstock_yesterday_done_v1:${yesterdayKey}`) === '1';
+    } catch {
+      return false;
+    }
+  }, [yesterdayCheck, yesterdayKey]);
+
+  useEffect(() => {
+    if (!yesterdayCheck) return;
+    try {
+      localStorage.setItem(
+        `checkstock_yesterday_done_v1:${yesterdayKey}`,
+        yesterdayCheck.done ? '1' : '0'
+      );
+    } catch {
+      void 0;
+    }
+  }, [yesterdayCheck, yesterdayKey]);
+
+  const autoRanRef = useRef(false);
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    let data = null;
+    try {
+      const raw = localStorage.getItem('__checkstock_autorun_v1');
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      data = null;
+    }
+    if (!data || !data.at) return;
+    if (Date.now() - Number(data.at) > 10 * 60 * 1000) {
+      try {
+        localStorage.removeItem('__checkstock_autorun_v1');
+      } catch {
+        void 0;
+      }
+      return;
+    }
+    autoRanRef.current = true;
+    try {
+      localStorage.removeItem('__checkstock_autorun_v1');
+    } catch {
+      void 0;
+    }
+    const dateKey = String(data?.date || '').trim();
+    if (dateKey) {
+      setSelectedType(null);
+      setFilterLine(null);
+      setFilterGender(null);
+      setFilterBrand(null);
+      setShowCheckedOnly(false);
+      setShowUncheckedOnly(false);
+      setShowErrorOnly(false);
+      setSoldDate(dateKey);
+      runSoldCheck(dateKey, { showOnly: true });
+      return;
+    }
+    handleYesterdayFilter();
+  }, [handleYesterdayFilter, runSoldCheck]);
 
   // Filter states
   const [filterLine, setFilterLine] = useState(null); // 'G' or 'L'
@@ -374,28 +465,9 @@ export default function CheckStockPage() {
     });
   }, [stockedProducts, filterLine, filterGender]);
 
-  const productBrands = useMemo(() => {
-    const brands = new Set();
-    baseFilteredProducts.forEach((p) => {
-      const brandCode = getBrandCode(p);
-      if (brandCode) {
-        brands.add(brandCode);
-      }
-    });
-    return Array.from(brands).sort();
-  }, [baseFilteredProducts]);
-
-  const brandFilteredProducts = useMemo(() => {
-    if (!filterBrand) return baseFilteredProducts;
-    return baseFilteredProducts.filter((p) => getBrandCode(p) === filterBrand);
-  }, [baseFilteredProducts, filterBrand]);
-
-  // 3. Extract unique types from BASE filtered products (so buttons update based on context)
-  // OR should we show ALL types always? User asked to filter "g, l...".
-  // If I pick "Man", I probably only want to see Man types.
   const productTypes = useMemo(() => {
     const types = new Set();
-    brandFilteredProducts.forEach((p) => {
+    baseFilteredProducts.forEach((p) => {
       const parts = (p.code || '').split('-');
       if (parts.length >= 2) {
         const typeCode = parts[1];
@@ -405,16 +477,33 @@ export default function CheckStockPage() {
       }
     });
     return Array.from(types).sort();
-  }, [brandFilteredProducts]);
+  }, [baseFilteredProducts]);
 
-  // 4. Filter by selected type
   const typeFilteredProducts = useMemo(() => {
     if (!selectedType) return [];
-    return brandFilteredProducts.filter((p) => {
+    return baseFilteredProducts.filter((p) => {
       const parts = (p.code || '').split('-');
       return parts[1] === selectedType;
     });
-  }, [brandFilteredProducts, selectedType]);
+  }, [baseFilteredProducts, selectedType]);
+
+  const productBrands = useMemo(() => {
+    if (!selectedType) return [];
+    const brands = new Set();
+    typeFilteredProducts.forEach((p) => {
+      const brandCode = getBrandCode(p);
+      if (brandCode) {
+        brands.add(brandCode);
+      }
+    });
+    return Array.from(brands).sort();
+  }, [typeFilteredProducts, selectedType]);
+
+  const brandFilteredProducts = useMemo(() => {
+    if (!selectedType) return [];
+    if (!filterBrand) return typeFilteredProducts;
+    return typeFilteredProducts.filter((p) => getBrandCode(p) === filterBrand);
+  }, [typeFilteredProducts, selectedType, filterBrand]);
 
   // 4. Filter by checked/error status (if enabled)
   const finalRows = useMemo(() => {
@@ -424,7 +513,7 @@ export default function CheckStockPage() {
     const getStatus = (p) => pendingChanges[p.code] ?? p.check_status ?? 'unchecked';
 
     if (soldOnlyView && soldProductCodes) {
-      base = brandFilteredProducts;
+      base = stockedProducts;
     } else if (showCheckedOnly) {
       base = brandFilteredProducts.filter((p) => getStatus(p) === 'checked');
     } else if (showErrorOnly) {
@@ -435,7 +524,7 @@ export default function CheckStockPage() {
         return !s || s === 'unchecked';
       });
     } else {
-      base = typeFilteredProducts;
+      base = brandFilteredProducts;
     }
 
     return base.map((p) => ({
@@ -444,7 +533,7 @@ export default function CheckStockPage() {
       type: (p.code || '').split('-')[1],
     }));
   }, [
-    typeFilteredProducts,
+    stockedProducts,
     brandFilteredProducts,
     soldOnlyView,
     soldProductCodes,
@@ -579,7 +668,12 @@ export default function CheckStockPage() {
 
   return (
     <div className="flex flex-col gap-4 pb-20">
-      <div className="flex flex-col gap-2 sticky top-0 bg-[var(--bg-main)] z-10 p-2 shadow-sm -mx-2">
+      <div
+        className="flex flex-col gap-2 sticky top-0 bg-[var(--bg-main)] z-10 p-2 shadow-sm -mx-2"
+        style={{
+          backgroundColor: yesterdayDoneVisual ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.14)',
+        }}
+      >
         {/* Sold Items Check Control */}
         <div className="flex items-center w-full px-1">
           <div
@@ -854,7 +948,37 @@ export default function CheckStockPage() {
             ))}
           </div>
           <hr className="border-t-2 border-[var(--gold)]" />
-          {productBrands.length > 0 && (
+          <div
+            className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pt-1"
+            style={{ flexWrap: 'nowrap' }}
+          >
+            {productTypes.map((t) => (
+              <Button
+                key={t}
+                onClick={() => {
+                  setSelectedType(selectedType === t ? null : t);
+                  setFilterBrand(null);
+                  setShowCheckedOnly(false);
+                  setShowErrorOnly(false);
+                  setShowUncheckedOnly(false);
+                }}
+                variant={
+                  selectedType === t && !showCheckedOnly && !showUncheckedOnly && !showErrorOnly
+                    ? 'primary'
+                    : 'outline'
+                }
+                size="compact"
+                className="whitespace-nowrap flex-shrink-0 text-[11px]"
+                style={{ marginTop: '6px' }}
+              >
+                {getTypeName(t)}
+              </Button>
+            ))}
+          </div>
+
+          <hr className="border-t-2 border-[var(--gold)]" />
+
+          {selectedType && productBrands.length > 0 && (
             <div
               className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pt-1"
               style={{ flexWrap: 'nowrap' }}
@@ -882,38 +1006,9 @@ export default function CheckStockPage() {
 
           <hr className="border-t-2 border-[var(--gold)]" />
         </div>
-
-        <div
-          className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pt-1"
-          style={{ flexWrap: 'nowrap' }}
-        >
-          {productTypes.map((t) => (
-            <Button
-              key={t}
-              onClick={() => {
-                setSelectedType(selectedType === t ? null : t); // Toggle functionality
-                setShowCheckedOnly(false);
-                setShowErrorOnly(false);
-                setShowUncheckedOnly(false);
-              }}
-              variant={
-                selectedType === t && !showCheckedOnly && !showUncheckedOnly && !showErrorOnly
-                  ? 'primary'
-                  : 'outline'
-              }
-              size="compact"
-              className="whitespace-nowrap flex-shrink-0 text-[11px]"
-              style={{ marginTop: '6px' }}
-            >
-              {getTypeName(t)}
-            </Button>
-          ))}
-        </div>
-
-        <hr className="border-t-2 border-[var(--gold)] mt-1" />
       </div>
 
-      {finalRows.length === 0 && !selectedType && !showCheckedOnly ? (
+      {finalRows.length === 0 && !soldOnlyView && !selectedType && !showCheckedOnly ? (
         <div className="text-center text-gray-500 mt-10">
           Select a type to begin checking stock.
         </div>
