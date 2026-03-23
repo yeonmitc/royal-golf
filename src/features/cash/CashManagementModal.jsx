@@ -198,7 +198,7 @@ export default function CashManagementModal({ open, onClose }) {
   const maxPage = Math.max(0, Math.ceil((filteredHistory.length || 0) / pageSize) - 1);
   const currentPage = Math.min(historyPage, maxPage);
   const pageItems = filteredHistory.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
-  const cellPad = { padding: '14px 18px' };
+  const cellPad = { padding: '2px 30px' };
   const noWrap = { whiteSpace: 'nowrap' };
 
   return (
