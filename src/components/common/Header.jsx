@@ -1,5 +1,5 @@
 // src/components/common/Header.jsx
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
@@ -25,37 +25,35 @@ export default function Header() {
   const [checkStockDone, setCheckStockDone] = useState(false);
   const [stockReminderOpen, setStockReminderOpen] = useState(false);
 
-  const getYesterdayKey = () => {
+  const getYesterdayKey = useCallback(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
-  };
+  }, []);
 
   useEffect(() => {
-    const y = getYesterdayKey();
-    const doneKey = `checkstock_yesterday_done_v1:${y}`;
-    const lastKey = `checkstock_reminder_last_v1:${y}`;
-
     const refresh = () => {
+      const y = getYesterdayKey();
+      const doneKey = `checkstock_yesterday_done_v1:${y}`;
       try {
-        setCheckStockDone(localStorage.getItem(doneKey) === '1');
+        const done = localStorage.getItem(doneKey) === '1';
+        setCheckStockDone(done);
+        if (done && stockReminderOpen) setStockReminderOpen(false);
+        return { y, done };
       } catch {
         setCheckStockDone(false);
+        return { y, done: false };
       }
     };
 
     const maybeRemind = () => {
-      let done = false;
-      try {
-        done = localStorage.getItem(doneKey) === '1';
-      } catch {
-        done = false;
-      }
+      const { y, done } = refresh();
       if (done) return;
       if (stockReminderOpen) return;
+      const lastKey = `checkstock_reminder_last_v1:${y}`;
       let last = 0;
       try {
         last = Number(localStorage.getItem(lastKey) || 0) || 0;
@@ -71,17 +69,15 @@ export default function Header() {
       setStockReminderOpen(true);
     };
 
-    refresh();
     maybeRemind();
 
     const onStorage = (e) => {
       if (!e?.key) return;
-      if (e.key === doneKey) refresh();
+      if (String(e.key).startsWith('checkstock_yesterday_done_v1:')) refresh();
     };
     window.addEventListener('storage', onStorage);
 
     const timer = setInterval(() => {
-      refresh();
       maybeRemind();
     }, 60 * 1000);
 
@@ -89,7 +85,7 @@ export default function Header() {
       clearInterval(timer);
       window.removeEventListener('storage', onStorage);
     };
-  }, [stockReminderOpen]);
+  }, [getYesterdayKey, stockReminderOpen]);
 
   const navItems = [
     { to: '/inventory', label: 'product list', adminOnly: false },

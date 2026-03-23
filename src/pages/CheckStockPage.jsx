@@ -219,6 +219,7 @@ export default function CheckStockPage() {
   const [soldProductCodes, setSoldProductCodes] = useState(null);
   const [soldOnlyView, setSoldOnlyView] = useState(false);
   const [isLoadingSold, setIsLoadingSold] = useState(false);
+  const SOLD_STATE_KEY = 'checkstock_sold_state_v1';
 
   const runSoldCheck = useCallback(async (dateStr, { showOnly = false } = {}) => {
     const dateKey = String(dateStr || soldDate || '').trim();
@@ -235,6 +236,11 @@ export default function CheckStockPage() {
         showAlert({ title: 'Sold Check', message: 'No sales found for the selected date.' });
         setSoldProductCodes(null);
         setSoldOnlyView(false);
+        try {
+          localStorage.removeItem(SOLD_STATE_KEY);
+        } catch {
+          void 0;
+        }
         setIsLoadingSold(false);
         return;
       }
@@ -290,6 +296,11 @@ export default function CheckStockPage() {
     setSoldProductCodes(null);
     setSoldOnlyView(false);
     setShowUncheckedOnly(false); // Reset view when filter is cleared
+    try {
+      localStorage.removeItem(SOLD_STATE_KEY);
+    } catch {
+      void 0;
+    }
     // Don't reset soldDate, keep last selection
   };
 
@@ -350,7 +361,21 @@ export default function CheckStockPage() {
       const s = pendingChanges[code] ?? p.check_status ?? 'unchecked';
       if (s !== 'checked' && s !== 'error') remaining += 1;
     });
-    return { total, remaining, done: total > 0 && remaining === 0 };
+    return { total, remaining, done: remaining === 0 };
+  }, [allProducts, pendingChanges, soldDate, soldProductCodes, yesterdayKey]);
+
+  const yesterdayPendingChanges = useMemo(() => {
+    if (!soldProductCodes || soldDate !== yesterdayKey) return {};
+    const byCode = new Map(allProducts.map((p) => [p.code, p]));
+    const out = {};
+    Object.entries(pendingChanges).forEach(([code, status]) => {
+      if (!soldProductCodes.has(code)) return;
+      const p = byCode.get(code);
+      if (!p) return;
+      if ((p.totalStock || 0) <= 0) return;
+      out[code] = status;
+    });
+    return out;
   }, [allProducts, pendingChanges, soldDate, soldProductCodes, yesterdayKey]);
 
   const yesterdayDoneVisual = useMemo(() => {
@@ -373,6 +398,47 @@ export default function CheckStockPage() {
       void 0;
     }
   }, [yesterdayCheck, yesterdayKey]);
+
+  const autoSaveYesterdayRef = useRef({ dateKey: '', ran: false });
+  useEffect(() => {
+    if (!yesterdayCheck?.done) return;
+    if (isSaving) return;
+    const dateKey = yesterdayKey;
+    if (!dateKey) return;
+    const keys = Object.keys(yesterdayPendingChanges);
+    if (keys.length === 0) return;
+    if (autoSaveYesterdayRef.current.dateKey === dateKey && autoSaveYesterdayRef.current.ran) return;
+    autoSaveYesterdayRef.current = { dateKey, ran: true };
+
+    batchUpdateStatus(yesterdayPendingChanges, {
+      onSuccess: () => {
+        setPendingChanges((prev) => {
+          const next = { ...prev };
+          keys.forEach((k) => {
+            delete next[k];
+          });
+          return next;
+        });
+        showToast("Yesterday's stock checks were saved.", 900);
+      },
+      onError: (err) => {
+        autoSaveYesterdayRef.current = { dateKey, ran: false };
+        console.error(err);
+        showAlert({
+          title: 'Auto Save Failed',
+          message: String(err?.message || 'Failed to auto save.'),
+        });
+      },
+    });
+  }, [
+    batchUpdateStatus,
+    isSaving,
+    showAlert,
+    showToast,
+    yesterdayCheck,
+    yesterdayKey,
+    yesterdayPendingChanges,
+  ]);
 
   const autoRanRef = useRef(false);
   useEffect(() => {
@@ -406,7 +472,7 @@ export default function CheckStockPage() {
       setFilterGender(null);
       setFilterBrand(null);
       setShowCheckedOnly(false);
-      setShowUncheckedOnly(false);
+      setShowUncheckedOnly(Boolean(data?.showUnchecked));
       setShowErrorOnly(false);
       setSoldDate(dateKey);
       runSoldCheck(dateKey, { showOnly: true });
@@ -419,6 +485,86 @@ export default function CheckStockPage() {
   const [filterLine, setFilterLine] = useState(null); // 'G' or 'L'
   const [filterGender, setFilterGender] = useState(null); // 'M', 'W', 'A', 'U'
   const [filterBrand, setFilterBrand] = useState(null);
+
+  useEffect(() => {
+    let autoRun = null;
+    try {
+      autoRun = localStorage.getItem('__checkstock_autorun_v1');
+    } catch {
+      autoRun = null;
+    }
+    if (autoRun) return;
+    let saved = null;
+    try {
+      const raw = localStorage.getItem(SOLD_STATE_KEY);
+      saved = raw ? JSON.parse(raw) : null;
+    } catch {
+      saved = null;
+    }
+    if (!saved || typeof saved !== 'object') return;
+    const codes = Array.isArray(saved.codes) ? saved.codes : [];
+    if (!codes.length) return;
+    const dateKey = String(saved.soldDate || '').trim();
+    if (dateKey) setSoldDate(dateKey);
+    setSoldOnlyView(Boolean(saved.soldOnlyView));
+    setSoldProductCodes(new Set(codes.map((c) => String(c || '').trim()).filter(Boolean)));
+    if (saved.pendingChanges && typeof saved.pendingChanges === 'object') {
+      setPendingChanges(saved.pendingChanges);
+    }
+    if (saved.filters && typeof saved.filters === 'object') {
+      const f = saved.filters;
+      if (Object.prototype.hasOwnProperty.call(f, 'selectedType')) setSelectedType(f.selectedType);
+      if (Object.prototype.hasOwnProperty.call(f, 'filterLine')) setFilterLine(f.filterLine);
+      if (Object.prototype.hasOwnProperty.call(f, 'filterGender')) setFilterGender(f.filterGender);
+      if (Object.prototype.hasOwnProperty.call(f, 'filterBrand')) setFilterBrand(f.filterBrand);
+      if (Object.prototype.hasOwnProperty.call(f, 'showCheckedOnly'))
+        setShowCheckedOnly(Boolean(f.showCheckedOnly));
+      if (Object.prototype.hasOwnProperty.call(f, 'showErrorOnly'))
+        setShowErrorOnly(Boolean(f.showErrorOnly));
+      if (Object.prototype.hasOwnProperty.call(f, 'showUncheckedOnly'))
+        setShowUncheckedOnly(Boolean(f.showUncheckedOnly));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!soldProductCodes || soldProductCodes.size === 0) return;
+    try {
+      localStorage.setItem(
+        SOLD_STATE_KEY,
+        JSON.stringify({
+          soldDate,
+          soldOnlyView,
+          codes: Array.from(soldProductCodes),
+          pendingChanges,
+          filters: {
+            selectedType,
+            filterLine,
+            filterGender,
+            filterBrand,
+            showCheckedOnly,
+            showErrorOnly,
+            showUncheckedOnly,
+          },
+          savedAt: Date.now(),
+        })
+      );
+    } catch {
+      void 0;
+    }
+  }, [
+    SOLD_STATE_KEY,
+    filterBrand,
+    filterGender,
+    filterLine,
+    pendingChanges,
+    selectedType,
+    showCheckedOnly,
+    showErrorOnly,
+    showUncheckedOnly,
+    soldDate,
+    soldOnlyView,
+    soldProductCodes,
+  ]);
 
   // Type Mapping
   const TYPE_LABELS = {
@@ -507,24 +653,19 @@ export default function CheckStockPage() {
 
   // 4. Filter by checked/error status (if enabled)
   const finalRows = useMemo(() => {
-    let base;
-
     // Helper to get effective status (pending > db)
     const getStatus = (p) => pendingChanges[p.code] ?? p.check_status ?? 'unchecked';
 
-    if (soldOnlyView && soldProductCodes) {
-      base = stockedProducts;
-    } else if (showCheckedOnly) {
-      base = brandFilteredProducts.filter((p) => getStatus(p) === 'checked');
+    let base = soldOnlyView && soldProductCodes ? stockedProducts : brandFilteredProducts;
+    if (showCheckedOnly) {
+      base = base.filter((p) => getStatus(p) === 'checked');
     } else if (showErrorOnly) {
-      base = brandFilteredProducts.filter((p) => getStatus(p) === 'error');
+      base = base.filter((p) => getStatus(p) === 'error');
     } else if (showUncheckedOnly) {
-      base = brandFilteredProducts.filter((p) => {
+      base = base.filter((p) => {
         const s = getStatus(p);
         return !s || s === 'unchecked';
       });
-    } else {
-      base = brandFilteredProducts;
     }
 
     return base.map((p) => ({

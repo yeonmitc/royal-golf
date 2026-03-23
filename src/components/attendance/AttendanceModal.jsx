@@ -578,7 +578,10 @@ export default function AttendanceModal({ open, onClose }) {
               const d = new Date();
               d.setDate(d.getDate() - 1);
               const y = toLocalDateKey(d);
-              localStorage.setItem('__checkstock_autorun_v1', JSON.stringify({ date: y, at: Date.now() }));
+              localStorage.setItem(
+                '__checkstock_autorun_v1',
+                JSON.stringify({ date: y, at: Date.now(), showUnchecked: true })
+              );
             } catch {
               void 0;
             }
