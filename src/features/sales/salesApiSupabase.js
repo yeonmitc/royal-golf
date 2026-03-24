@@ -877,6 +877,30 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     })
     .filter((r) => r.qty > 0);
 
+  try {
+    const toFix = normalized
+      .filter((n) => n.isPeter && !n.isRefunded)
+      .filter((n) => {
+        const listUnit = Number(n.listPricePhp || 0) || 0;
+        const unit = Number(n.discountUnitPricePhp != null ? n.discountUnitPricePhp : n.unitPricePhp || 0) || 0;
+        return listUnit > 1000 && unit === listUnit;
+      });
+    for (const n of toFix) {
+      const base = Number(n.listPricePhp || 0) || 0;
+      const next = Math.ceil((base * 0.8) / 100) * 100;
+      if (next && next !== base) {
+        await sbUpdate(
+          'sales',
+          { price: next, list_price: base },
+          { filters: [{ column: 'id', op: 'eq', value: n.saleId }], returning: 'minimal' }
+        );
+        n.discountUnitPricePhp = next;
+      }
+    }
+  } catch (e) {
+    console.warn('Auto-enforce Peter discount failed:', e?.message || e);
+  }
+
   const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
   const withMeta = withMetaRaw.map((r) => ({
     ...r,
