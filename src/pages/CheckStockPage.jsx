@@ -204,7 +204,8 @@ export default function CheckStockPage() {
     });
   };
 
-  const [selectedType, setSelectedType] = useState(null);
+  const ALL_TYPE = '__ALL__';
+  const [selectedType, setSelectedType] = useState(ALL_TYPE);
   const [showCheckedOnly, setShowCheckedOnly] = useState(false);
   const [showErrorOnly, setShowErrorOnly] = useState(false);
   const [showUncheckedOnly, setShowUncheckedOnly] = useState(false);
@@ -308,7 +309,7 @@ export default function CheckStockPage() {
     const d = new Date();
     d.setDate(d.getDate() - 1);
     const y = toLocalDateKey(d);
-    setSelectedType(null);
+    setSelectedType(ALL_TYPE);
     setFilterLine(null);
     setFilterGender(null);
     setFilterBrand(null);
@@ -317,7 +318,7 @@ export default function CheckStockPage() {
     setShowErrorOnly(false);
     setSoldDate(y);
     runSoldCheck(y, { showOnly: true });
-  }, [runSoldCheck]);
+  }, [ALL_TYPE, runSoldCheck]);
 
   // 1. Filter products that have at least 1 stock OR are in the sold list
   const stockedProducts = useMemo(() => {
@@ -467,7 +468,7 @@ export default function CheckStockPage() {
     }
     const dateKey = String(data?.date || '').trim();
     if (dateKey) {
-      setSelectedType(null);
+      setSelectedType(ALL_TYPE);
       setFilterLine(null);
       setFilterGender(null);
       setFilterBrand(null);
@@ -479,7 +480,7 @@ export default function CheckStockPage() {
       return;
     }
     handleYesterdayFilter();
-  }, [handleYesterdayFilter, runSoldCheck]);
+  }, [ALL_TYPE, handleYesterdayFilter, runSoldCheck]);
 
   // Filter states
   const [filterLine, setFilterLine] = useState(null); // 'G' or 'L'
@@ -513,7 +514,10 @@ export default function CheckStockPage() {
     }
     if (saved.filters && typeof saved.filters === 'object') {
       const f = saved.filters;
-      if (Object.prototype.hasOwnProperty.call(f, 'selectedType')) setSelectedType(f.selectedType);
+      if (Object.prototype.hasOwnProperty.call(f, 'selectedType')) {
+        const v = f.selectedType;
+        setSelectedType(v ? v : ALL_TYPE);
+      }
       if (Object.prototype.hasOwnProperty.call(f, 'filterLine')) setFilterLine(f.filterLine);
       if (Object.prototype.hasOwnProperty.call(f, 'filterGender')) setFilterGender(f.filterGender);
       if (Object.prototype.hasOwnProperty.call(f, 'filterBrand')) setFilterBrand(f.filterBrand);
@@ -586,7 +590,7 @@ export default function CheckStockPage() {
     MA: 'Mask',
   };
 
-  const getTypeName = (code) => TYPE_LABELS[code] || code;
+  const getTypeName = (code) => (code === ALL_TYPE ? 'All' : TYPE_LABELS[code] || code);
   const getBrandCode = (product) =>
     product.brandCode || String(product.code || '').split('-')[2] || '';
   const getBrandLabel = (code) => {
@@ -622,19 +626,18 @@ export default function CheckStockPage() {
         }
       }
     });
-    return Array.from(types).sort();
+    return [ALL_TYPE, ...Array.from(types).sort()];
   }, [baseFilteredProducts]);
 
   const typeFilteredProducts = useMemo(() => {
-    if (!selectedType) return [];
+    if (selectedType === ALL_TYPE) return baseFilteredProducts;
     return baseFilteredProducts.filter((p) => {
       const parts = (p.code || '').split('-');
       return parts[1] === selectedType;
     });
-  }, [baseFilteredProducts, selectedType]);
+  }, [ALL_TYPE, baseFilteredProducts, selectedType]);
 
   const productBrands = useMemo(() => {
-    if (!selectedType) return [];
     const brands = new Set();
     typeFilteredProducts.forEach((p) => {
       const brandCode = getBrandCode(p);
@@ -643,13 +646,12 @@ export default function CheckStockPage() {
       }
     });
     return Array.from(brands).sort();
-  }, [typeFilteredProducts, selectedType]);
+  }, [typeFilteredProducts]);
 
   const brandFilteredProducts = useMemo(() => {
-    if (!selectedType) return [];
     if (!filterBrand) return typeFilteredProducts;
     return typeFilteredProducts.filter((p) => getBrandCode(p) === filterBrand);
-  }, [typeFilteredProducts, selectedType, filterBrand]);
+  }, [typeFilteredProducts, filterBrand]);
 
   // 4. Filter by checked/error status (if enabled)
   const finalRows = useMemo(() => {
@@ -1097,7 +1099,7 @@ export default function CheckStockPage() {
               <Button
                 key={t}
                 onClick={() => {
-                  setSelectedType(selectedType === t ? null : t);
+                  setSelectedType(t === ALL_TYPE ? ALL_TYPE : selectedType === t ? ALL_TYPE : t);
                   setFilterBrand(null);
                   setShowCheckedOnly(false);
                   setShowErrorOnly(false);
@@ -1149,9 +1151,9 @@ export default function CheckStockPage() {
         </div>
       </div>
 
-      {finalRows.length === 0 && !soldOnlyView && !selectedType && !showCheckedOnly ? (
+      {finalRows.length === 0 && !soldOnlyView && !showCheckedOnly ? (
         <div className="text-center text-gray-500 mt-10">
-          Select a type to begin checking stock.
+          No products found.
         </div>
       ) : (
         <div className="stock-check-table-wrapper">
