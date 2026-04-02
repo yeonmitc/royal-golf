@@ -34,6 +34,21 @@ export default function Header() {
     return `${y}-${m}-${day}`;
   }, []);
 
+  const armStockCheck = useCallback(
+    ({ showUnchecked = true } = {}) => {
+      const y = getYesterdayKey();
+      try {
+        localStorage.setItem(
+          '__checkstock_autorun_v1',
+          JSON.stringify({ date: y, at: Date.now(), showUnchecked: Boolean(showUnchecked) })
+        );
+      } catch {
+        void 0;
+      }
+    },
+    [getYesterdayKey]
+  );
+
   useEffect(() => {
     const refresh = () => {
       const y = getYesterdayKey();
@@ -307,6 +322,9 @@ export default function Header() {
             {!isMobile && (
               <NavLink
                 to="/check-stock"
+                onClick={() => {
+                  if (!checkStockDone) armStockCheck({ showUnchecked: true });
+                }}
                 style={{
                   padding: '8px 12px',
                   fontSize: 16,
@@ -427,7 +445,10 @@ export default function Header() {
             </button>
             <NavLink
               to="/check-stock"
-              onClick={() => setMenuOpen(false)}
+              onClick={() => {
+                if (!checkStockDone) armStockCheck({ showUnchecked: true });
+                setMenuOpen(false);
+              }}
               style={{
                 padding: '10px 14px',
                 fontSize: 16,
@@ -481,7 +502,10 @@ export default function Header() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <NavLink
               to="/check-stock"
-              onClick={() => setStockReminderOpen(false)}
+              onClick={() => {
+                armStockCheck({ showUnchecked: true });
+                setStockReminderOpen(false);
+              }}
               style={{
                 padding: '8px 12px',
                 fontSize: 14,
