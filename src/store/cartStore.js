@@ -1,5 +1,6 @@
 // src/store/cartStore.js
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 /**
  * 장바구니 아이템 구조
@@ -19,16 +20,28 @@ function makeCartItemId(code, size) {
   return `${code}|${size || ''}`;
 }
 
-export const useCartStore = create((set, get) => ({
-  items: [],
-  totalQty: 0,
-  totalPrice: 0,
-  guideId: null,
+function computeTotals(items) {
+  const safe = Array.isArray(items) ? items : [];
+  const totalQty = safe.reduce((sum, i) => sum + (Number(i?.qty || 0) || 0), 0);
+  const totalPrice = safe.reduce(
+    (sum, i) => sum + (Number(i?.qty || 0) || 0) * (Number(i?.unitPricePhp || 0) || 0),
+    0
+  );
+  return { totalQty, totalPrice };
+}
+
+export const useCartStore = create(
+  persist(
+    (set, get) => ({
+      items: [],
+      totalQty: 0,
+      totalPrice: 0,
+      guideId: null,
 
   /**
    * 장바구니 비우기 (결제 완료 후 호출)
    */
-  clearCart: () => set({ items: [], totalQty: 0, totalPrice: 0, guideId: null }),
+      clearCart: () => set({ items: [], totalQty: 0, totalPrice: 0, guideId: null }),
 
   /**
    * 장바구니에 아이템 추가
@@ -62,8 +75,7 @@ export const useCartStore = create((set, get) => ({
             }
           : i
       );
-      const totalQty = updated.reduce((sum, i) => sum + i.qty, 0);
-      const totalPrice = updated.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+      const { totalQty, totalPrice } = computeTotals(updated);
       set({ items: updated, totalQty, totalPrice });
     } else {
       const nextItems = [
@@ -79,8 +91,7 @@ export const useCartStore = create((set, get) => ({
           qty: qty > 0 ? qty : 1,
         },
       ];
-      const totalQty = nextItems.reduce((sum, i) => sum + i.qty, 0);
-      const totalPrice = nextItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+      const { totalQty, totalPrice } = computeTotals(nextItems);
       set({ items: nextItems, totalQty, totalPrice });
     }
   },
@@ -91,8 +102,7 @@ export const useCartStore = create((set, get) => ({
   incrementQty: (code, size) => {
     const id = makeCartItemId(code, size);
     const updated = get().items.map((i) => (i.id === id ? { ...i, qty: i.qty + 1 } : i));
-    const totalQty = updated.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = updated.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    const { totalQty, totalPrice } = computeTotals(updated);
     set({ items: updated, totalQty, totalPrice });
   },
 
@@ -104,8 +114,7 @@ export const useCartStore = create((set, get) => ({
     const updated = get()
       .items.map((i) => (i.id === id ? { ...i, qty: i.qty - 1 } : i))
       .filter((i) => i.qty > 0);
-    const totalQty = updated.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = updated.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    const { totalQty, totalPrice } = computeTotals(updated);
     set({ items: updated, totalQty, totalPrice });
   },
 
@@ -115,8 +124,7 @@ export const useCartStore = create((set, get) => ({
   removeItem: (code, size) => {
     const id = makeCartItemId(code, size);
     const filtered = get().items.filter((i) => i.id !== id);
-    const totalQty = filtered.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = filtered.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    const { totalQty, totalPrice } = computeTotals(filtered);
     set({ items: filtered, totalQty, totalPrice });
   },
 
@@ -126,8 +134,7 @@ export const useCartStore = create((set, get) => ({
     const updatedItems = currentItems.map((i) =>
       i.id === id ? { ...i, color: String(color || '').trim() } : i
     );
-    const totalQty = updatedItems.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = updatedItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    const { totalQty, totalPrice } = computeTotals(updatedItems);
     set({ items: updatedItems, totalQty, totalPrice });
   },
 
@@ -149,8 +156,7 @@ export const useCartStore = create((set, get) => ({
           }
         : i
     );
-    const totalQty = updatedItems.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = updatedItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    const { totalQty, totalPrice } = computeTotals(updatedItems);
     set({ items: updatedItems, totalQty, totalPrice });
   },
 
@@ -192,8 +198,7 @@ export const useCartStore = create((set, get) => ({
       );
     }
 
-    const totalQty = updatedItems.reduce((sum, i) => sum + i.qty, 0);
-    const totalPrice = updatedItems.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0);
+    const { totalQty, totalPrice } = computeTotals(updatedItems);
     set({ items: updatedItems, totalQty, totalPrice });
   },
 
@@ -205,4 +210,18 @@ export const useCartStore = create((set, get) => ({
   getTotalAmount: () => get().items.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0),
 
   setGuideId: (id) => set({ guideId: id }),
-}));
+    }),
+    {
+      name: 'royal_cart_v1',
+      version: 1,
+      partialize: (s) => ({ items: s.items, guideId: s.guideId }),
+      merge: (persistedState, currentState) => {
+        const ps = persistedState && typeof persistedState === 'object' ? persistedState : {};
+        const items = Array.isArray(ps.items) ? ps.items : currentState.items;
+        const guideId = ps.guideId ?? currentState.guideId;
+        const { totalQty, totalPrice } = computeTotals(items);
+        return { ...currentState, items, guideId, totalQty, totalPrice };
+      },
+    }
+  )
+);

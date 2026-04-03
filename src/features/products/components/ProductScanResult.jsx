@@ -1,5 +1,5 @@
 // src/features/products/components/ProductScanResult.jsx
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
@@ -15,18 +15,42 @@ import { useProductWithInventory } from '../productHooks';
 export default function ProductScanResult({ code }) {
   const { data, isLoading, isError, error } = useProductWithInventory(code);
   const addItem = useCartStore((s) => s.addItem);
-  const [localStocks, setLocalStocks] = useState({});
+  const cartItems = useCartStore((s) => s.items);
 
-  useEffect(() => {
-    const bySize = new Map((data?.inventory || []).map((r) => [r.size || 'Free', r]));
-    const standard = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
-    const init = {};
-    standard.forEach((sz) => {
-      const r = bySize.get(sz);
-      init[sz] = Number(r?.stockQty ?? 0) || 0;
+  const productCode = String(data?.code || code || '').trim();
+
+  const reservedBySize = useMemo(() => {
+    const m = new Map();
+    if (!productCode) return m;
+    (cartItems || []).forEach((i) => {
+      if (!i || i.code !== productCode) return;
+      const sz = String(i.size || 'Free').trim() || 'Free';
+      const q = Number(i.qty || 0) || 0;
+      if (q <= 0) return;
+      m.set(sz, (m.get(sz) || 0) + q);
     });
-    setLocalStocks(init);
-  }, [data?.code, data?.inventory]);
+    return m;
+  }, [cartItems, productCode]);
+
+  const reservedTotal = useMemo(() => {
+    let sum = 0;
+    reservedBySize.forEach((v) => {
+      sum += Number(v || 0) || 0;
+    });
+    return sum;
+  }, [reservedBySize]);
+
+  const remainingTotalStock = Math.max(
+    0,
+    (Number(data?.totalStock ?? 0) || 0) - reservedTotal
+  );
+
+  const getRemainingSizeStock = (sizeRow) => {
+    const sizeKey = String(sizeRow?.size || 'Free').trim() || 'Free';
+    const base = Number(sizeRow?.stockQty ?? 0) || 0;
+    const reserved = Number(reservedBySize.get(sizeKey) || 0) || 0;
+    return Math.max(0, base - reserved);
+  };
 
   if (!code) {
     return (
@@ -68,8 +92,7 @@ export default function ProductScanResult({ code }) {
   const defaultColor = findLabel('color', data.colorCode);
 
   const handleAddToCart = (sizeRow) => {
-    const sizeKey = sizeRow.size;
-    const remaining = Number(localStocks[sizeKey] ?? sizeRow.stockQty ?? 0) || 0;
+    const remaining = getRemainingSizeStock(sizeRow);
     if (remaining <= 0) return;
     addItem({
       code: data.code,
@@ -80,10 +103,6 @@ export default function ProductScanResult({ code }) {
       unitPricePhp: data.salePricePhp,
       qty: 1,
     });
-    setLocalStocks((prev) => ({
-      ...prev,
-      [sizeKey]: Math.max(0, (Number(prev[sizeKey] ?? sizeRow.stockQty ?? 0) || 0) - 1),
-    }));
   };
 
   return (
@@ -111,7 +130,7 @@ export default function ProductScanResult({ code }) {
                   {(data.salePricePhp || 0).toLocaleString('en-PH')} PHP
                 </span>
               ),
-              stock: data.totalStock ?? 0,
+              stock: remainingTotalStock,
             },
           ]}
         />
@@ -158,12 +177,12 @@ export default function ProductScanResult({ code }) {
               rows={rows.map((row) => ({
                 id: `${row.code}-${row.size}`,
                 size: row.sizeDisplay || row.size || '-',
-                stock: Number(localStocks[row.size] ?? row.stockQty ?? 0) || 0,
+                stock: getRemainingSizeStock(row),
                 action: (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!((Number(localStocks[row.size] ?? row.stockQty ?? 0) || 0) > 0)}
+                    disabled={!(getRemainingSizeStock(row) > 0)}
                     onClick={() => handleAddToCart(row)}
                   >
                     + Add

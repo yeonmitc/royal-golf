@@ -222,7 +222,7 @@ export default function CheckStockPage() {
   const [isLoadingSold, setIsLoadingSold] = useState(false);
   const SOLD_STATE_KEY = 'checkstock_sold_state_v1';
 
-  const runSoldCheck = useCallback(async (dateStr, { showOnly = false } = {}) => {
+  const runSoldCheck = useCallback(async (dateStr, { showOnly = false, resetChecked = false } = {}) => {
     const dateKey = String(dateStr || soldDate || '').trim();
     if (!dateKey) return;
     setIsLoadingSold(true);
@@ -259,22 +259,23 @@ export default function CheckStockPage() {
         showToast(`Sold codes not in stock list: ${missing.length}`, 900);
       }
 
-      setPendingChanges((prev) => {
-        const next = { ...prev };
-        allProducts.forEach((p) => {
-          if (!codes.has(p.code)) return;
-          if ((p.totalStock || 0) <= 0) return;
-          const dbStatus = p.check_status ?? 'unchecked';
-          const effective = prev[p.code] ?? dbStatus;
-          if (effective !== 'checked') return;
-          if (dbStatus === 'unchecked') {
-            delete next[p.code];
-          } else {
-            next[p.code] = 'unchecked';
-          }
+      if (resetChecked) {
+        setPendingChanges((prev) => {
+          const next = { ...prev };
+          allProducts.forEach((p) => {
+            if (!codes.has(p.code)) return;
+            const dbStatus = p.check_status ?? 'unchecked';
+            const effective = prev[p.code] ?? dbStatus;
+            if (effective !== 'checked') return;
+            if (dbStatus === 'unchecked') {
+              delete next[p.code];
+            } else {
+              next[p.code] = 'unchecked';
+            }
+          });
+          return next;
         });
-        return next;
-      });
+      }
     } catch (err) {
       console.error(err);
       showAlert({ title: 'Sold Check Failed', message: 'Failed to fetch sales data.' });
@@ -289,7 +290,7 @@ export default function CheckStockPage() {
       title: 'Sold Check',
       message:
         "This will highlight sold codes in yellow, and reset only the sold codes that are currently CHECKED back to UNCHECKED. Continue?",
-      onConfirm: () => runSoldCheck(soldDate, { showOnly: false }),
+      onConfirm: () => runSoldCheck(soldDate, { showOnly: false, resetChecked: true }),
     });
   };
 
@@ -317,7 +318,7 @@ export default function CheckStockPage() {
     setShowUncheckedOnly(false);
     setShowErrorOnly(false);
     setSoldDate(y);
-    runSoldCheck(y, { showOnly: true });
+    runSoldCheck(y, { showOnly: true, resetChecked: true });
   }, [ALL_TYPE, runSoldCheck]);
 
   // 1. Filter products that have at least 1 stock OR are in the sold list
@@ -357,7 +358,6 @@ export default function CheckStockPage() {
     soldProductCodes.forEach((code) => {
       const p = byCode.get(code);
       if (!p) return;
-      if ((p.totalStock || 0) <= 0) return;
       total += 1;
       const s = pendingChanges[code] ?? p.check_status ?? 'unchecked';
       if (s !== 'checked' && s !== 'error') remaining += 1;
@@ -373,7 +373,6 @@ export default function CheckStockPage() {
       if (!soldProductCodes.has(code)) return;
       const p = byCode.get(code);
       if (!p) return;
-      if ((p.totalStock || 0) <= 0) return;
       out[code] = status;
     });
     return out;
@@ -468,6 +467,8 @@ export default function CheckStockPage() {
     }
     const dateKey = String(data?.date || '').trim();
     if (dateKey) {
+      const resetSoldChecked = Boolean(data?.resetSoldChecked ?? data?.resetChecked);
+      const showOnly = data?.showOnly == null ? true : Boolean(data.showOnly);
       setSelectedType(ALL_TYPE);
       setFilterLine(null);
       setFilterGender(null);
@@ -476,7 +477,7 @@ export default function CheckStockPage() {
       setShowUncheckedOnly(Boolean(data?.showUnchecked));
       setShowErrorOnly(false);
       setSoldDate(dateKey);
-      runSoldCheck(dateKey, { showOnly: true });
+      runSoldCheck(dateKey, { showOnly, resetChecked: resetSoldChecked });
       return;
     }
     handleYesterdayFilter();
@@ -488,6 +489,7 @@ export default function CheckStockPage() {
   const [filterBrand, setFilterBrand] = useState(null);
 
   useEffect(() => {
+    if (autoRanRef.current) return;
     let autoRun = null;
     try {
       autoRun = localStorage.getItem('__checkstock_autorun_v1');

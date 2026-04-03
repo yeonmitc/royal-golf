@@ -40,7 +40,13 @@ export default function Header() {
       try {
         localStorage.setItem(
           '__checkstock_autorun_v1',
-          JSON.stringify({ date: y, at: Date.now(), showUnchecked: Boolean(showUnchecked) })
+          JSON.stringify({
+            date: y,
+            at: Date.now(),
+            showUnchecked: Boolean(showUnchecked),
+            resetSoldChecked: true,
+            showOnly: true,
+          })
         );
       } catch {
         void 0;
