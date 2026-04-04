@@ -318,7 +318,7 @@ export default function SalesTable({
         ) : (
           brand
         ),
-      commission: isElla ? '-' : guideName || '-',
+      commission: giftChecked ? 'gift' : isElla ? '-' : guideName || '-',
       unitPricePhp: (
         <div
           style={{

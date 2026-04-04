@@ -307,8 +307,7 @@ export async function checkoutCart(payload) {
     // Assuming standard flow: item.unitPricePhp is original.
     // If we want to FORCE the calculated price:
 
-    // FIX: If item is explicitly marked as free (0), we must respect that even for Mr. Moon.
-    const isExplicitlyFree = item.unitPricePhp === 0;
+    const isExplicitlyFree = item.unitPricePhp === 0 || Boolean(product.freeGift);
 
     const unitPriceCharged = isExplicitlyFree
       ? 0
@@ -319,7 +318,7 @@ export async function checkoutCart(payload) {
           : unitPriceOriginal;
 
     const lineTotal = unitPriceCharged * qty;
-    const isFreeGift = unitPriceCharged === 0 || Boolean(product.freeGift);
+    const isFreeGift = unitPriceCharged === 0;
 
     totalAmount += lineTotal;
     // const ellaRevenue = 0; // Unused
@@ -841,6 +840,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isElla = nameLower.includes('ella');
       const isPeter = nameLower.includes('peter');
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
+      const finalUnit = isRefunded || isFreeGift ? 0 : unit;
 
       return {
         saleId: r.id,
@@ -853,10 +853,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         sizeDisplay: sizeKey,
         qty: qtyN,
         listPricePhp: listUnit || undefined,
-        unitPricePhp: isRefunded ? 0 : listUnit || unit,
+        unitPricePhp: isRefunded || isFreeGift ? 0 : listUnit || unit,
         discountUnitPricePhp:
-          !isRefunded && listUnit > 0 && unit > 0 && unit !== listUnit ? unit : undefined,
-        lineTotalPhp: (isRefunded ? 0 : unit) * qtyN,
+          !isRefunded && !isFreeGift && listUnit > 0 && unit > 0 && unit !== listUnit ? unit : undefined,
+        lineTotalPhp: finalUnit * qtyN,
         freeGift: isFreeGift,
         refundedAt,
         refundReason: String(r.refund_reason || '').trim(),
@@ -871,7 +871,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
           guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift
-            ? (isRefunded ? 0 : unit) * qtyN * 0.1
+            ? finalUnit * qtyN * 0.1
             : 0,
       };
     })
@@ -1201,6 +1201,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     Boolean
   );
   let kpriceByCode = new Map();
+  let p1priceByCode = new Map();
   if (codesForCost.length) {
     try {
       const productsForCost = [];
@@ -1210,7 +1211,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
         const inList = buildInList(chunk);
         if (inList === '()') continue;
         const page = await sbSelect('products', {
-          select: 'code,kprice',
+          select: 'code,kprice,p1price',
           filters: [{ column: 'code', op: 'in', value: inList }],
         });
         if (Array.isArray(page) && page.length) productsForCost.push(...page);
@@ -1218,16 +1219,22 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
       kpriceByCode = new Map(
         productsForCost.map((p) => [String(p.code || '').trim(), Number(p.kprice ?? 0) || 0])
       );
+      p1priceByCode = new Map(
+        productsForCost.map((p) => [String(p.code || '').trim(), Number(p.p1price ?? 0) || 0])
+      );
     } catch (_e) {
       void _e;
       kpriceByCode = new Map();
+      p1priceByCode = new Map();
     }
   }
 
   const costAmount = rows.reduce((sum, r) => {
     const code = String(r.code || '').trim();
+    const p1price = p1priceByCode.get(code) ?? 0;
     const kprice = kpriceByCode.get(code) ?? 0;
-    const costUnitPhp = (Number(kprice || 0) || 0) / 25;
+    const costUnitPhp =
+      (Number(p1price || 0) || 0) > 0 ? Number(p1price || 0) || 0 : (Number(kprice || 0) || 0) / 25;
     return sum + costUnitPhp * (Number(r.qty || 0) || 0);
   }, 0);
 
