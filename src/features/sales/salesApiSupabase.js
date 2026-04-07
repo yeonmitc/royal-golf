@@ -946,11 +946,31 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   const fromKey = String(fromDate || '').trim();
   const toKey = String(toDate || '').trim();
 
+  const nextDayKey = (key) => {
+    const parts = String(key || '').split('-').map((v) => Number(v));
+    const y = parts[0];
+    const m = parts[1];
+    const d = parts[2];
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return '';
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    if (!Number.isFinite(dt.getTime())) return '';
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    return dt.toISOString().slice(0, 10);
+  };
+
+  const filters = [];
+  if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: `${fromKey}T00:00:00.000Z` });
+  if (hasTo) {
+    const upper = nextDayKey(toKey);
+    if (upper) filters.push({ column: 'sold_at', op: 'lt', value: `${upper}T00:00:00.000Z` });
+  }
+
   let sales;
   try {
     report(10, '판매 데이터 조회 중…');
     sales = await sbSelectAll('sales', {
       select: 'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,refunded_at,sale_group_id',
+      filters,
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
@@ -959,6 +979,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
       report(10, '판매 데이터 조회 중…');
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,free_gift,refunded_at,sale_group_id',
+        filters,
         order: { column: 'sold_at', ascending: false },
       });
     } else {
@@ -966,16 +987,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     }
   }
 
-  const inRange =
-    hasFrom || hasTo
-      ? (sales || []).filter((s) => {
-          const key = String(s?.sold_at || '').slice(0, 10);
-          if (!key) return false;
-          if (hasFrom && key < fromKey) return false;
-          if (hasTo && key > toKey) return false;
-          return true;
-        })
-      : sales || [];
+  const inRange = sales || [];
 
   // Manual join for sale_groups
   report(25, '영수증/가이드 매핑 중…');
