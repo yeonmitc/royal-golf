@@ -948,25 +948,17 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
 
   let sales;
   try {
-    const filters = [];
-    if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey });
-    if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: `${toKey}T23:59:59.999Z` });
     report(10, '판매 데이터 조회 중…');
     sales = await sbSelectAll('sales', {
-      select: 'id,sold_at,code,color,size_std,qty,list_price,price,refunded_at,sale_group_id',
-      filters,
+      select: 'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,refunded_at,sale_group_id',
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
     const msg = String(e?.message || '').toLowerCase();
     if (msg.includes('color')) {
-      const filters = [];
-      if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey });
-      if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: `${toKey}T23:59:59.999Z` });
       report(10, '판매 데이터 조회 중…');
       sales = await sbSelectAll('sales', {
-        select: 'id,sold_at,code,size_std,qty,price,refunded_at,sale_group_id',
-        filters,
+        select: 'id,sold_at,code,size_std,qty,price,free_gift,refunded_at,sale_group_id',
         order: { column: 'sold_at', ascending: false },
       });
     } else {
@@ -974,7 +966,16 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     }
   }
 
-  const inRange = sales || [];
+  const inRange =
+    hasFrom || hasTo
+      ? (sales || []).filter((s) => {
+          const key = String(s?.sold_at || '').slice(0, 10);
+          if (!key) return false;
+          if (hasFrom && key < fromKey) return false;
+          if (hasTo && key > toKey) return false;
+          return true;
+        })
+      : sales || [];
 
   // Manual join for sale_groups
   report(25, '영수증/가이드 매핑 중…');
@@ -1003,6 +1004,10 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
 
   const refundedRows = (inRange || []).filter((r) => toMsFromIso(r?.refunded_at));
   const nonRefundedRows = (inRange || []).filter((r) => !toMsFromIso(r?.refunded_at));
+  const giftRows = (nonRefundedRows || []).filter((r) => {
+    const unit = Number(r?.price ?? 0) || 0;
+    return Boolean(r?.free_gift ?? false) || unit === 0;
+  });
 
   report(45, '상품 메타 결합 중…');
   const analyzedRows = await attachLocalProductMeta(
@@ -1014,6 +1019,8 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
         const sizeKey = normalizeSizeKey(r.size_std);
         const g = groupMap.get(String(r.sale_group_id));
         const guideId = g?.guideId ?? null;
+        const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
+        const finalUnit = isFreeGift ? 0 : unit;
         return {
           saleId: r.id,
           soldAt: r.sold_at,
@@ -1022,15 +1029,15 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
           size: sizeKey,
           sizeDisplay: sizeKey,
           qty: qtyN,
-          unitPricePhp: unit,
+          unitPricePhp: finalUnit,
           listPricePhp: listUnit || undefined,
           discountUnitPricePhp: undefined,
-          lineTotalPhp: unit * qtyN,
-          freeGift: Boolean(r.free_gift ?? false) || unit === 0,
+          lineTotalPhp: finalUnit * qtyN,
+          freeGift: isFreeGift,
           nameKo: '',
           guideId: guideId,
           saleGroupId: r.sale_group_id,
-          commission: guideId ? unit * qtyN * 0.1 : 0,
+          commission: guideId && !isFreeGift ? finalUnit * qtyN * 0.1 : 0,
         };
       })
     )
@@ -1182,18 +1189,14 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
 
   const realTotalSales = totalRevenue - ellaCommission;
 
-  const grossAmount =
-    rows.reduce(
-      (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
-      0
-    ) - ellaCommission;
+  const grossAmount = realTotalSales;
 
   // Mr. Moon commission is actually the discount amount (already deducted from price),
   // so we should NOT deduct it again from Net Sales.
   const realTotalCommission = totalCommission - mrMoonCommission - ellaCommission;
   const netAmount = realTotalSales - realTotalCommission;
 
-  const aov = transactionCount ? grossAmount / transactionCount : 0;
+  const aov = transactionCount ? realTotalSales / transactionCount : 0;
 
   const discountRate = 0.1;
 
@@ -1268,6 +1271,13 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
 
   const ownerProfit = netTotalSales - expenseAmount - costAmount;
 
+  const giftQty = giftRows.reduce((sum, r) => sum + (Number(r?.qty ?? 0) || 0), 0);
+  const giftListAmount = giftRows.reduce((sum, r) => {
+    const qty = Number(r?.qty ?? 0) || 0;
+    const unit = Number(r?.list_price ?? r?.price ?? 0) || 0;
+    return sum + unit * qty;
+  }, 0);
+
   const summary = {
     grossAmount,
     realTotalSales,
@@ -1284,6 +1294,8 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     discountRate,
     refundCount: refundedNonElla.length,
     refundAmount,
+    giftQty,
+    giftListAmount,
   };
 
   if (typeof onSummary === 'function') {

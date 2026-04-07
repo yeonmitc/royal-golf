@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
@@ -19,6 +19,8 @@ export default function AnalyzePage() {
   const [data, setData] = useState(null);
   const [pending, setPending] = useState(false);
   const [progress, setProgress] = useState(null);
+  const fromInputRef = useRef(null);
+  const toInputRef = useRef(null);
   const OPEN_DATE = '2025-12-17';
 
   async function load(nextFrom = fromDate, nextTo = toDate) {
@@ -104,10 +106,18 @@ export default function AnalyzePage() {
             <span className="date-control-label">From</span>
             <div className="date-control-box">
               <input
+                ref={fromInputRef}
                 type="date"
                 className="input-field date-control-input"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
+                onClick={() => {
+                  try {
+                    fromInputRef.current?.showPicker?.();
+                  } catch {
+                    void 0;
+                  }
+                }}
               />
             </div>
           </div>
@@ -115,10 +125,18 @@ export default function AnalyzePage() {
             <span className="date-control-label">To</span>
             <div className="date-control-box">
               <input
+                ref={toInputRef}
                 type="date"
                 className="input-field date-control-input"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
+                onClick={() => {
+                  try {
+                    toInputRef.current?.showPicker?.();
+                  } catch {
+                    void 0;
+                  }
+                }}
               />
             </div>
           </div>
@@ -199,7 +217,9 @@ export default function AnalyzePage() {
               <div>Total Sales - Guide Comm</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(
-                  data.summary.grossAmount - (data.summary.totalCommission || 0)
+                  data.summary.netAmount != null
+                    ? data.summary.netAmount
+                    : data.summary.grossAmount - (data.summary.totalCommission || 0)
                 ).toLocaleString('en-PH')}{' '}
                 PHP
               </div>
@@ -268,6 +288,16 @@ export default function AnalyzePage() {
               <div>Total Commission</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.totalCommission || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Gift Qty</div>
+              <div style={{ fontWeight: 700 }}>{Number(data.summary.giftQty || 0).toLocaleString('en-PH')}</div>
+            </div>
+            <div className="page-card">
+              <div>Gift (List)</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.giftListAmount || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
           </div>
