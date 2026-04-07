@@ -1,6 +1,6 @@
 // src/pages/SalesHistoryPage.jsx
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import ellaIcon from '../assets/ella.svg';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -25,6 +25,8 @@ export default function SalesHistoryPage() {
   const OPEN_DATE = '2025-12-17';
   const [fromInput, setFromInput] = useState(today);
   const [toInput, setToInput] = useState(today);
+  const fromInputRef = useRef(null);
+  const toInputRef = useRef(null);
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
   const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon'
@@ -243,7 +245,7 @@ export default function SalesHistoryPage() {
 
   const summary = useMemo(() => {
     const rows = visibleRows || [];
-    const count = rows.length;
+    const itemCount = rows.length;
     const ellaGuideIds = new Set(
       (guides || [])
         .filter((g) =>
@@ -254,7 +256,7 @@ export default function SalesHistoryPage() {
         .map((g) => String(g.id))
     );
 
-    const { totalQty, totalAmount } = rows.reduce(
+    const { totalQty, totalAmount, txCount } = rows.reduce(
       (acc, r) => {
         const isRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
         const original = Number(r?.unitPricePhp || 0) || 0;
@@ -265,15 +267,18 @@ export default function SalesHistoryPage() {
         const qty = Number(r?.qty || 0) || 0;
         const isElla = r?.guideId != null && ellaGuideIds.has(String(r.guideId));
         const qtyForTotal = isRefunded || isElla ? 0 : qty;
+        const txKey = String(r?.saleGroupId || '').trim() || String(r?.soldAt || '').trim();
+        if (txKey) acc.txKeys.add(txKey);
         return {
           totalQty: acc.totalQty + qtyForTotal,
           totalAmount: acc.totalAmount + finalUnit * qtyForTotal,
+          txCount: acc.txKeys.size,
         };
       },
-      { totalQty: 0, totalAmount: 0 }
+      { totalQty: 0, totalAmount: 0, txCount: 0, txKeys: new Set() }
     );
 
-    return { count, totalQty, totalAmount };
+    return { itemCount, totalQty, totalAmount, txCount };
   }, [visibleRows, guides]);
 
   const cardActions = useMemo(() => {
@@ -399,6 +404,7 @@ export default function SalesHistoryPage() {
               <span className="date-control-label">From</span>
               <div className="date-control-box">
                 <input
+                  ref={fromInputRef}
                   type="date"
                   className="input-field date-control-input"
                   value={fromInput}
@@ -407,6 +413,13 @@ export default function SalesHistoryPage() {
                     setFromInput(v);
                     setFilters((prev) => ({ ...prev, fromDate: v || '' }));
                   }}
+                  onClick={() => {
+                    try {
+                      fromInputRef.current?.showPicker?.();
+                    } catch {
+                      void 0;
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -414,6 +427,7 @@ export default function SalesHistoryPage() {
               <span className="date-control-label">To</span>
               <div className="date-control-box">
                 <input
+                  ref={toInputRef}
                   type="date"
                   className="input-field date-control-input"
                   value={toInput}
@@ -421,6 +435,13 @@ export default function SalesHistoryPage() {
                     const v = e.target.value;
                     setToInput(v);
                     setFilters((prev) => ({ ...prev, toDate: v || '' }));
+                  }}
+                  onClick={() => {
+                    try {
+                      toInputRef.current?.showPicker?.();
+                    } catch {
+                      void 0;
+                    }
                   }}
                 />
               </div>
@@ -511,7 +532,13 @@ export default function SalesHistoryPage() {
             size="sm"
             variant="outline"
             title="Total (Since Open)"
-            style={{ height: 30, padding: '0 8px', fontSize: 11, minWidth: 'unset', width: 'fit-content' }}
+            style={{
+              height: 30,
+              padding: '0 8px',
+              fontSize: 11,
+              minWidth: 'unset',
+              width: 'fit-content',
+            }}
           >
             Total
           </Button>
@@ -531,7 +558,7 @@ export default function SalesHistoryPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>Sales Records</span>
             <span style={{ fontSize: '0.9em', fontWeight: 'normal', color: 'var(--text-muted)' }}>
-              Total: {summary.count} tx / {summary.totalQty} items /{' '}
+              Total: {summary.txCount} tx / {summary.itemCount} items / {summary.totalQty} qty /{' '}
               <span style={{ color: 'var(--gold-soft)', fontWeight: 'bold' }}>
                 {summary.totalAmount.toLocaleString()} PHP
               </span>

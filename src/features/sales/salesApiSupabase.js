@@ -988,6 +988,15 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   }
 
   const inRange = sales || [];
+  const srcSoldAts = (inRange || [])
+    .map((r) => String(r?.sold_at || '').trim())
+    .filter(Boolean);
+  let sourceSoldAtMin = '';
+  let sourceSoldAtMax = '';
+  srcSoldAts.forEach((s) => {
+    if (!sourceSoldAtMin || s < sourceSoldAtMin) sourceSoldAtMin = s;
+    if (!sourceSoldAtMax || s > sourceSoldAtMax) sourceSoldAtMax = s;
+  });
 
   // Manual join for sale_groups
   report(25, '영수증/가이드 매핑 중…');
@@ -1117,6 +1126,13 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     return { ...r, isMrMoon, isElla, isPeter };
   });
   let rows = withGuideFlags.filter((r) => !r.isElla);
+  const rowSoldAts = (rows || []).map((r) => String(r?.soldAt || '').trim()).filter(Boolean);
+  let soldAtMin = '';
+  let soldAtMax = '';
+  rowSoldAts.forEach((s) => {
+    if (!soldAtMin || s < soldAtMin) soldAtMin = s;
+    if (!soldAtMax || s > soldAtMax) soldAtMax = s;
+  });
 
   const groupSubtotalMap = new Map();
   const groupCommissionMap = new Map();
@@ -1308,6 +1324,12 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     refundAmount,
     giftQty,
     giftListAmount,
+    sourceRowCount: inRange.length,
+    sourceSoldAtMin,
+    sourceSoldAtMax,
+    rowCount: rows.length,
+    soldAtMin,
+    soldAtMax,
   };
 
   if (typeof onSummary === 'function') {

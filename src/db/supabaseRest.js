@@ -142,7 +142,7 @@ export async function sbSelect(table, { select = '*', filters = [], order, order
   const path = `/rest/v1/${table}`;
   const url = new URL(buildUrl(path, query));
   (filters || []).forEach(({ column, op, value }) => {
-    url.searchParams.set(column, `${op}.${value}`);
+    url.searchParams.append(column, `${op}.${value}`);
   });
   return request(url.pathname + url.search, { method: 'GET' });
 }
@@ -178,7 +178,7 @@ export async function sbUpdate(table, values, { filters = [], returning = 'repre
   const path = `/rest/v1/${table}`;
   const url = new URL(buildUrl(path, {}));
   (filters || []).forEach(({ column, op, value }) => {
-    url.searchParams.set(column, `${op}.${value}`);
+    url.searchParams.append(column, `${op}.${value}`);
   });
   return request(url.pathname + url.search, {
     method: 'PATCH',
@@ -193,7 +193,7 @@ export async function sbDelete(table, { filters = [], returning = 'minimal' } = 
   const path = `/rest/v1/${table}`;
   const url = new URL(buildUrl(path, {}));
   (filters || []).forEach(({ column, op, value }) => {
-    url.searchParams.set(column, `${op}.${value}`);
+    url.searchParams.append(column, `${op}.${value}`);
   });
   return request(url.pathname + url.search, {
     method: 'DELETE',

@@ -24,9 +24,9 @@ import Button from '../common/Button';
 const getPunctualityScore = (targetTime, checkTime) => {
   const diffMs = checkTime - targetTime;
   const lateMins = Math.max(0, Math.floor(diffMs / 60000));
-  if (lateMins <= 5) return 100;
-  if (lateMins <= 8) return 90;
-  if (lateMins <= 11) return 80;
+  if (lateMins <= 3) return 100;
+  if (lateMins <= 6) return 90;
+  if (lateMins <= 10) return 80;
   if (lateMins <= 13) return 70;
   if (lateMins <= 15) return 60;
   return 0;
@@ -48,6 +48,8 @@ const formatTimeForDisplay = (date) => {
     minute: '2-digit',
     hour12: true,
   });
+  const parts = timeStr.split(' ');
+  if (parts.length === 2) return `${parts[1]} ${parts[0]}`;
   return timeStr;
 };
 
@@ -132,7 +134,7 @@ const AttendanceCalendar = () => {
     });
 
     if (dayLogs.length === 0) {
-      return { score: null, isFuture, hasLog: true, details: [], noAttendance: true };
+      return { score: 100, isFuture, hasLog: true, details: [], noAttendance: false };
     }
 
     const sorted = [...dayLogs].sort(
@@ -168,9 +170,27 @@ const AttendanceCalendar = () => {
       };
     });
 
-    const scores = details.map((d) => Number(d.score ?? 0) || 0);
-    const avg = scores.length ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 100;
-    const finalScore = Math.max(0, Math.min(100, avg));
+    const scoreByName = new Map();
+    details.forEach((d) => {
+      if (!scoreByName.has(d.name)) scoreByName.set(d.name, Number(d.score ?? 0) || 0);
+    });
+    const jScoreVal = scoreByName.get('JESHEICA');
+    const bScoreVal = scoreByName.get('BERLYN');
+
+    const dow = targetDate.getDay();
+    const isMonTue = dow === 1 || dow === 2;
+    let finalScore;
+    if (isMonTue) {
+      if (jScoreVal != null && bScoreVal == null) finalScore = jScoreVal;
+      else if (bScoreVal != null && jScoreVal == null) finalScore = bScoreVal;
+      else if (jScoreVal != null && bScoreVal != null) finalScore = (jScoreVal + bScoreVal) / 2;
+      else finalScore = 100;
+    } else {
+      const jPart = jScoreVal != null ? jScoreVal : 100;
+      const bPart = bScoreVal != null ? bScoreVal : 100;
+      finalScore = (jPart + bPart) / 2;
+    }
+    finalScore = Math.max(0, Math.min(100, finalScore));
     return { score: Math.round(finalScore), isFuture, hasLog: true, details, noAttendance: false };
   };
 

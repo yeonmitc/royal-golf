@@ -609,6 +609,13 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
       : () => {};
   report(10, '판매 데이터 조회 중…');
   const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' });
+  const soldAts = (rows || []).map((r) => String(r?.soldAt || '').trim()).filter(Boolean);
+  let soldAtMin = '';
+  let soldAtMax = '';
+  soldAts.forEach((s) => {
+    if (!soldAtMin || s < soldAtMin) soldAtMin = s;
+    if (!soldAtMax || s > soldAtMax) soldAtMax = s;
+  });
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
   const fromKey = String(fromDate || '').trim();
@@ -641,6 +648,12 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
         discountRate: 0,
         refundCount: refunds.length,
         refundAmount: refunds.reduce((sum, r) => sum + (Number(r.amountPhp || 0) || 0), 0),
+        sourceRowCount: 0,
+        sourceSoldAtMin: '',
+        sourceSoldAtMax: '',
+        rowCount: 0,
+        soldAtMin: '',
+        soldAtMax: '',
       },
       best: [],
       worst: [],
@@ -687,6 +700,12 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     discountRate: 0.1,
     refundCount,
     refundAmount,
+    sourceRowCount: rows.length,
+    sourceSoldAtMin: soldAtMin,
+    sourceSoldAtMax: soldAtMax,
+    rowCount: rows.length,
+    soldAtMin,
+    soldAtMax,
   };
 
   if (typeof onSummary === 'function') {
