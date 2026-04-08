@@ -268,11 +268,13 @@ export default function SalesHistoryPage() {
         const isElla = r?.guideId != null && ellaGuideIds.has(String(r.guideId));
         const qtyForTotal = isRefunded || isElla ? 0 : qty;
         const txKey = String(r?.saleGroupId || '').trim() || String(r?.soldAt || '').trim();
-        if (txKey) acc.txKeys.add(txKey);
+        const txKeys = acc.txKeys;
+        if (txKey) txKeys.add(txKey);
         return {
           totalQty: acc.totalQty + qtyForTotal,
           totalAmount: acc.totalAmount + finalUnit * qtyForTotal,
-          txCount: acc.txKeys.size,
+          txCount: txKeys.size,
+          txKeys,
         };
       },
       { totalQty: 0, totalAmount: 0, txCount: 0, txKeys: new Set() }
