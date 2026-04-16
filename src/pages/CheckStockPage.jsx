@@ -1012,9 +1012,18 @@ export default function CheckStockPage() {
             className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             style={{ marginTop: '6px' }}
             onClick={() => {
-              setShowCheckedOnly(!showCheckedOnly);
+              const next = !showCheckedOnly;
+              setShowCheckedOnly(next);
               setShowErrorOnly(false);
               setShowUncheckedOnly(false);
+              if (next) {
+                setSelectedType(ALL_TYPE);
+                setFilterLine(null);
+                setFilterGender(null);
+                setFilterBrand(null);
+                setSoldOnlyView(false);
+                setSoldProductCodes(null);
+              }
             }}
           >
             Checked
@@ -1025,9 +1034,18 @@ export default function CheckStockPage() {
             className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
             style={{ marginTop: '6px' }}
             onClick={() => {
-              setShowUncheckedOnly(!showUncheckedOnly);
+              const next = !showUncheckedOnly;
+              setShowUncheckedOnly(next);
               setShowCheckedOnly(false);
               setShowErrorOnly(false);
+              if (next) {
+                setSelectedType(ALL_TYPE);
+                setFilterLine(null);
+                setFilterGender(null);
+                setFilterBrand(null);
+                setSoldOnlyView(false);
+                setSoldProductCodes(null);
+              }
             }}
           >
             Unchecked
