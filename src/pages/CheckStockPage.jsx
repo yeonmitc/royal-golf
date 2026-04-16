@@ -326,11 +326,17 @@ export default function CheckStockPage() {
     if (soldOnlyView && soldProductCodes) {
       return allProducts.filter((p) => soldProductCodes.has(p.code));
     }
-    return allProducts.filter((p) => (p.totalStock || 0) > 0);
-  }, [allProducts, soldOnlyView, soldProductCodes]);
+    return allProducts.filter((p) => {
+      const status = pendingChanges[p.code] ?? p.check_status ?? 'unchecked';
+      return (p.totalStock || 0) > 0 || status === 'error';
+    });
+  }, [allProducts, pendingChanges, soldOnlyView, soldProductCodes]);
 
   const progress = useMemo(() => {
-    const all = allProducts.filter((p) => (p.totalStock || 0) > 0);
+    const all = allProducts.filter((p) => {
+      const s = pendingChanges[p.code] ?? p.check_status ?? 'unchecked';
+      return (p.totalStock || 0) > 0 || s === 'error';
+    });
     const total = all.length;
     let checked = 0;
     let error = 0;
