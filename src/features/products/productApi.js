@@ -255,13 +255,14 @@ export async function getProductInventoryList() {
       (async () => {
         try {
           return await sbSelect('erro_stock', {
-            select: 'code,memo,is_checked,checked_at',
+            select: 'id,code,memo,is_checked,checked_at,created_at',
             filters: [{ column: 'is_checked', op: 'eq', value: false }],
+            order: { column: 'id', ascending: false },
           });
         } catch (e) {
           const msg = String(e?.message || '').toLowerCase();
           if (msg.includes('is_checked') || msg.includes('checked_at')) {
-            return sbSelect('erro_stock', { select: 'code,memo' });
+            return sbSelect('erro_stock', { select: 'id,code,memo,created_at', order: { column: 'id', ascending: false } });
           }
           throw e;
         }
@@ -271,14 +272,24 @@ export async function getProductInventoryList() {
     const inventories = inventoriesRaw || [];
     const errorStocks = errorStocksRaw || [];
     const byCode = new Map((inventories || []).map((r) => [String(r?.code || '').trim(), r]));
-    const memoByCode = new Map((errorStocks || []).map((r) => [String(r?.code || '').trim(), r.memo]));
+    const errorByCode = new Map(
+      (errorStocks || []).map((r) => [
+        String(r?.code || '').trim(),
+        {
+          id: Number(r?.id ?? 0) || 0,
+          memo: String(r?.memo || '').trim(),
+          createdAt: r?.created_at ?? null,
+        },
+      ])
+    );
     const productCodes = new Set(products.map((p) => String(p.code || '').trim()));
 
     const baseRows = products.map((p) => {
       const invRow = byCode.get(p.code);
       const totalStock = invRow ? sumInventoriesRow(invRow) : 0;
       const sizes = invRow ? inventoriesRowToInventoryList(p.code, invRow) : [];
-      const memo = String(memoByCode.get(p.code) || '').trim();
+      const err = errorByCode.get(p.code) || null;
+      const memo = String(err?.memo || '').trim();
       const statusFromInv = invRow?.check_status || 'unchecked';
       const checkStatus = memo ? 'error' : statusFromInv;
 
@@ -289,12 +300,14 @@ export async function getProductInventoryList() {
         check_status: checkStatus,
         check_updated_at: invRow?.check_updated_at || null,
         error_memo: memo,
+        error_id: Number(err?.id ?? 0) || 0,
+        error_created_at: err?.createdAt ?? null,
       };
     });
 
     // Keep erro_stock-only codes visible in Check Stock even if product/inventory rows are missing.
     const orphanErrorRows = [];
-    for (const [codeRaw, memoRaw] of memoByCode.entries()) {
+    for (const [codeRaw, errRaw] of errorByCode.entries()) {
       const code = String(codeRaw || '').trim();
       if (!code || productCodes.has(code)) continue;
       const parsed = parseCode(code);
@@ -324,7 +337,9 @@ export async function getProductInventoryList() {
         sizes: invRow ? inventoriesRowToInventoryList(code, invRow) : [],
         check_status: 'error',
         check_updated_at: invRow?.check_updated_at || null,
-        error_memo: String(memoRaw || '').trim(),
+        error_memo: String(errRaw?.memo || '').trim(),
+        error_id: Number(errRaw?.id ?? 0) || 0,
+        error_created_at: errRaw?.createdAt ?? null,
       });
     }
 

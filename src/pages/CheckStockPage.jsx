@@ -678,11 +678,24 @@ export default function CheckStockPage() {
       });
     }
 
-    return base.map((p) => ({
+    const rows = base.map((p) => ({
       ...p,
-      check_status: getStatus(p), // Override for UI
+      check_status: getStatus(p),
       type: (p.code || '').split('-')[1],
     }));
+
+    if (showErrorOnly) {
+      return rows.sort((a, b) => {
+        const ai = Number(a?.error_id ?? 0) || 0;
+        const bi = Number(b?.error_id ?? 0) || 0;
+        if (bi !== ai) return bi - ai;
+        const at = String(a?.check_updated_at || '');
+        const bt = String(b?.check_updated_at || '');
+        return bt.localeCompare(at);
+      });
+    }
+
+    return rows;
   }, [
     stockedProducts,
     brandFilteredProducts,
