@@ -252,9 +252,20 @@ export async function getProductInventoryList() {
         select: '*',
         order: { column: 'code', ascending: true },
       }),
-      sbSelect('erro_stock', {
-        select: 'code,memo',
-      }),
+      (async () => {
+        try {
+          return await sbSelect('erro_stock', {
+            select: 'code,memo,is_checked,checked_at',
+            filters: [{ column: 'is_checked', op: 'eq', value: false }],
+          });
+        } catch (e) {
+          const msg = String(e?.message || '').toLowerCase();
+          if (msg.includes('is_checked') || msg.includes('checked_at')) {
+            return sbSelect('erro_stock', { select: 'code,memo' });
+          }
+          throw e;
+        }
+      })(),
     ]);
     const products = (productsRaw || []).map(normalizeProductRow).filter(Boolean);
     const inventories = inventoriesRaw || [];
@@ -455,15 +466,48 @@ export async function upsertErroStock({ code, memo }) {
         
         if (Array.isArray(existing) && existing.length > 0) {
           // Update
-          await sbUpdate('erro_stock', { memo: m, updated_at: now }, {
-            filters: [{ column: 'code', op: 'eq', value: c }],
-            returning: 'minimal',
-          });
+          try {
+            await sbUpdate(
+              'erro_stock',
+              { memo: m, is_checked: false, checked_at: null, updated_at: now },
+              {
+                filters: [{ column: 'code', op: 'eq', value: c }],
+                returning: 'minimal',
+              }
+            );
+          } catch (e) {
+            const msg = String(e?.message || '').toLowerCase();
+            if (msg.includes('is_checked') || msg.includes('checked_at')) {
+              await sbUpdate(
+                'erro_stock',
+                { memo: m, updated_at: now },
+                {
+                  filters: [{ column: 'code', op: 'eq', value: c }],
+                  returning: 'minimal',
+                }
+              );
+            } else {
+              throw e;
+            }
+          }
         } else {
           // Insert
-          await sbInsert('erro_stock', [{ code: c, memo: m, updated_at: now }], {
-            returning: 'minimal',
-          });
+          try {
+            await sbInsert(
+              'erro_stock',
+              [{ code: c, memo: m, is_checked: false, checked_at: null, updated_at: now }],
+              { returning: 'minimal' }
+            );
+          } catch (e) {
+            const msg = String(e?.message || '').toLowerCase();
+            if (msg.includes('is_checked') || msg.includes('checked_at')) {
+              await sbInsert('erro_stock', [{ code: c, memo: m, updated_at: now }], {
+                returning: 'minimal',
+              });
+            } else {
+              throw e;
+            }
+          }
         }
       } catch (e) {
         console.error('Supabase save error:', e);
@@ -498,19 +542,26 @@ export async function deleteErroStock(code) {
       check_updated_at: now
     }).catch(dexieErr => console.warn('Failed to update Dexie error_memo:', dexieErr)),
 
-    // 2. erro_stock delete (Supabase)
-    sbDelete('erro_stock', {
-      filters: [{ column: 'code', op: 'eq', value: c }],
-      returning: 'representation',
-    }).then(rows => {
-      if (!rows || rows.length === 0) {
-        console.warn('DELETE_NO_MATCH: No rows deleted from erro_stock. Check RLS policies.');
+    // 2. erro_stock mark checked=true (Supabase). Fallback: hard delete if schema is old.
+    (async () => {
+      try {
+        await sbUpdate(
+          'erro_stock',
+          { is_checked: true, checked_at: now, updated_at: now },
+          { filters: [{ column: 'code', op: 'eq', value: c }], returning: 'minimal' }
+        );
+      } catch (e) {
+        const msg = String(e?.message || '').toLowerCase();
+        if (msg.includes('is_checked') || msg.includes('checked_at')) {
+          await sbDelete('erro_stock', {
+            filters: [{ column: 'code', op: 'eq', value: c }],
+            returning: 'representation',
+          });
+          return;
+        }
+        throw e;
       }
-      return rows;
-    }).catch(e => {
-      console.error('Supabase delete error:', e);
-      throw e;
-    }),
+    })(),
 
     // 3. Explicitly update inventories (Supabase)
     sbUpdate('inventories', {
