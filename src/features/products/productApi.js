@@ -261,21 +261,65 @@ export async function getProductInventoryList() {
     const errorStocks = errorStocksRaw || [];
     const byCode = new Map((inventories || []).map((r) => [String(r?.code || '').trim(), r]));
     const memoByCode = new Map((errorStocks || []).map((r) => [String(r?.code || '').trim(), r.memo]));
+    const productCodes = new Set(products.map((p) => String(p.code || '').trim()));
 
-    return products.map((p) => {
+    const baseRows = products.map((p) => {
       const invRow = byCode.get(p.code);
       const totalStock = invRow ? sumInventoriesRow(invRow) : 0;
       const sizes = invRow ? inventoriesRowToInventoryList(p.code, invRow) : [];
+      const memo = String(memoByCode.get(p.code) || '').trim();
+      const statusFromInv = invRow?.check_status || 'unchecked';
+      const checkStatus = memo ? 'error' : statusFromInv;
 
       return {
         ...p,
         totalStock,
         sizes,
-        check_status: invRow?.check_status || 'unchecked',
+        check_status: checkStatus,
         check_updated_at: invRow?.check_updated_at || null,
-        error_memo: memoByCode.get(p.code) || '',
+        error_memo: memo,
       };
     });
+
+    // Keep erro_stock-only codes visible in Check Stock even if product/inventory rows are missing.
+    const orphanErrorRows = [];
+    for (const [codeRaw, memoRaw] of memoByCode.entries()) {
+      const code = String(codeRaw || '').trim();
+      if (!code || productCodes.has(code)) continue;
+      const parsed = parseCode(code);
+      const invRow = byCode.get(code);
+      orphanErrorRows.push({
+        code,
+        no: 0,
+        nameKo: '',
+        categoryCode: parsed.categoryCode,
+        genderCode: parsed.genderCode,
+        typeCode: parsed.typeCode,
+        brandCode: parsed.brandCode,
+        colorCode: parsed.colorCode,
+        modelNo: parsed.modelNo,
+        priceCny: 0,
+        cprice: 0,
+        kprice: 0,
+        p1price: 0,
+        p2price: 0,
+        p3price: 0,
+        basePricePhp: 0,
+        salePricePhp: 0,
+        totalStock: invRow ? sumInventoriesRow(invRow) : 0,
+        freeGift: false,
+        archived: false,
+        archivedAt: null,
+        sizes: invRow ? inventoriesRowToInventoryList(code, invRow) : [],
+        check_status: 'error',
+        check_updated_at: invRow?.check_updated_at || null,
+        error_memo: String(memoRaw || '').trim(),
+      });
+    }
+
+    return [...baseRows, ...orphanErrorRows].sort((a, b) =>
+      String(a?.code || '').localeCompare(String(b?.code || ''))
+    );
   } catch (e) {
     if (!isNetworkFailure(e)) throw e;
 
