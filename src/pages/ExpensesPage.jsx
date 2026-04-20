@@ -402,7 +402,6 @@ export default function ExpensesPage() {
               { key: 'title', header: 'Title' },
               { key: 'php', header: 'PHP' },
               { key: 'krw', header: 'KRW' },
-              { key: 'note', header: 'Note' },
             ]}
             rows={
               filteredExpenses?.map((item) => ({
@@ -411,7 +410,6 @@ export default function ExpensesPage() {
                 title: item.title || '',
                 php: item.amount_php || 0,
                 krw: item.amount_krw || 0,
-                note: item.note || '',
               })) || []
             }
             filename={`expenses_${filters.from}_${filters.to}.csv`}
@@ -426,7 +424,7 @@ export default function ExpensesPage() {
           >
             <thead className="sticky top-0 z-20 shadow-sm">
               <tr className="bg-gray-900 font-bold text-xs" style={{ color: '#FACC15' }}>
-                <td colSpan={7} style={{ padding: 0 }}>
+                <td colSpan={6} style={{ padding: 0 }}>
                   <div
                     style={{
                       margin: '10px 0',
@@ -464,23 +462,22 @@ export default function ExpensesPage() {
               <tr className="bg-gray-50 border-b">
                 <th className="px-2 py-2 w-[10%]">Date</th>
                 <th className="px-2 py-2 w-[15%]">Category</th>
-                <th className="px-2 py-2 w-[20%]">Title</th>
+                <th className="px-2 py-2 w-[35%]">Title</th>
                 <th className="px-2 py-2 w-[10%]">PHP</th>
-                <th className="px-2 py-2 w-[10%]">KRW</th>
-                <th className="px-2 py-2 w-[25%]">Note</th>
+                <th className="px-2 py-2 w-[20%]">KRW</th>
                 <th className="px-2 py-2 w-[10%]">Manage</th>
               </tr>
             </thead>
             <tbody className="divide-y overflow-y-auto">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-2 py-2 text-center">
+                  <td colSpan={6} className="px-2 py-2 text-center">
                     Loading...
                   </td>
                 </tr>
               ) : filteredExpenses?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-2 py-2 text-center text-gray-500">
+                  <td colSpan={6} className="px-2 py-2 text-center text-gray-500">
                     No expenses found.
                   </td>
                 </tr>
@@ -493,14 +490,13 @@ export default function ExpensesPage() {
                   >
                     <td className="px-2 py-2">{item.expense_date?.slice(2, 10)}</td>
                     <td className="px-2 py-2 text-gray-600 truncate">{getCategoryName(item)}</td>
-                    <td className="px-2 py-2 font-medium">{item.title}</td>
+                    <td className="px-2 py-2 font-medium text-left break-all">{item.title}</td>
                     <td className="px-2 py-2 text-gray-600">
                       {item.amount_php ? Number(item.amount_php).toLocaleString() : '-'}
                     </td>
                     <td className="px-2 py-2 text-gray-600">
                       {item.amount_krw ? Number(item.amount_krw).toLocaleString() : '-'}
                     </td>
-                    <td className="px-2 py-2 text-gray-500 truncate">{item.note}</td>
                     <td className="px-2 py-2 flex justify-center items-center">
                       <Button
                         variant="danger"

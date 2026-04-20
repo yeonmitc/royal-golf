@@ -10,10 +10,21 @@ import {
   useUpdateInventoryMutation,
   useUpsertProductMutation,
 } from '../features/products/productHooks';
+import {
+  useCreateExpenseMutation,
+  useExpenseCategories,
+} from '../features/expenses/expensesHooks';
 import { getNextProductNo, getNextSerialForPrefix, isProductCodeExists } from '../features/products/productApi';
 import { generateProductCode } from '../utils/codeGenerator';
 import { useToast } from '../context/ToastContext';
 import { useAdminStore } from '../store/adminStore';
+
+function toInputDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 export default function AddProductPage() {
   const navigate = useNavigate();
@@ -44,6 +55,8 @@ export default function AddProductPage() {
 
   const { mutateAsync: saveProduct, isPending } = useUpsertProductMutation();
   const { mutateAsync: updateInv } = useUpdateInventoryMutation();
+  const { mutateAsync: createExpense, isPending: isExpensePending } = useCreateExpenseMutation();
+  const { data: expenseCategories = [] } = useExpenseCategories();
 
   const categoryOptions = allCodeParts
     .filter((p) => p.group === 'category')
@@ -116,6 +129,8 @@ export default function AddProductPage() {
   const effectiveSalePricePhp = salePriceManual ? salePricePhp : computedP3PricePhp;
   const p1PriceForDb = computedP1PricePhp;
   const p3PriceForDb = computedP3PricePhp;
+  const totalQty = Object.values(sizeInputs).reduce((sum, v) => sum + (Number(v || 0) || 0), 0);
+  const expenseAmountKrw = (Number(priceCny || 0) || 0) * totalQty * 223;
 
   async function recomputeCode(next = {}) {
     const c = next.category ?? category;
@@ -214,8 +229,6 @@ export default function AddProductPage() {
     const changes = Object.fromEntries(
       Object.entries(sizeInputs).map(([k, v]) => [k, Number(v || 0) || 0])
     );
-    const totalQty = Object.values(changes).reduce((sum, n) => sum + (Number(n) || 0), 0);
-
     const payload = {
       code: codePreview,
       nameKo: nameKo.trim(),
@@ -257,6 +270,44 @@ export default function AddProductPage() {
     // 현재 state 기준으로 다시 계산
     refreshProductNo();
     recomputeCode({});
+  }
+
+  async function handleAddExpense() {
+    if (!isAdmin) {
+      openLoginModal();
+      showToast('Admin required.');
+      return;
+    }
+    if (!codePreview) {
+      showToast('Code not generated. Please select all options.');
+      return;
+    }
+    if (totalQty <= 0) {
+      showToast('Quantity must be greater than 0.');
+      return;
+    }
+    const category = (expenseCategories || []).find((c) => String(c?.name || '').includes('의류'));
+    if (!category?.id) {
+      showToast('Expense category "의류 사입비" not found.');
+      return;
+    }
+
+    try {
+      await createExpense({
+        category_id: Number(category.id),
+        title: codePreview,
+        amount_krw: expenseAmountKrw,
+        amount_php: 0,
+        amount_cny: 0,
+        method: 'bankTranse',
+        expense_date: toInputDate(new Date()),
+        note: '',
+      });
+      showToast(`Expense added: ${codePreview}`);
+    } catch (err) {
+      const msg = String(err?.message || err || '');
+      showToast(`Expense add failed: ${msg}`);
+    }
   }
 
   return (
@@ -523,21 +574,39 @@ export default function AddProductPage() {
               </FormSection>
               <div style={{ flex: 1 }} />
               <div
-                style={{ marginTop: 5, display: 'flex', justifyContent: 'space-between', gap: 8 }}
+                style={{
+                  marginTop: 12,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                  gap: 10,
+                  alignItems: 'stretch',
+                }}
               >
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="md"
                   onClick={() => navigate('/inventory')}
+                  style={{ width: '100%' }}
                 >
                   Cancel
                 </Button>
                 <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  disabled={isExpensePending || !codePreview || totalQty <= 0}
+                  onClick={handleAddExpense}
+                  style={{ width: '100%' }}
+                >
+                  {isExpensePending ? 'Adding Expense...' : 'Add Expense'}
+                </Button>
+                <Button
                   type="submit"
                   variant="primary"
-                  size="sm"
+                  size="md"
                   disabled={isPending || !codePreview || duplicate}
+                  style={{ width: '100%' }}
                 >
                   Save
                 </Button>
