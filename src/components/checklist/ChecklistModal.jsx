@@ -36,8 +36,62 @@ function formatHHSS(d) {
   return `${hh}:${ss}`;
 }
 
-function storageKey(dateStr, employeeNames) {
-  return `checklist:${dateStr}:${employeeNames}`;
+function storageKey(dateStr) {
+  return `checklist:${dateStr}:shared`;
+}
+
+function toSharedRecord(dayRow, maxItems) {
+  const employees = dayRow?.employees;
+  if (!employees || typeof employees !== 'object') {
+    return { checkedMap: {}, metaMap: {} };
+  }
+
+  const shared = employees._shared;
+  if (shared && typeof shared === 'object') {
+    const checkedMap = {};
+    const metaMap = {};
+    const checkedItems = Array.isArray(shared.checked_items) ? shared.checked_items : [];
+    const times = shared.times && typeof shared.times === 'object' ? shared.times : {};
+    checkedItems.forEach((idxRaw) => {
+      const idx = Number(idxRaw);
+      if (!Number.isFinite(idx) || idx < 0 || idx >= maxItems) return;
+      checkedMap[idx] = true;
+      const raw = times?.[String(idx)];
+      if (raw && typeof raw === 'object') {
+        const by = String(raw.by || '').trim();
+        const time = String(raw.time || '').trim();
+        if (time) metaMap[idx] = { by, time };
+      } else {
+        const time = String(raw || '').trim();
+        if (time) metaMap[idx] = { by: '', time };
+      }
+    });
+    return { checkedMap, metaMap };
+  }
+
+  // Backward compatibility: merge old per-employee records into one shared state.
+  const checkedMap = {};
+  const metaMap = {};
+  Object.entries(employees).forEach(([name, rec]) => {
+    if (name === '_shared' || !rec || typeof rec !== 'object') return;
+    const checkedItems = Array.isArray(rec.checked_items) ? rec.checked_items : [];
+    const times = rec.times && typeof rec.times === 'object' ? rec.times : {};
+    checkedItems.forEach((idxRaw) => {
+      const idx = Number(idxRaw);
+      if (!Number.isFinite(idx) || idx < 0 || idx >= maxItems) return;
+      checkedMap[idx] = true;
+      const raw = times?.[String(idx)];
+      if (raw && typeof raw === 'object') {
+        const by = String(raw.by || '').trim();
+        const time = String(raw.time || '').trim();
+        metaMap[idx] = { by: by || name, time };
+      } else {
+        const time = String(raw || '').trim();
+        metaMap[idx] = { by: name, time };
+      }
+    });
+  });
+  return { checkedMap, metaMap };
 }
 
 export default function ChecklistModal({ open, onClose, employeeNames }) {
@@ -55,16 +109,14 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
 
   const dateStr = businessDateKey(now, 5);
   const employeeKey = String(employeeNames || '').trim();
-  const selectedEmployees = useMemo(
+  const actorName = useMemo(
     () =>
       employeeKey
         .split(',')
         .map((s) => String(s || '').trim())
-        .filter(Boolean)
-        .slice(0, 2),
+        .filter(Boolean)[0] || '',
     [employeeKey]
   );
-
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const checkMobile = () => {
@@ -105,8 +157,7 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
     } catch {
       setItems(DEFAULT_ITEMS);
     }
-    if (!employeeKey) return;
-    const key = storageKey(dateStr, employeeKey);
+    const key = storageKey(dateStr);
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
@@ -119,63 +170,44 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
           if (!Number.isFinite(idx)) return;
           const v = incoming[k];
           if (typeof v === 'string') {
-            nextMeta[idx] = { by: employeeKey, time: v };
+            nextMeta[idx] = { by: actorName, time: v };
             return;
           }
           if (v && typeof v === 'object') {
             const by = String(v.by || '').trim();
             const time = String(v.time || '').trim();
-            if (time) nextMeta[idx] = { by: by || employeeKey, time };
+            if (time) nextMeta[idx] = { by: by || actorName, time };
           }
         });
         setMetaMap(nextMeta);
-        restoredRef.current = { key: employeeKey, source: 'local' };
+        restoredRef.current = { key: dateStr, source: 'local' };
       } else {
         setCheckedMap({});
         setMetaMap({});
-        restoredRef.current = { key: employeeKey, source: 'none' };
+        restoredRef.current = { key: dateStr, source: 'none' };
       }
     } catch {
       setCheckedMap({});
       setMetaMap({});
-      restoredRef.current = { key: employeeKey, source: 'none' };
+      restoredRef.current = { key: dateStr, source: 'none' };
     }
-  }, [open, employeeKey, dateStr]);
+  }, [open, actorName, dateStr]);
 
   useEffect(() => {
     if (!open) return;
-    if (!employeeKey) return;
     if (!dayRow || !dayRow.employees) return;
-    if (restoredRef.current.key !== employeeKey) return;
+    if (restoredRef.current.key !== dateStr) return;
     if (restoredRef.current.source !== 'none') return;
 
-    const dbEmployees = dayRow.employees || {};
-    const nextChecked = {};
-    const nextMeta = {};
-
-    selectedEmployees.forEach((name) => {
-      const rec = dbEmployees?.[name];
-      if (!rec || typeof rec !== 'object') return;
-      const checkedItems = Array.isArray(rec.checked_items) ? rec.checked_items : [];
-      const times = rec.times && typeof rec.times === 'object' ? rec.times : {};
-      checkedItems.forEach((idx) => {
-        const i = Number(idx);
-        if (!Number.isFinite(i) || i < 0 || i >= items.length) return;
-        nextChecked[i] = true;
-        const t = String(times?.[String(i)] || '').trim();
-        nextMeta[i] = { by: name, time: t };
-      });
-    });
-
+    const { checkedMap: nextChecked, metaMap: nextMeta } = toSharedRecord(dayRow, items.length);
     setCheckedMap(nextChecked);
     setMetaMap(nextMeta);
-    localStorage.setItem(storageKey(dateStr, employeeKey), JSON.stringify({ checkedMap: nextChecked, metaMap: nextMeta }));
-    restoredRef.current = { key: employeeKey, source: 'db' };
-  }, [open, employeeKey, dateStr, dayRow, items.length, selectedEmployees]);
+    localStorage.setItem(storageKey(dateStr), JSON.stringify({ checkedMap: nextChecked, metaMap: nextMeta }));
+    restoredRef.current = { key: dateStr, source: 'db' };
+  }, [open, dateStr, dayRow, items.length]);
 
   useEffect(() => {
     if (!open) return;
-    if (!employeeKey) return;
     const max = items.length;
 
     setCheckedMap((prev) => {
@@ -214,20 +246,19 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
           changed = true;
           return;
         }
-        next[idx] = { by: by || employeeKey, time };
+        next[idx] = { by: by || actorName, time };
         if (v.by !== next[idx].by || v.time !== next[idx].time) changed = true;
       });
       if (!changed && Object.keys(next).length === Object.keys(prev || {}).length) return prev;
       return next;
     });
-  }, [items.length, open, employeeKey, dateStr]);
+  }, [items.length, open, actorName, dateStr]);
 
   useEffect(() => {
     if (!open) return;
-    if (!employeeKey) return;
-    const key = storageKey(dateStr, employeeKey);
+    const key = storageKey(dateStr);
     localStorage.setItem(key, JSON.stringify({ checkedMap, metaMap }));
-  }, [open, employeeKey, dateStr, checkedMap, metaMap]);
+  }, [open, dateStr, checkedMap, metaMap]);
 
   const totalCount = items.length;
   const checkedCount = useMemo(
@@ -246,16 +277,22 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
   );
 
   const toggleItem = (idx) => {
-    if (!employeeKey) {
+    if (!actorName) {
       showToast('Select employee first.');
       return;
     }
     setCheckedMap((prev) => {
-      const next = { ...prev, [idx]: !prev[idx] };
       const timeStr = formatHHSS(new Date());
+      const isChecked = Boolean(prev[idx]);
+      const currentBy = String(metaMap?.[idx]?.by || '').trim();
+      const transferOwner = isChecked && currentBy && currentBy !== actorName;
+      const next = { ...prev };
+      if (!isChecked) next[idx] = true;
+      else if (transferOwner) next[idx] = true;
+      else next[idx] = false;
       setMetaMap((t) => {
         const copy = { ...t };
-        if (next[idx]) copy[idx] = { by: employeeKey, time: timeStr };
+        if (next[idx]) copy[idx] = { by: actorName, time: timeStr };
         else delete copy[idx];
         return copy;
       });
@@ -265,7 +302,7 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
 
 
   const saveSummary = () => {
-    if (!employeeKey) {
+    if (!actorName) {
       showToast('Select employee first.');
       return;
     }
@@ -273,33 +310,30 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
     const baseEmployees =
       dayRow && dayRow.employees && typeof dayRow.employees === 'object' ? { ...dayRow.employees } : {};
 
-    const groups = {};
+    const shared = { checked_items: [], times: {} };
     Object.keys(checkedMap || {}).forEach((k) => {
       const idx = Number(k);
       if (!checkedMap[k]) return;
       const by = String(metaMap?.[idx]?.by || '').trim();
       const time = String(metaMap?.[idx]?.time || '').trim();
-      const owner = by || selectedEmployees[0] || employeeKey;
-      if (!groups[owner]) groups[owner] = { checked_items: [], times: {} };
-      groups[owner].checked_items.push(idx);
-      if (time) groups[owner].times[String(idx)] = time;
+      shared.checked_items.push(idx);
+      if (time || by) shared.times[String(idx)] = { by: by || actorName, time };
     });
 
-    selectedEmployees.forEach((name) => {
-      if (!groups[name]) groups[name] = { checked_items: [], times: {} };
-    });
-
-    Object.keys(groups).forEach((name) => {
-      const rec = groups[name];
-      const unique = Array.from(new Set((rec.checked_items || []).map((n) => Number(n)).filter((n) => Number.isFinite(n))));
-      unique.sort((a, b) => a - b);
-      baseEmployees[name] = { checked_items: unique, times: rec.times || {} };
-    });
+    const unique = Array.from(
+      new Set((shared.checked_items || []).map((n) => Number(n)).filter((n) => Number.isFinite(n)))
+    );
+    unique.sort((a, b) => a - b);
+    baseEmployees._shared = { checked_items: unique, times: shared.times || {} };
 
     upsertChecklist(
       { checkDate: dateStr, totalCount, employees: baseEmployees },
       {
         onSuccess: () => {
+          localStorage.setItem(
+            storageKey(dateStr),
+            JSON.stringify({ checkedMap, metaMap })
+          );
           showToast('Checklist saved.');
           onClose?.();
         },

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchChecklistDaily,
   fetchChecklistSummary,
@@ -30,7 +30,11 @@ export function useChecklistDaily(checkDate, options = {}) {
 }
 
 export function useUpsertChecklistDailyMutation() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: upsertChecklistDaily,
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['checklist', 'daily', variables?.checkDate] });
+    },
   });
 }
