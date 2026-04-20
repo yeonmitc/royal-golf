@@ -49,7 +49,13 @@ export default function SalesHistoryPage() {
 
   const resetSearch = () => {
     setQInput('');
-    setAllRange();
+    setFromInput('');
+    setToInput('');
+    setFilters({
+      fromDate: '',
+      toDate: '',
+      query: '',
+    });
   };
 
   const setAllRange = () => {
@@ -246,15 +252,6 @@ export default function SalesHistoryPage() {
   const summary = useMemo(() => {
     const rows = visibleRows || [];
     const itemCount = rows.length;
-    const ellaGuideIds = new Set(
-      (guides || [])
-        .filter((g) =>
-          String(g.name || '')
-            .toLowerCase()
-            .includes('ella')
-        )
-        .map((g) => String(g.id))
-    );
 
     const { totalQty, totalAmount, txCount } = rows.reduce(
       (acc, r) => {
@@ -265,8 +262,7 @@ export default function SalesHistoryPage() {
         const finalUnitRaw = isDiscounted ? discounted : original;
         const finalUnit = isRefunded ? 0 : finalUnitRaw;
         const qty = Number(r?.qty || 0) || 0;
-        const isElla = r?.guideId != null && ellaGuideIds.has(String(r.guideId));
-        const qtyForTotal = isRefunded || isElla ? 0 : qty;
+        const qtyForTotal = isRefunded ? 0 : qty;
         const txKey = String(r?.saleGroupId || '').trim() || String(r?.soldAt || '').trim();
         const txKeys = acc.txKeys;
         if (txKey) txKeys.add(txKey);
@@ -281,7 +277,7 @@ export default function SalesHistoryPage() {
     );
 
     return { itemCount, totalQty, totalAmount, txCount };
-  }, [visibleRows, guides]);
+  }, [visibleRows]);
 
   const cardActions = useMemo(() => {
     const actions = [

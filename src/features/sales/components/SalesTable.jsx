@@ -154,11 +154,11 @@ export default function SalesTable({
       const finalUnitRaw = isDiscounted ? discounted : original;
       const finalUnit = isRefunded ? 0 : finalUnitRaw;
       const qty = Number(row.qty || 0) || 0;
-      const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
-      const qtyForTotal = isRefunded || isElla ? 0 : qty;
+      const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
       const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
       const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
+      const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
       const commissionForTotal = isRefunded || isMrMoon || isElla || isPeter ? 0 : commission;
       const lineTotalForTotal = finalUnit * qtyForTotal;
 
