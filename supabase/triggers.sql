@@ -1,12 +1,14 @@
--- Trigger function to update inventories.check_status when erro_stock changes
+-- Trigger function to sync inventories.check_status from erro_stock.checked_at
+-- - checked_at IS NULL     => unresolved error => inventories.check_status = 'error'
+-- - checked_at IS NOT NULL => resolved         => inventories.check_status = 'unchecked'
 
 -- 1. Function to handle insert/update on erro_stock
 CREATE OR REPLACE FUNCTION handle_erro_stock_upsert()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- When a record is inserted or updated in erro_stock, set the corresponding inventory status to 'error'
+  -- checked_at is the single source of truth for resolved/unresolved state.
   UPDATE inventories
-  SET check_status = 'error',
+  SET check_status = CASE WHEN NEW.checked_at IS NULL THEN 'error' ELSE 'unchecked' END,
       check_updated_at = NOW()
   WHERE code = NEW.code;
   RETURN NEW;
@@ -17,8 +19,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION handle_erro_stock_delete()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- When a record is deleted from erro_stock, reset the corresponding inventory status to 'unchecked'
-  -- (Assuming deletion means the error is resolved or removed)
+  -- Purged/deleted rows should leave inventory in unchecked state.
   UPDATE inventories
   SET check_status = 'unchecked',
       check_updated_at = NOW()

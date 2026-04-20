@@ -253,19 +253,11 @@ export async function getProductInventoryList() {
         order: { column: 'code', ascending: true },
       }),
       (async () => {
-        try {
-          return await sbSelect('erro_stock', {
-            select: 'id,code,memo,is_checked,checked_at,created_at',
-            filters: [{ column: 'is_checked', op: 'eq', value: false }],
-            order: { column: 'id', ascending: false },
-          });
-        } catch (e) {
-          const msg = String(e?.message || '').toLowerCase();
-          if (msg.includes('is_checked') || msg.includes('checked_at')) {
-            return sbSelect('erro_stock', { select: 'id,code,memo,created_at', order: { column: 'id', ascending: false } });
-          }
-          throw e;
-        }
+        return sbSelect('erro_stock', {
+          select: 'id,code,memo,checked_at,created_at',
+          filters: [{ column: 'checked_at', op: 'is', value: 'null' }],
+          order: { column: 'id', ascending: false },
+        });
       })(),
     ]);
     const products = (productsRaw || []).map(normalizeProductRow).filter(Boolean);
@@ -460,7 +452,7 @@ export async function upsertErroStock({ code, memo }) {
   const now = new Date().toISOString();
 
   // Parallel: Local Dexie + Remote erro_stock
-  // Note: We rely on DB Triggers to update 'inventories.check_status' on the server.
+  // checked_at = NULL means unresolved error.
   await Promise.all([
     // 1. Update Dexie (Local First) - Critical for offline support
     db.products.update(c, { 
@@ -480,49 +472,18 @@ export async function upsertErroStock({ code, memo }) {
         });
         
         if (Array.isArray(existing) && existing.length > 0) {
-          // Update
-          try {
-            await sbUpdate(
-              'erro_stock',
-              { memo: m, is_checked: false, checked_at: null, updated_at: now },
-              {
-                filters: [{ column: 'code', op: 'eq', value: c }],
-                returning: 'minimal',
-              }
-            );
-          } catch (e) {
-            const msg = String(e?.message || '').toLowerCase();
-            if (msg.includes('is_checked') || msg.includes('checked_at')) {
-              await sbUpdate(
-                'erro_stock',
-                { memo: m, updated_at: now },
-                {
-                  filters: [{ column: 'code', op: 'eq', value: c }],
-                  returning: 'minimal',
-                }
-              );
-            } else {
-              throw e;
+          await sbUpdate(
+            'erro_stock',
+            { memo: m, checked_at: null, updated_at: now },
+            {
+              filters: [{ column: 'code', op: 'eq', value: c }],
+              returning: 'minimal',
             }
-          }
+          );
         } else {
-          // Insert
-          try {
-            await sbInsert(
-              'erro_stock',
-              [{ code: c, memo: m, is_checked: false, checked_at: null, updated_at: now }],
-              { returning: 'minimal' }
-            );
-          } catch (e) {
-            const msg = String(e?.message || '').toLowerCase();
-            if (msg.includes('is_checked') || msg.includes('checked_at')) {
-              await sbInsert('erro_stock', [{ code: c, memo: m, updated_at: now }], {
-                returning: 'minimal',
-              });
-            } else {
-              throw e;
-            }
-          }
+          await sbInsert('erro_stock', [{ code: c, memo: m, checked_at: null, updated_at: now }], {
+            returning: 'minimal',
+          });
         }
       } catch (e) {
         console.error('Supabase save error:', e);
@@ -547,8 +508,7 @@ export async function deleteErroStock(code) {
   const now = new Date().toISOString();
 
   // Parallel: Local Dexie + Remote erro_stock
-  // Note: We rely on DB Triggers to update 'inventories.check_status' on the server.
-  // UPDATE: We also explicitly update inventories to ensure consistency even if trigger fails.
+  // checked_at = NOW() means resolved; row is purged 7 days later by cron.
   await Promise.all([
     // 1. Update Dexie (Local First)
     db.products.update(c, { 
@@ -557,25 +517,13 @@ export async function deleteErroStock(code) {
       check_updated_at: now
     }).catch(dexieErr => console.warn('Failed to update Dexie error_memo:', dexieErr)),
 
-    // 2. erro_stock mark checked=true (Supabase). Fallback: hard delete if schema is old.
+    // 2. Resolve erro_stock by stamping checked_at.
     (async () => {
-      try {
-        await sbUpdate(
-          'erro_stock',
-          { is_checked: true, checked_at: now, updated_at: now },
-          { filters: [{ column: 'code', op: 'eq', value: c }], returning: 'minimal' }
-        );
-      } catch (e) {
-        const msg = String(e?.message || '').toLowerCase();
-        if (msg.includes('is_checked') || msg.includes('checked_at')) {
-          await sbDelete('erro_stock', {
-            filters: [{ column: 'code', op: 'eq', value: c }],
-            returning: 'representation',
-          });
-          return;
-        }
-        throw e;
-      }
+      await sbUpdate(
+        'erro_stock',
+        { checked_at: now, updated_at: now },
+        { filters: [{ column: 'code', op: 'eq', value: c }], returning: 'minimal' }
+      );
     })(),
 
     // 3. Explicitly update inventories (Supabase)
