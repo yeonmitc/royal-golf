@@ -246,7 +246,19 @@ export default function CheckStockPage() {
         return;
       }
 
-      const codes = new Set(result.rows.map((r) => r.code));
+      const soldCodes = new Set(
+        result.rows
+          .map((r) => String(r?.code || '').trim())
+          .filter(Boolean)
+      );
+      const codes = new Set(soldCodes);
+      const hasGaGgSale = Array.from(soldCodes).some((code) => code.startsWith('GA-GG-'));
+      if (hasGaGgSale) {
+        allProducts.forEach((p) => {
+          const code = String(p?.code || '').trim();
+          if (code.startsWith('GA-GG-')) codes.add(code);
+        });
+      }
       setSoldProductCodes(codes);
       setSoldOnlyView(Boolean(showOnly));
 

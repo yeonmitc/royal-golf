@@ -406,6 +406,25 @@ export async function updateInventoryStatus(code, status) {
     }
     throw e;
   }
+
+  // If an erro_stock row exists for this code, marking as checked resolves it.
+  if (status === 'checked') {
+    try {
+      await sbUpdate(
+        'erro_stock',
+        { checked_at: now, updated_at: now },
+        {
+          filters: [
+            { column: 'code', op: 'eq', value: c },
+            { column: 'checked_at', op: 'is', value: 'null' },
+          ],
+          returning: 'minimal',
+        }
+      );
+    } catch (e) {
+      if (!isNetworkFailure(e)) console.warn(`Failed to resolve erro_stock for ${c}:`, e);
+    }
+  }
 }
 
 export async function batchUpdateInventoryStatus(changes) {
@@ -442,6 +461,35 @@ export async function batchUpdateInventoryStatus(changes) {
         if (!isNetworkFailure(e)) console.error(`Failed to update ${code}:`, e);
       })
     ));
+  }
+
+  // Resolve unresolved erro_stock rows when a code is saved as checked.
+  const checkedCodes = entries
+    .filter(([, status]) => status === 'checked')
+    .map(([code]) => String(code || '').trim())
+    .filter(Boolean);
+
+  if (checkedCodes.length > 0) {
+    for (let i = 0; i < checkedCodes.length; i += CHUNK_SIZE) {
+      const chunk = checkedCodes.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((code) =>
+          sbUpdate(
+            'erro_stock',
+            { checked_at: now, updated_at: now },
+            {
+              filters: [
+                { column: 'code', op: 'eq', value: code },
+                { column: 'checked_at', op: 'is', value: 'null' },
+              ],
+              returning: 'minimal',
+            }
+          ).catch((e) => {
+            if (!isNetworkFailure(e)) console.warn(`Failed to resolve erro_stock for ${code}:`, e);
+          })
+        )
+      );
+    }
   }
 }
 
