@@ -8,7 +8,10 @@ RETURNS TRIGGER AS $$
 BEGIN
   -- checked_at is the single source of truth for resolved/unresolved state.
   UPDATE inventories
-  SET check_status = CASE WHEN NEW.checked_at IS NULL THEN 'error' ELSE 'unchecked' END,
+  SET check_status = CASE
+        WHEN NEW.checked_at IS NULL THEN 'error'::stock_check_state
+        ELSE 'unchecked'::stock_check_state
+      END,
       check_updated_at = NOW()
   WHERE code = NEW.code;
   RETURN NEW;
@@ -21,7 +24,7 @@ RETURNS TRIGGER AS $$
 BEGIN
   -- Purged/deleted rows should leave inventory in unchecked state.
   UPDATE inventories
-  SET check_status = 'unchecked',
+  SET check_status = 'unchecked'::stock_check_state,
       check_updated_at = NOW()
   WHERE code = OLD.code;
   RETURN OLD;
