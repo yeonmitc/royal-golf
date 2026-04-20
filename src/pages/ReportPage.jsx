@@ -4,6 +4,7 @@ import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import { sbSelect } from '../db/supabaseRest';
 import { getExpenseCategories } from '../features/expenses/expensesApi';
+import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
 
 const START_YEAR = 2025;
 const MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -41,15 +42,6 @@ function formatNumber(value) {
 
 function formatPhp(value) {
   return `PHP ${formatNumber(value)}`;
-}
-
-function inferGuideFlags(name) {
-  const norm = String(name || '').toLowerCase().replace(/[\s.]/g, '');
-  return {
-    isElla: norm.includes('ella'),
-    isPeterLike: norm.includes('peter') || norm.includes('perter'),
-    isMrMoon: norm.includes('mrmoon'),
-  };
 }
 
 function classifyExpenseCategory(name) {
@@ -299,20 +291,6 @@ async function fetchProductCostMap(codes) {
   return costMap;
 }
 
-async function fetchSalesRows(range) {
-  return (
-    (await sbSelect('sales', {
-      select: 'id,sold_at,code,qty,price,free_gift,refunded_at,sale_group_id',
-      filters: [
-        { column: 'sold_at', op: 'gte', value: `${range.from}T00:00:00.000Z` },
-        { column: 'sold_at', op: 'lte', value: `${range.to}T23:59:59.999Z` },
-      ],
-      order: { column: 'sold_at', ascending: true },
-      limit: 5000,
-    })) || []
-  );
-}
-
 async function fetchExpensesRaw(range) {
   return (
     (await sbSelect('expenses', {
@@ -327,56 +305,10 @@ async function fetchExpensesRaw(range) {
   );
 }
 
-async function fetchGuideNameBySaleGroupIds(saleGroupIds) {
-  const result = new Map();
-  const groupIds = [...new Set((saleGroupIds || []).map((v) => String(v || '').trim()).filter(Boolean))];
-  if (groupIds.length === 0) return result;
-  const chunkSize = 200;
-  const saleGroups = [];
-  for (let i = 0; i < groupIds.length; i += chunkSize) {
-    const chunk = groupIds.slice(i, i + chunkSize);
-    const inList = buildInList(chunk);
-    if (inList === '()') continue;
-    const page = await sbSelect('sale_groups', {
-      select: 'id,guide_id',
-      filters: [{ column: 'id', op: 'in', value: inList }],
-      limit: 5000,
-    });
-    if (Array.isArray(page) && page.length) saleGroups.push(...page);
-  }
-  const guideIds = [...new Set((saleGroups || []).map((g) => String(g?.guide_id || '').trim()).filter(Boolean))];
-  const guideNameMap = new Map();
-
-  if (guideIds.length > 0) {
-    for (let i = 0; i < guideIds.length; i += chunkSize) {
-      const chunk = guideIds.slice(i, i + chunkSize);
-      const guideIn = buildInList(chunk);
-      if (guideIn === '()') continue;
-      const guides = await sbSelect('guides', {
-        select: 'id,name',
-        filters: [{ column: 'id', op: 'in', value: guideIn }],
-        limit: 5000,
-      });
-      (guides || []).forEach((row) => {
-        const id = String(row?.id || '').trim();
-        if (id) guideNameMap.set(id, String(row?.name || '').trim());
-      });
-    }
-  }
-
-  (saleGroups || []).forEach((group) => {
-    const groupId = String(group?.id || '').trim();
-    const guideId = String(group?.guide_id || '').trim();
-    if (groupId) result.set(groupId, guideNameMap.get(guideId) || '');
-  });
-
-  return result;
-}
-
 async function buildMonthlyReport(year) {
   const range = buildYearRange(year);
-  const [salesRowsRaw, expensesRaw, expenseCategories] = await Promise.all([
-    fetchSalesRows(range),
+  const [salesHistoryResult, expensesRaw, expenseCategories] = await Promise.all([
+    getSalesHistoryFilteredResult({ fromDate: range.from, toDate: range.to, query: '' }),
     fetchExpensesRaw(range),
     getExpenseCategories(),
   ]);
@@ -384,8 +316,7 @@ async function buildMonthlyReport(year) {
     (expenseCategories || []).map((row) => [String(row?.id || '').trim(), String(row?.name || '').trim()])
   );
 
-  const salesRows = (salesRowsRaw || []).filter((row) => !row?.refunded_at);
-  const guideMap = await fetchGuideNameBySaleGroupIds(salesRows.map((row) => row?.sale_group_id));
+  const salesRows = Array.isArray(salesHistoryResult?.rows) ? salesHistoryResult.rows : [];
   const productCostMap = await fetchProductCostMap(salesRows.map((row) => row?.code));
 
   const monthMap = new Map();
@@ -412,26 +343,21 @@ async function buildMonthlyReport(year) {
   }
 
   for (const row of salesRows) {
-    const soldKey = String(row?.sold_at || '').slice(0, 7);
+    const soldKey = String(row?.soldAt || '').slice(0, 7);
     if (!monthMap.has(soldKey)) continue;
-
-    const guideName = String(guideMap.get(String(row?.sale_group_id || '').trim()) || '').trim();
-    const flags = inferGuideFlags(guideName);
-    if (flags.isElla) continue;
+    if (row?.isElla) continue;
 
     const bucket = monthMap.get(soldKey);
     const qty = Number(row?.qty || 0) || 0;
-    const salesAmount = (Number(row?.price || 0) || 0) * qty;
+    const salesAmount = Number(row?.lineTotalPhp || 0) || 0;
     const unitCost = Number(productCostMap.get(String(row?.code || '').trim()) || 0) || 0;
-    const isGift = Boolean(row?.free_gift);
+    const isGift = Boolean(row?.freeGift);
 
     bucket.total_sales += isGift ? 0 : salesAmount;
     if (isGift) bucket.gift_cost += unitCost * qty;
     else bucket.product_cost += unitCost * qty;
 
-    if (!isGift && !flags.isPeterLike && !flags.isMrMoon && guideName) {
-      bucket.guide_commission += salesAmount * 0.1;
-    }
+    bucket.guide_commission += Number(row?.commission || 0) || 0;
   }
 
   for (const expense of expensesRaw || []) {

@@ -15,6 +15,7 @@ import SettingsPage from './pages/SettingsPage';
 import SoldProductPage from './pages/SoldProductPage';
 import StaffSoldProductPage from './pages/StaffSoldProductPage';
 import ProfitPage from './pages/ProfitPage';
+import ReportPage from './pages/ReportPage';
 
 export default function App() {
   return (
@@ -78,6 +79,14 @@ export default function App() {
           element={
             <AdminRoute>
               <ProfitPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <AdminRoute>
+              <ReportPage />
             </AdminRoute>
           }
         />

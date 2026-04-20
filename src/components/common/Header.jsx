@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
-import AttendanceModal from '../attendance/AttendanceModal';
 import AdminLoginModal from '../admin/AdminLoginModal';
-import ChecklistModal from '../checklist/ChecklistModal';
+import AttendanceModal from '../attendance/AttendanceModal';
 import ChecklistEmployeePickerModal from '../checklist/ChecklistEmployeePickerModal';
+import ChecklistModal from '../checklist/ChecklistModal';
 import Modal from './Modal';
 
 export default function Header() {
@@ -116,6 +116,7 @@ export default function Header() {
     { to: '/sold-products', label: 'sold products', adminOnly: true },
     { to: '/expenses', label: 'expenses', adminOnly: true },
     { to: '/profit', label: 'profit', adminOnly: true },
+    { to: '/report', label: 'report', adminOnly: true },
     { to: '/analyze', label: 'analyze', adminOnly: true },
     { to: '/guides', label: 'guides', adminOnly: true },
     { to: '/add', label: 'add product', adminOnly: true },
@@ -174,188 +175,201 @@ export default function Header() {
           height: 'var(--header-height, 86px)',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: 12,
         }}
       >
-        <NavLink
-          to="/sell"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            aspectRatio: '1',
-            marginRight: 12,
-          }}
-        >
-          <img
-            src={logoUrl}
-            alt="Royal Golf Logo"
-            style={{
-              height: '100%',
-              width: '100%',
-              objectFit: 'contain',
-              transition: 'transform 0.3s ease, filter 0.3s ease',
-              transform: logoHovered ? 'scale(1.05)' : 'scale(1)',
-              filter: logoHovered ? 'invert(1)' : 'none',
-              willChange: 'transform, filter',
-            }}
-            onMouseEnter={() => setLogoHovered(true)}
-            onMouseLeave={() => setLogoHovered(false)}
-          />
-        </NavLink>
-
-        <nav
-          aria-label="Main Navigation"
-          className="header-nav"
+        <div
           style={{
             display: 'flex',
             flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 40,
-            whiteSpace: 'nowrap',
+            height: '100%',
+            minWidth: 0,
             overflowX: 'auto',
-            padding: '0 20px',
+            overflowY: 'hidden',
+            alignItems: 'center',
+            gap: 12,
           }}
         >
-          {/* Left: Admin Items (Gold) */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {adminItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                style={({ isActive }) => ({
-                  padding: '8px 12px',
-                  fontSize: 16,
-                  fontWeight: 600,
-                  borderRadius: 999,
-                  color: isActive ? 'var(--gold)' : 'var(--gold-soft)',
-                  background: isActive ? '#141420' : 'transparent',
-                  textDecoration: 'none',
-                  boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
-                  cursor: 'pointer',
-                })}
-                end
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
+          <NavLink
+            to="/sell"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              aspectRatio: '1',
+              flex: '0 0 auto',
+            }}
+          >
+            <img
+              src={logoUrl}
+              alt="Royal Golf Logo"
+              style={{
+                height: '100%',
+                width: '100%',
+                objectFit: 'contain',
+                transition: 'transform 0.3s ease, filter 0.3s ease',
+                transform: logoHovered ? 'scale(1.05)' : 'scale(1)',
+                filter: logoHovered ? 'invert(1)' : 'none',
+                willChange: 'transform, filter',
+              }}
+              onMouseEnter={() => setLogoHovered(true)}
+              onMouseLeave={() => setLogoHovered(false)}
+            />
+          </NavLink>
 
-          {/* Right: Public Items */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {publicItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                style={({ isActive }) => ({
-                  padding: '8px 12px',
-                  fontSize: 16,
-                  fontWeight: 500,
-                  borderRadius: 999,
-                  color: isActive ? 'var(--gold)' : 'var(--text-main)',
-                  background: isActive ? '#141420' : 'transparent',
-                  textDecoration: 'none',
-                  boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
-                  cursor: 'pointer',
-                })}
-                end
-              >
-                {item.label}
-              </NavLink>
-            ))}
+          <nav
+            aria-label="Main Navigation"
+            className="header-nav"
+            style={{
+              display: 'flex',
+              flex: '0 0 auto',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              gap: 40,
+              whiteSpace: 'nowrap',
+              padding: '0 20px 0 0',
+              minWidth: 'max-content',
+            }}
+          >
+            {/* Left: Admin Items (Gold) */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {adminItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  style={({ isActive }) => ({
+                    padding: '8px 12px',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    borderRadius: 999,
+                    color: isActive ? 'var(--gold)' : 'var(--gold-soft)',
+                    background: isActive ? '#141420' : 'transparent',
+                    textDecoration: 'none',
+                    boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
+                    cursor: 'pointer',
+                  })}
+                  end
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
 
-            {/* Attendance Stamp Button - PC Only */}
-            {!isMobile && (
-              <button
-                onClick={() => setAttendanceModalOpen(true)}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: 16,
-                  fontWeight: 500,
-                  borderRadius: 999,
-                  color: 'var(--text-main)',
-                  background: 'transparent',
-                  border: '1px solid var(--border-soft)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--gold)';
-                  e.currentTarget.style.color = 'var(--gold)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-soft)';
-                  e.currentTarget.style.color = 'var(--text-main)';
-                }}
-              >
-                <span>⏰</span> Stamp
-              </button>
-            )}
-            {!isMobile && (
-              <button
-                onClick={() => setChecklistPickerOpen(true)}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: 16,
-                  fontWeight: 500,
-                  borderRadius: 999,
-                  color: 'var(--text-main)',
-                  background: 'transparent',
-                  border: '1px solid var(--border-soft)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'all 0.2s ease',
-                  marginLeft: 4,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--gold)';
-                  e.currentTarget.style.color = 'var(--gold)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-soft)';
-                  e.currentTarget.style.color = 'var(--text-main)';
-                }}
-              >
-                <span>✅</span> Checklist
-              </button>
-            )}
-            {!isMobile && (
-              <NavLink
-                to="/check-stock"
-                onClick={() => {
-                  if (!checkStockDone) armStockCheck({ showUnchecked: true });
-                }}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: 16,
-                  fontWeight: 800,
-                  borderRadius: 999,
-                  color: checkStockDone ? '#22c55e' : '#ef4444',
-                  background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
-                  border: `1px solid ${
-                    checkStockDone ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)'
-                  }`,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  textDecoration: 'none',
-                  transition: 'all 0.2s ease',
-                  marginLeft: 4,
-                }}
-                end
-              >
-                <span>📦</span> Check Stock
-              </NavLink>
-            )}
-          </div>
-        </nav>
+            {/* Right: Public Items */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {publicItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  style={({ isActive }) => ({
+                    padding: '8px 12px',
+                    fontSize: 16,
+                    fontWeight: 500,
+                    borderRadius: 999,
+                    color: isActive ? 'var(--gold)' : 'var(--text-main)',
+                    background: isActive ? '#141420' : 'transparent',
+                    textDecoration: 'none',
+                    boxShadow: isActive ? '0 0 0 1px rgba(212,175,55,0.45)' : 'none',
+                    cursor: 'pointer',
+                  })}
+                  end
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+
+              {!isMobile && (
+                <button
+                  onClick={() => setAttendanceModalOpen(true)}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 16,
+                    fontWeight: 500,
+                    borderRadius: 999,
+                    color: 'var(--text-main)',
+                    background: 'transparent',
+                    border: '1px solid var(--border-soft)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--gold)';
+                    e.currentTarget.style.color = 'var(--gold)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-soft)';
+                    e.currentTarget.style.color = 'var(--text-main)';
+                  }}
+                >
+                  <span>⏰</span> Stamp
+                </button>
+              )}
+              {!isMobile && (
+                <button
+                  onClick={() => setChecklistPickerOpen(true)}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 16,
+                    fontWeight: 500,
+                    borderRadius: 999,
+                    color: 'var(--text-main)',
+                    background: 'transparent',
+                    border: '1px solid var(--border-soft)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.2s ease',
+                    marginLeft: 4,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--gold)';
+                    e.currentTarget.style.color = 'var(--gold)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-soft)';
+                    e.currentTarget.style.color = 'var(--text-main)';
+                  }}
+                >
+                  <span>✅</span> Checklist
+                </button>
+              )}
+              {!isMobile && (
+                <NavLink
+                  to="/check-stock"
+                  onClick={() => {
+                    if (!checkStockDone) armStockCheck({ showUnchecked: true });
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 16,
+                    fontWeight: 800,
+                    borderRadius: 999,
+                    color: checkStockDone ? '#22c55e' : '#ef4444',
+                    background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
+                    border: `1px solid ${
+                      checkStockDone ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)'
+                    }`,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    textDecoration: 'none',
+                    transition: 'all 0.2s ease',
+                    marginLeft: 4,
+                  }}
+                  end
+                >
+                  <span>📦</span> Check Stock
+                </NavLink>
+              )}
+            </div>
+          </nav>
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
@@ -502,9 +516,7 @@ export default function Header() {
         size="content"
       >
         <div style={{ display: 'grid', gap: 12, width: 'min(420px, 90vw)' }}>
-          <div style={{ fontWeight: 800 }}>
-            Please check yesterday&apos;s sold items stock.
-          </div>
+          <div style={{ fontWeight: 800 }}>Please check yesterday&apos;s sold items stock.</div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <NavLink
               to="/check-stock"

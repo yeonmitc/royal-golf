@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Button from '../components/common/Button';
 import DataTable from '../components/common/DataTable';
-import { sbRpc } from '../db/supabaseRest';
+import { sbSelect } from '../db/supabaseRest';
+import { getExpenses } from '../features/expenses/expensesApi';
 import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
 
 // Helper for date formatting without date-fns
@@ -19,6 +20,55 @@ function formatDate(dateStr, fmt = 'yyyy-MM-dd') {
   return `${yyyy}-${MM}-${dd}`;
 }
 
+function buildInList(values) {
+  const unique = [...new Set((values || []).map((v) => String(v ?? '').trim()).filter(Boolean))];
+  return `(${unique.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(',')})`;
+}
+
+function getDateKeysBetween(start, end) {
+  const out = [];
+  const s = new Date(`${start}T00:00:00`);
+  const e = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || s > e) return out;
+  const cur = new Date(s);
+  while (cur <= e) {
+    out.push(formatDate(cur, 'yyyy-MM-dd'));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function toExpensePhp(expense) {
+  const amountPhp = Number(expense?.amount_php || 0) || 0;
+  const amountKrw = Number(expense?.amount_krw || 0) || 0;
+  return amountPhp + amountKrw / 25;
+}
+
+async function fetchGiftCostByCode(codes) {
+  const out = new Map();
+  const uniqueCodes = [...new Set((codes || []).map((v) => String(v || '').trim()).filter(Boolean))];
+  const chunkSize = 200;
+
+  for (let i = 0; i < uniqueCodes.length; i += chunkSize) {
+    const chunk = uniqueCodes.slice(i, i + chunkSize);
+    const inList = buildInList(chunk);
+    if (inList === '()') continue;
+    const rows = await sbSelect('products', {
+      select: 'code,kprice,p1price',
+      filters: [{ column: 'code', op: 'in', value: inList }],
+    });
+    (rows || []).forEach((row) => {
+      const code = String(row?.code || '').trim();
+      const p1price = Number(row?.p1price || 0) || 0;
+      const kprice = Number(row?.kprice || 0) || 0;
+      const unitPhp = p1price > 0 ? p1price : kprice > 0 ? kprice / 25 : 0;
+      if (code) out.set(code, unitPhp);
+    });
+  }
+
+  return out;
+}
+
 export default function ProfitPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -30,60 +80,100 @@ export default function ProfitPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await sbRpc('get_daily_profit_loss', {
-        start_date: startDate || '2025-12-16',
-        end_date: endDate || formatDate(new Date(), 'yyyy-MM-dd'),
-      });
-      // Subtract Ella guide sales from revenue (treated as separate category)
-      let adjusted = Array.isArray(result) ? result.slice() : [];
-      try {
-        const hist = await getSalesHistoryFilteredResult({
-          fromDate: startDate || '',
-          toDate: endDate || '',
+      const from = startDate || '2025-12-16';
+      const to = endDate || formatDate(new Date(), 'yyyy-MM-dd');
+
+      const [hist, expenses] = await Promise.all([
+        getSalesHistoryFilteredResult({
+          fromDate: from,
+          toDate: to,
           query: '',
-        });
-        const ellaMap = new Map();
-        for (const r of hist.rows || []) {
-          if (r.isElla || String(r?.isElla) === 'true') {
-            const key = String(r.soldAt || '').slice(0, 10);
-            const amt = Number(r.lineTotalPhp || 0) || 0;
-            ellaMap.set(key, (ellaMap.get(key) || 0) + amt);
-          }
+        }),
+        getExpenses({ from, to }),
+      ]);
+
+      const salesRows = Array.isArray(hist?.rows) ? hist.rows : [];
+      const giftCodes = salesRows
+        .filter((row) => Boolean(row?.freeGift) && !row?.isRefunded)
+        .map((row) => row?.code);
+      const giftCostByCode = await fetchGiftCostByCode(giftCodes);
+
+      const dailyMap = new Map();
+      const ensureEntry = (key) => {
+        if (!dailyMap.has(key)) {
+          dailyMap.set(key, {
+            grossSales: 0,
+            ellaSales: 0,
+            guideCommission: 0,
+            giftCost: 0,
+            expense: 0,
+          });
         }
-        adjusted = adjusted.map((row) => {
-          const key = String(row.date || '').slice(0, 10);
-          const sub = Math.round(ellaMap.get(key) || 0);
-          const revenue = Math.max(0, Number(row.daily_revenue_php || 0) - sub);
-          const expense = Number(row.daily_expense_php || 0);
-          return {
-            ...row,
-            daily_revenue_php: revenue,
-            daily_profit_php: revenue - expense,
-          };
-        });
-        // Recompute cumulative profit in date ascending order
-        const asc = adjusted.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
-        let cum = 0;
-        const cumMap = new Map();
-        for (const r of asc) {
-          const profit = Number(r.daily_profit_php || 0) || 0;
-          cum += profit;
-          cumMap.set(String(r.date), cum);
+        return dailyMap.get(key);
+      };
+
+      for (const row of salesRows) {
+        const key = String(row?.soldAt || '').slice(0, 10);
+        if (!key) continue;
+        const entry = ensureEntry(key);
+        const lineTotal = Number(row?.lineTotalPhp || 0) || 0;
+        const commission = Number(row?.commission || 0) || 0;
+        const qty = Number(row?.qty || 0) || 0;
+        const code = String(row?.code || '').trim();
+        const giftUnitCost = giftCostByCode.get(code) || 0;
+
+        entry.grossSales += lineTotal;
+
+        if (row?.isElla) {
+          entry.ellaSales += lineTotal;
         }
-        adjusted = adjusted.map((r) => ({
-          ...r,
-          cumulative_profit_php: cumMap.get(String(r.date)) || 0,
-        }));
-      } catch (e) {
-        // If fetching history fails, fall back to raw result
-        void e;
+
+        if (!row?.isElla && !row?.isPeter && !row?.isMrMoon) {
+          entry.guideCommission += commission;
+        }
+
+        if (row?.freeGift && !row?.isRefunded) {
+          entry.giftCost += giftUnitCost * qty;
+        }
       }
-      setData(adjusted || []);
+
+      for (const expense of expenses || []) {
+        const key = String(expense?.expense_date || '').slice(0, 10);
+        if (!key) continue;
+        const categoryName = String(expense?.expense_categories?.name || '').trim();
+        if (categoryName.includes('기타')) continue;
+        const entry = ensureEntry(key);
+        entry.expense += toExpensePhp(expense);
+      }
+
+      let cumulative = 0;
+      const rows = getDateKeysBetween(from, to).map((date) => {
+        const entry = dailyMap.get(date) || {
+          grossSales: 0,
+          ellaSales: 0,
+          guideCommission: 0,
+          giftCost: 0,
+          expense: 0,
+        };
+        const revenue = Math.round(
+          entry.grossSales - entry.ellaSales - entry.guideCommission - entry.giftCost
+        );
+        const expense = Math.round(entry.expense);
+        const profit = revenue - expense;
+        cumulative += profit;
+        return {
+          date,
+          daily_revenue_php: revenue,
+          daily_expense_php: expense,
+          daily_profit_php: profit,
+          cumulative_profit_php: cumulative,
+        };
+      });
+
+      setData(rows.slice().reverse());
     } catch (err) {
       console.error('Error fetching profit data:', err);
-      setError(err.message);
-      // Fallback for when RPC is not created yet
-      // alert('데이터를 불러오지 못했습니다. DB 함수가 생성되었는지 확인해주세요.');
+      setError(err?.message || 'Failed to calculate profit.');
     } finally {
       setLoading(false);
     }
@@ -275,15 +365,6 @@ export default function ProfitPage() {
           >
             <strong className="font-bold">Error: </strong>
             <span className="block sm:inline">{error}</span>
-            <div className="mt-2 text-sm">
-              <p>
-                DB 함수가 생성되지 않았을 수 있습니다. 아래 SQL을 Supabase SQL Editor에서
-                실행해주세요:
-              </p>
-              <code className="block bg-red-50 p-2 mt-1 rounded text-xs select-all">
-                get_daily_profit_loss
-              </code>
-            </div>
           </div>
         )}
         <DataTable

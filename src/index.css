@@ -50,6 +50,18 @@ body {
   color: var(--text-main);
 }
 
+@keyframes report-loading-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  50% {
+    transform: translateX(110%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
 /* 스크롤바 최소화 */
 ::-webkit-scrollbar {
   width: 12px;
