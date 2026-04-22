@@ -269,10 +269,11 @@ function CostBreakdownChart({ summary }) {
   );
 }
 
-async function fetchProductCostMap(codes) {
+async function fetchProductCostMap(codes, onProgress) {
   const costMap = new Map();
   const uniqueCodes = [...new Set((codes || []).map((v) => String(v || '').trim()).filter(Boolean))];
   const chunkSize = 200;
+  const totalChunks = Math.max(1, Math.ceil(uniqueCodes.length / chunkSize));
 
   for (let i = 0; i < uniqueCodes.length; i += chunkSize) {
     const chunk = uniqueCodes.slice(i, i + chunkSize);
@@ -286,9 +287,23 @@ async function fetchProductCostMap(codes) {
       const code = String(row?.code || '').trim();
       if (code) costMap.set(code, Number(row?.p1price || 0) || 0);
     });
+    if (typeof onProgress === 'function') {
+      onProgress({
+        currentChunk: Math.floor(i / chunkSize) + 1,
+        totalChunks,
+      });
+    }
+  }
+
+  if (uniqueCodes.length === 0 && typeof onProgress === 'function') {
+    onProgress({ currentChunk: 1, totalChunks: 1 });
   }
 
   return costMap;
+}
+
+function clampProgress(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value || 0))));
 }
 
 async function fetchExpensesRaw(range) {
@@ -305,19 +320,58 @@ async function fetchExpensesRaw(range) {
   );
 }
 
-async function buildMonthlyReport(year) {
+async function buildMonthlyReport(year, onProgress) {
+  const reportProgress = (value, message) => {
+    if (typeof onProgress === 'function') {
+      onProgress({
+        percent: clampProgress(value),
+        message: String(message || '').trim(),
+      });
+    }
+  };
+
+  reportProgress(0, '리포트 준비 중...');
   const range = buildYearRange(year);
+  let fetchDone = 0;
+  const updateFetchProgress = (label) => {
+    fetchDone += 1;
+    reportProgress(10 + (fetchDone / 3) * 30, label);
+  };
+
   const [salesHistoryResult, expensesRaw, expenseCategories] = await Promise.all([
-    getSalesHistoryFilteredResult({ fromDate: range.from, toDate: range.to, query: '' }),
-    fetchExpensesRaw(range),
-    getExpenseCategories(),
+    getSalesHistoryFilteredResult({ fromDate: range.from, toDate: range.to, query: '' }).then((result) => {
+      updateFetchProgress('판매 데이터 불러오는 중...');
+      return result;
+    }),
+    fetchExpensesRaw(range).then((result) => {
+      updateFetchProgress('지출 데이터 불러오는 중...');
+      return result;
+    }),
+    getExpenseCategories().then((result) => {
+      updateFetchProgress('지출 카테고리 불러오는 중...');
+      return result;
+    }),
   ]);
   const expenseCategoryMap = new Map(
     (expenseCategories || []).map((row) => [String(row?.id || '').trim(), String(row?.name || '').trim()])
   );
 
   const salesRows = Array.isArray(salesHistoryResult?.rows) ? salesHistoryResult.rows : [];
-  const productCostMap = await fetchProductCostMap(salesRows.map((row) => row?.code));
+  reportProgress(45, '상품 원가 계산 준비 중...');
+  const salesCodes = salesRows.map((row) => row?.code);
+  const uniqueSalesCodes = [...new Set(salesCodes.map((code) => String(code || '').trim()).filter(Boolean))];
+  const productCostMap = await fetchProductCostMap(salesCodes, ({ currentChunk, totalChunks }) => {
+    if (!totalChunks) {
+      reportProgress(70, '상품 원가 조회 완료');
+      return;
+    }
+    const chunkRatio = currentChunk / totalChunks;
+    reportProgress(45 + chunkRatio * 25, `상품 원가 조회 중... ${currentChunk}/${totalChunks}`);
+  });
+  reportProgress(
+    72,
+    `상품 원가 확인 완료 (${uniqueSalesCodes.length.toLocaleString()}개 코드)`
+  );
 
   const monthMap = new Map();
   for (let month = 1; month <= 12; month += 1) {
@@ -341,6 +395,7 @@ async function buildMonthlyReport(year) {
       final_net_profit: 0,
     });
   }
+  reportProgress(78, '월별 판매 집계 중...');
 
   for (const row of salesRows) {
     const soldKey = String(row?.soldAt || '').slice(0, 7);
@@ -359,6 +414,7 @@ async function buildMonthlyReport(year) {
 
     bucket.guide_commission += Number(row?.commission || 0) || 0;
   }
+  reportProgress(88, '월별 지출 집계 중...');
 
   for (const expense of expensesRaw || []) {
     const monthKey = String(expense?.expense_date || '').slice(0, 7);
@@ -382,8 +438,9 @@ async function buildMonthlyReport(year) {
     else if (kind === 'supplies_cost') bucket.supplies_cost += expensePhp;
     else if (kind === 'inventory_purchase_cost') bucket.inventory_purchase_cost += expensePhp;
   }
+  reportProgress(95, '최종 수익 계산 중...');
 
-  return [...monthMap.values()].map((bucket) => {
+  const result = [...monthMap.values()].map((bucket) => {
     const sales_profit =
       bucket.total_sales - bucket.product_cost - bucket.gift_cost - bucket.guide_commission;
     const operating_cost_total =
@@ -399,6 +456,8 @@ async function buildMonthlyReport(year) {
       final_net_profit,
     };
   });
+  reportProgress(100, '리포트 로딩 완료');
+  return result;
 }
 
 export default function ReportPage() {
@@ -407,6 +466,8 @@ export default function ReportPage() {
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingPercent, setLoadingPercent] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('리포트 준비 중...');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -414,9 +475,15 @@ export default function ReportPage() {
 
     async function load() {
       setLoading(true);
+      setLoadingPercent(0);
+      setLoadingMessage('리포트 준비 중...');
       setError('');
       try {
-        const result = await buildMonthlyReport(selectedYear);
+        const result = await buildMonthlyReport(selectedYear, ({ percent, message }) => {
+          if (cancelled) return;
+          setLoadingPercent(clampProgress(percent));
+          if (message) setLoadingMessage(message);
+        });
         if (!cancelled) setRows(result);
       } catch (err) {
         console.error(err);
@@ -502,26 +569,40 @@ export default function ReportPage() {
 
       <Card title="Month Selector" subtitle="Select a month to update KPI cards and cost breakdown">
         {loading ? (
-          <div
-            style={{
-              position: 'relative',
-              height: 6,
-              borderRadius: 999,
-              background: 'rgba(255,255,255,0.08)',
-              overflow: 'hidden',
-              marginBottom: 14,
-            }}
-          >
+          <div style={{ marginBottom: 14, display: 'grid', gap: 8 }}>
             <div
               style={{
-                position: 'absolute',
-                inset: 0,
-                width: '34%',
-                borderRadius: 999,
-                background: 'linear-gradient(90deg, rgba(212,175,55,0.25), rgba(212,175,55,0.9), rgba(212,175,55,0.25))',
-                animation: 'report-loading-bar 1.2s ease-in-out infinite',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                fontSize: 12,
+                color: 'var(--text-muted)',
               }}
-            />
+            >
+              <span>{loadingMessage || '리포트 로딩 중...'}</span>
+              <strong style={{ color: 'var(--gold-soft)' }}>{clampProgress(loadingPercent)}%</strong>
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                height: 8,
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.08)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: `${clampProgress(loadingPercent)}%`,
+                  borderRadius: 999,
+                  background:
+                    'linear-gradient(90deg, rgba(212,175,55,0.55), rgba(212,175,55,0.95), rgba(245,215,110,0.9))',
+                  transition: 'width 0.25s ease',
+                }}
+              />
+            </div>
           </div>
         ) : null}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -557,7 +638,9 @@ export default function ReportPage() {
       ) : null}
 
       {loading ? (
-        <div className="page-card">Loading monthly report...</div>
+        <div className="page-card">
+          {loadingMessage || '리포트 로딩 중...'} {clampProgress(loadingPercent)}%
+        </div>
       ) : (
         <>
           <div

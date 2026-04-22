@@ -1,6 +1,6 @@
 // src/features/sales/components/SalesTable.jsx
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
@@ -35,7 +35,10 @@ export default function SalesTable({
   const [receiptData, setReceiptData] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideTargetGroup, setGuideTargetGroup] = useState(null);
+  const [guideTargetSaleId, setGuideTargetSaleId] = useState(null);
+  const [guideTargetCode, setGuideTargetCode] = useState('');
   const [selectedGuide, setSelectedGuide] = useState('');
+  const [guideOnlyThisItem, setGuideOnlyThisItem] = useState(false);
   const [priceEditOpen, setPriceEditOpen] = useState(false);
   const [priceEditTarget, setPriceEditTarget] = useState(null);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -51,6 +54,17 @@ export default function SalesTable({
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
   const { mutateAsync: updateColor } = useUpdateSaleItemColorMutation();
   const { mutateAsync: setSaleTime, isPending: savingTime } = useSetSaleTimeMutation();
+  const autoEllaTriedRef = useRef(new Set());
+  const autoEllaRunningRef = useRef(false);
+
+  function isEllaPriorityCode(code) {
+    const normalized = String(code || '')
+      .trim()
+      .toUpperCase();
+    if (!normalized) return false;
+    if (normalized.startsWith('SU-KR')) return true;
+    return normalized.split('-').includes('EA');
+  }
 
   async function copyTextToClipboard(text) {
     const v = String(text || '').trim();
@@ -98,21 +112,7 @@ export default function SalesTable({
     return { date: `${mm}-${dd} ${dow}`.trim(), time };
   }
 
-  if (isLoading) {
-    return <div className="p-4 text-sm text-gray-500">Loading sales history…</div>;
-  }
-
-  if (isError) {
-    return (
-      <div className="p-4 text-sm text-red-600">Failed to load sales history: {String(error)}</div>
-    );
-  }
-
-  const visibleRows = rows || [];
-
-  if (visibleRows.length === 0) {
-    return <div className="p-4 text-sm text-gray-500">No results found.</div>;
-  }
+  const visibleRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
 
   const mrMoonGuideIds = new Set(
     (guides || [])
@@ -129,6 +129,14 @@ export default function SalesTable({
       )
       .map((g) => String(g.id))
   );
+  const ellaGuideId = (() => {
+    const hit = (guides || []).find((g) =>
+      String(g.name || '')
+        .toLowerCase()
+        .includes('ella')
+    );
+    return hit ? String(hit.id) : '';
+  })();
 
   const peterGuideIds = new Set(
     (guides || [])
@@ -144,6 +152,56 @@ export default function SalesTable({
   const guideNameById = new Map(
     (guides || []).map((g) => [String(g.id), String(g.name || '').trim()])
   );
+
+  useEffect(() => {
+    if (!isAdmin || !ellaGuideId || autoEllaRunningRef.current) return;
+    const candidate = visibleRows.find((row) => {
+      const saleId = String(row?.saleId || '').trim();
+      return (
+        saleId &&
+        !autoEllaTriedRef.current.has(saleId) &&
+        isEllaPriorityCode(row?.code) &&
+        !row?.guideId &&
+        !row?.isRefunded &&
+        !row?.refundedAt &&
+        row?.saleGroupId
+      );
+    });
+    if (!candidate) return;
+
+    const saleId = String(candidate.saleId);
+    autoEllaTriedRef.current.add(saleId);
+    autoEllaRunningRef.current = true;
+
+    setGroupGuide({
+      saleGroupId: candidate.saleGroupId,
+      saleId: candidate.saleId,
+      guideId: ellaGuideId,
+      guideRate: 0.1,
+      scope: 'item',
+    })
+      .catch((e) => {
+        console.error(e);
+        showToast('Ella 우선 품목 자동 저장에 실패했습니다.');
+      })
+      .finally(() => {
+        autoEllaRunningRef.current = false;
+      });
+  }, [ellaGuideId, isAdmin, setGroupGuide, showToast, visibleRows]);
+
+  if (isLoading) {
+    return <div className="p-4 text-sm text-gray-500">Loading sales history…</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-4 text-sm text-red-600">Failed to load sales history: {String(error)}</div>
+    );
+  }
+
+  if (visibleRows.length === 0) {
+    return <div className="p-4 text-sm text-gray-500">No results found.</div>;
+  }
 
   const { totalQty, totalPrice, totalCommission } = visibleRows.reduce(
     (acc, row) => {
@@ -486,7 +544,16 @@ export default function SalesTable({
                 return;
               }
               setGuideTargetGroup(row.saleGroupId);
-              setSelectedGuide('');
+              setGuideTargetSaleId(row.saleId || null);
+              setGuideTargetCode(String(row.code || ''));
+              setSelectedGuide(
+                row.guideId != null
+                  ? String(row.guideId)
+                  : isEllaPriorityCode(row.code) && ellaGuideId
+                    ? ellaGuideId
+                    : ''
+              );
+              setGuideOnlyThisItem(isEllaPriorityCode(row.code));
               setGuideOpen(true);
             }}
           />
@@ -757,7 +824,10 @@ export default function SalesTable({
         onClose={() => {
           setGuideOpen(false);
           setGuideTargetGroup(null);
+          setGuideTargetSaleId(null);
+          setGuideTargetCode('');
           setSelectedGuide('');
+          setGuideOnlyThisItem(false);
         }}
         title="Assign Guide (10% Commission)"
         size="content"
@@ -768,7 +838,10 @@ export default function SalesTable({
               onClick={() => {
                 setGuideOpen(false);
                 setGuideTargetGroup(null);
+                setGuideTargetSaleId(null);
+                setGuideTargetCode('');
                 setSelectedGuide('');
+                setGuideOnlyThisItem(false);
               }}
             >
               Cancel
@@ -785,13 +858,22 @@ export default function SalesTable({
                 try {
                   await setGroupGuide({
                     saleGroupId: guideTargetGroup,
+                    saleId: guideTargetSaleId,
                     guideId: selectedGuide || null,
                     guideRate: 0.1,
+                    scope: guideOnlyThisItem ? 'item' : 'group',
                   });
                   setGuideOpen(false);
                   setGuideTargetGroup(null);
+                  setGuideTargetSaleId(null);
+                  setGuideTargetCode('');
                   setSelectedGuide('');
-                  showToast('Guide commission applied.');
+                  setGuideOnlyThisItem(false);
+                  showToast(
+                    guideOnlyThisItem
+                      ? 'Guide updated for this item only.'
+                      : 'Guide commission applied.'
+                  );
                 } catch (e) {
                   const msg = String(e?.message || e);
                   if (msg === 'ADMIN_REQUIRED') {
@@ -810,6 +892,9 @@ export default function SalesTable({
         }
       >
         <div style={{ display: 'grid', gap: 12 }}>
+          {guideTargetCode ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Code {guideTargetCode}</div>
+          ) : null}
           <label className="input-label">Guide</label>
           <select
             className="w-full rounded-full border border-[#32324a] bg-[#141420] px-3 py-1.5 text-sm text-[var(--text-main)] pr-8 focus:outline-none focus:border-[var(--gold-soft)] focus:ring-1 focus:ring-[var(--gold-soft)]"
@@ -823,6 +908,23 @@ export default function SalesTable({
               </option>
             ))}
           </select>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+              color: 'var(--text-main)',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={guideOnlyThisItem}
+              onChange={(e) => setGuideOnlyThisItem(e.target.checked)}
+              disabled={!guideTargetSaleId}
+            />
+            <span>Only this item</span>
+          </label>
         </div>
       </Modal>
       <ColorChangeModal

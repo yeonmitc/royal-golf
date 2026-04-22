@@ -560,9 +560,16 @@ export async function setSaleFreeGift({ saleId, freeGift, code, size } = {}) {
   return { ok: true, saleId: sid, freeGift: Boolean(freeGift), code, size };
 }
 
-export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 } = {}) {
+export async function setSaleGroupGuide({
+  saleGroupId,
+  saleId,
+  guideId,
+  guideRate = 0.1,
+  scope = 'group',
+} = {}) {
   requireAdminOrThrow();
   const gid = String(saleGroupId || '').trim();
+  const sid = Number(saleId || 0);
   if (!gid) throw new Error('INVALID_SALE_GROUP_ID');
   const guide = guideId ? Number(guideId) : null;
 
@@ -586,23 +593,11 @@ export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 
   const isPeter = guideNameNorm.includes('peter');
   const isMrMoon = guideNameNorm.includes('mrmoon');
   const finalGuideRate = guide ? (isPeter || isMrMoon ? 0 : Number(guideRate || 0.1)) : 0;
-  await sbUpdate(
-    'sale_groups',
-    { guide_id: guide, guide_rate: finalGuideRate },
-    { filters: [{ column: 'id', op: 'eq', value: gid }], returning: 'minimal' }
-  );
 
-  try {
-    const sales = await sbSelect('sales', {
-      select: 'id,price,list_price,free_gift',
-      filters: [{ column: 'sale_group_id', op: 'eq', value: gid }],
-      order: { column: 'id', ascending: true },
-      limit: 1000,
-    });
-
-    for (const s of sales || []) {
-      const sid = Number(s?.id || 0);
-      if (!sid) continue;
+  async function applyGuidePricingToSalesRows(targetRows) {
+    for (const s of targetRows || []) {
+      const rowSaleId = Number(s?.id || 0);
+      if (!rowSaleId) continue;
       const isFreeGift = Boolean(s?.free_gift);
       const storedList = Number(s?.list_price ?? 0) || 0;
       const currentPrice = Number(s?.price ?? 0) || 0;
@@ -611,7 +606,8 @@ export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 
       let nextList = storedList;
       if (!nextList && base > 0) nextList = base;
 
-      let nextPrice = base;
+      // Keep explicit free gifts at 0 even when guide changes.
+      let nextPrice = isFreeGift ? currentPrice : base;
       if (!isFreeGift && base > 0) {
         if (isPeter) {
           if (base > 1000) nextPrice = Math.ceil((base * 0.8) / 100) * 100;
@@ -626,19 +622,109 @@ export async function setSaleGroupGuide({ saleGroupId, guideId, guideRate = 0.1 
       if (Object.keys(patch).length === 0) continue;
 
       await sbUpdate('sales', patch, {
-        filters: [{ column: 'id', op: 'eq', value: sid }],
+        filters: [{ column: 'id', op: 'eq', value: rowSaleId }],
         returning: 'minimal',
       });
     }
+  }
+
+  async function finalizeGroup(groupId) {
+    try {
+      await sbRpc('finalize_sale_group', { p_group_id: groupId });
+    } catch {
+      // ignore
+    }
+  }
+
+  if (String(scope || 'group').toLowerCase() === 'item') {
+    if (!sid) throw new Error('INVALID_SALE_ID');
+
+    const targetRows = await sbSelect('sales', {
+      select: 'id,sold_at,sale_group_id,price,list_price,free_gift',
+      filters: [{ column: 'id', op: 'eq', value: sid }],
+      limit: 1,
+    });
+    const target = Array.isArray(targetRows) && targetRows.length ? targetRows[0] : null;
+    if (!target) throw new Error('SALE_NOT_FOUND');
+
+    const sourceGroupId = String(target?.sale_group_id || gid).trim();
+    if (!sourceGroupId) throw new Error('INVALID_SALE_GROUP_ID');
+
+    const siblings = await sbSelect('sales', {
+      select: 'id',
+      filters: [{ column: 'sale_group_id', op: 'eq', value: sourceGroupId }],
+      limit: 2,
+    });
+    const hasOtherItems = (siblings || []).some((row) => Number(row?.id || 0) !== sid);
+
+    let targetGroupId = sourceGroupId;
+    if (hasOtherItems) {
+      targetGroupId = crypto.randomUUID();
+      await sbInsert(
+        'sale_groups',
+        [
+          {
+            id: targetGroupId,
+            guide_id: guide,
+            guide_rate: finalGuideRate,
+            sold_at: target?.sold_at || nowLocalIsoLikeUtc(),
+            subtotal: 0,
+            total: 0,
+            guide_commission: 0,
+          },
+        ],
+        { returning: 'minimal' }
+      );
+      await sbUpdate(
+        'sales',
+        { sale_group_id: targetGroupId },
+        { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
+      );
+    } else {
+      await sbUpdate(
+        'sale_groups',
+        { guide_id: guide, guide_rate: finalGuideRate },
+        { filters: [{ column: 'id', op: 'eq', value: targetGroupId }], returning: 'minimal' }
+      );
+    }
+
+    await applyGuidePricingToSalesRows([
+      {
+        id: sid,
+        price: target?.price,
+        list_price: target?.list_price,
+        free_gift: target?.free_gift,
+      },
+    ]);
+
+    await finalizeGroup(targetGroupId);
+    if (hasOtherItems) {
+      await finalizeGroup(sourceGroupId);
+    }
+
+    return { ok: true, scope: 'item', saleGroupId: targetGroupId, saleId: sid };
+  }
+
+  await sbUpdate(
+    'sale_groups',
+    { guide_id: guide, guide_rate: finalGuideRate },
+    { filters: [{ column: 'id', op: 'eq', value: gid }], returning: 'minimal' }
+  );
+
+  try {
+    const sales = await sbSelect('sales', {
+      select: 'id,price,list_price,free_gift',
+      filters: [{ column: 'sale_group_id', op: 'eq', value: gid }],
+      order: { column: 'id', ascending: true },
+      limit: 1000,
+    });
+
+    await applyGuidePricingToSalesRows(sales || []);
   } catch {
     // ignore
   }
 
-  try {
-    await sbRpc('finalize_sale_group', { p_group_id: gid });
-  } catch {
-    // ignore
-  }
+  await finalizeGroup(gid);
   return { ok: true };
 }
 
