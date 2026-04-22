@@ -131,7 +131,7 @@ export default function ProfitPage() {
       ]);
 
       const giftCodes = salesRows
-        .filter((row) => Boolean(row?.freeGift) && !row?.isRefunded)
+        .filter((row) => !row?.isElla && Boolean(row?.freeGift) && !row?.isRefunded)
         .map((row) => row?.code);
       reportProgress(45, '선물 원가 조회 중...');
       const giftCostByCode = await fetchGiftCostByCode(
@@ -167,6 +167,7 @@ export default function ProfitPage() {
       for (const row of salesRows) {
         const key = String(row?.soldAt || '').slice(0, 10);
         if (!key) continue;
+        if (row?.isElla) continue;
         const entry = ensureEntry(key);
         const lineTotal = Number(row?.lineTotalPhp || 0) || 0;
         const commission = Number(row?.commission || 0) || 0;
