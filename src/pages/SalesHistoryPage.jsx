@@ -29,7 +29,7 @@ export default function SalesHistoryPage() {
   const toInputRef = useRef(null);
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
-  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon'
+  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'ella', 'no-ella'
   const [refundOnly, setRefundOnly] = useState(false);
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
@@ -151,6 +151,9 @@ export default function SalesHistoryPage() {
       }
       if (filterMode === 'mr-moon') {
         return isMrMoon;
+      }
+      if (filterMode === 'ella') {
+        return isElla;
       }
       if (filterMode === 'no-ella') {
         return !isElla;
@@ -482,6 +485,24 @@ export default function SalesHistoryPage() {
               style={{ height: 28, padding: '0 10px', fontSize: 11, minWidth: 50 }}
             >
               Month
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setFilterMode((prev) => (prev === 'ella' ? 'all' : 'ella'))}
+              size="sm"
+              variant={filterMode === 'ella' ? 'primary' : 'outline'}
+              title="Ella Only"
+              style={{
+                height: 28,
+                width: 28,
+                minWidth: 28,
+                padding: 0,
+                borderRadius: '50%',
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              {filterMode === 'ella' ? '❤️' : '♡'}
             </Button>
           </div>
         </div>

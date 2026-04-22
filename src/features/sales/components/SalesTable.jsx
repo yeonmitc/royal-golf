@@ -910,20 +910,36 @@ export default function SalesTable({
           </select>
           <label
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 13,
+              display: 'block',
+              width: 'fit-content',
+              margin: '0 auto',
+              padding: '4px 0 2px',
               color: 'var(--text-main)',
+              cursor: guideTargetSaleId ? 'pointer' : 'not-allowed',
+              opacity: guideTargetSaleId ? 1 : 0.6,
+              textAlign: 'center',
             }}
           >
-            <input
-              type="checkbox"
-              checked={guideOnlyThisItem}
-              onChange={(e) => setGuideOnlyThisItem(e.target.checked)}
-              disabled={!guideTargetSaleId}
-            />
-            <span>Only this item</span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={guideOnlyThisItem}
+                onChange={(e) => setGuideOnlyThisItem(e.target.checked)}
+                disabled={!guideTargetSaleId}
+                style={{ width: 16, height: 16, accentColor: 'var(--gold-soft)', margin: 0 }}
+              />
+              <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                Only this item
+              </span>
+            </span>
           </label>
         </div>
       </Modal>

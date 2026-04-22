@@ -44,10 +44,15 @@ function toExpensePhp(expense) {
   return amountPhp + amountKrw / 25;
 }
 
-async function fetchGiftCostByCode(codes) {
+function clampProgress(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value || 0))));
+}
+
+async function fetchGiftCostByCode(codes, onProgress) {
   const out = new Map();
   const uniqueCodes = [...new Set((codes || []).map((v) => String(v || '').trim()).filter(Boolean))];
   const chunkSize = 200;
+  const totalChunks = Math.max(1, Math.ceil(uniqueCodes.length / chunkSize));
 
   for (let i = 0; i < uniqueCodes.length; i += chunkSize) {
     const chunk = uniqueCodes.slice(i, i + chunkSize);
@@ -64,6 +69,16 @@ async function fetchGiftCostByCode(codes) {
       const unitPhp = p1price > 0 ? p1price : kprice > 0 ? kprice / 25 : 0;
       if (code) out.set(code, unitPhp);
     });
+    if (typeof onProgress === 'function') {
+      onProgress({
+        currentChunk: Math.floor(i / chunkSize) + 1,
+        totalChunks,
+      });
+    }
+  }
+
+  if (uniqueCodes.length === 0 && typeof onProgress === 'function') {
+    onProgress({ currentChunk: 1, totalChunks: 1 });
   }
 
   return out;
@@ -72,31 +87,54 @@ async function fetchGiftCostByCode(codes) {
 export default function ProfitPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingPercent, setLoadingPercent] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('손익 데이터 준비 중...');
   const [error, setError] = useState(null);
   const [startDate, setStartDate] = useState('2025-12-16');
   const [endDate, setEndDate] = useState(formatDate(new Date(), 'yyyy-MM-dd'));
 
   const fetchData = useCallback(async () => {
+    const reportProgress = (percent, message) => {
+      setLoadingPercent(clampProgress(percent));
+      if (message) setLoadingMessage(message);
+    };
+
     setLoading(true);
+    reportProgress(0, '손익 데이터 준비 중...');
     setError(null);
     try {
       const from = startDate || '2025-12-16';
       const to = endDate || formatDate(new Date(), 'yyyy-MM-dd');
+
+      let fetchDone = 0;
+      const updateFetchProgress = (label) => {
+        fetchDone += 1;
+        reportProgress(10 + (fetchDone / 2) * 30, label);
+      };
 
       const [hist, expenses] = await Promise.all([
         getSalesHistoryFilteredResult({
           fromDate: from,
           toDate: to,
           query: '',
+        }).then((result) => {
+          updateFetchProgress('판매 데이터 불러오는 중...');
+          return result;
         }),
-        getExpenses({ from, to }),
+        getExpenses({ from, to }).then((result) => {
+          updateFetchProgress('지출 데이터 불러오는 중...');
+          return result;
+        }),
       ]);
 
       const salesRows = Array.isArray(hist?.rows) ? hist.rows : [];
       const giftCodes = salesRows
         .filter((row) => Boolean(row?.freeGift) && !row?.isRefunded)
         .map((row) => row?.code);
-      const giftCostByCode = await fetchGiftCostByCode(giftCodes);
+      reportProgress(45, '선물 원가 계산 준비 중...');
+      const giftCostByCode = await fetchGiftCostByCode(giftCodes, ({ currentChunk, totalChunks }) => {
+        reportProgress(45 + (currentChunk / totalChunks) * 20, `선물 원가 조회 중... ${currentChunk}/${totalChunks}`);
+      });
 
       const dailyMap = new Map();
       const ensureEntry = (key) => {
@@ -111,6 +149,7 @@ export default function ProfitPage() {
         }
         return dailyMap.get(key);
       };
+      reportProgress(70, '일별 매출 집계 중...');
 
       for (const row of salesRows) {
         const key = String(row?.soldAt || '').slice(0, 10);
@@ -136,6 +175,7 @@ export default function ProfitPage() {
           entry.giftCost += giftUnitCost * qty;
         }
       }
+      reportProgress(84, '일별 지출 집계 중...');
 
       for (const expense of expenses || []) {
         const key = String(expense?.expense_date || '').slice(0, 10);
@@ -146,6 +186,7 @@ export default function ProfitPage() {
         entry.expense += toExpensePhp(expense);
       }
 
+      reportProgress(94, '누적 손익 계산 중...');
       let cumulative = 0;
       const rows = getDateKeysBetween(from, to).map((date) => {
         const entry = dailyMap.get(date) || {
@@ -170,6 +211,7 @@ export default function ProfitPage() {
         };
       });
 
+      reportProgress(100, '손익 로딩 완료');
       setData(rows.slice().reverse());
     } catch (err) {
       console.error('Error fetching profit data:', err);
@@ -358,6 +400,43 @@ export default function ProfitPage() {
       </div>
 
       <div className="card">
+        {loading ? (
+          <div style={{ marginBottom: 14, display: 'grid', gap: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                fontSize: 12,
+                color: 'var(--text-muted)',
+              }}
+            >
+              <span>{loadingMessage || '손익 로딩 중...'}</span>
+              <strong style={{ color: 'var(--gold-soft)' }}>{clampProgress(loadingPercent)}%</strong>
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                height: 8,
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.08)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: `${clampProgress(loadingPercent)}%`,
+                  borderRadius: 999,
+                  background:
+                    'linear-gradient(90deg, rgba(212,175,55,0.55), rgba(212,175,55,0.95), rgba(245,215,110,0.9))',
+                  transition: 'width 0.25s ease',
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
         {error && (
           <div
             className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
