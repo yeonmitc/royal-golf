@@ -602,6 +602,27 @@ export async function getSalesHistoryFilteredResult({
   return { hasAnySales, rows };
 }
 
+export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
+  const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' });
+  return (rows || []).map((row) => ({
+    saleId: row.saleId,
+    soldAt: row.soldAt,
+    code: row.code,
+    qty: row.qty,
+    listPricePhp: row.listPricePhp,
+    lineTotalPhp: row.lineTotalPhp,
+    freeGift: row.freeGift,
+    refundedAt: row.refundedAt,
+    isRefunded: row.isRefunded,
+    guideId: row.guideId,
+    saleGroupId: row.saleGroupId,
+    isMrMoon: row.isMrMoon,
+    isElla: row.isElla,
+    isPeter: row.isPeter,
+    commission: row.commission,
+  }));
+}
+
 export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onSummary, mode = 'full' } = {}) {
   const report =
     typeof onProgress === 'function'

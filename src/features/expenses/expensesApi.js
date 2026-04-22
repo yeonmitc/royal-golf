@@ -2,7 +2,7 @@ import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
 
 export async function getExpenseCategories() {
   const categories = await sbSelect('expense_categories', {
-    select: '*',
+    select: 'id,name',
     orders: [{ column: 'name', ascending: true }],
   });
   return categories || [];
@@ -27,6 +27,21 @@ export async function getExpenses({ from, to, categoryId } = {}) {
         name
       )
     `,
+    filters,
+    orders: [{ column: 'expense_date', ascending: false }],
+  });
+
+  return expenses || [];
+}
+
+export async function getExpensesLite({ from, to, categoryId } = {}) {
+  const filters = [];
+  if (from) filters.push({ column: 'expense_date', op: 'gte', value: from });
+  if (to) filters.push({ column: 'expense_date', op: 'lte', value: to });
+  if (categoryId) filters.push({ column: 'category_id', op: 'eq', value: categoryId });
+
+  const expenses = await sbSelect('expenses', {
+    select: 'id,category_id,amount_php,amount_krw,expense_date',
     filters,
     orders: [{ column: 'expense_date', ascending: false }],
   });

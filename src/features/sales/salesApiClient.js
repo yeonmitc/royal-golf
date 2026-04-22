@@ -65,6 +65,13 @@ export function getSalesHistoryFilteredResult(args) {
   );
 }
 
+export function getSalesSummaryRows(args) {
+  return withOfflineFallback(
+    () => supabase.getSalesSummaryRows(args),
+    () => local.getSalesSummaryRows(args)
+  );
+}
+
 export function getAnalytics(args) {
   return withOfflineFallback(
     () => supabase.getAnalytics(args),

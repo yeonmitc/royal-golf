@@ -94,6 +94,20 @@ function buildInList(values) {
   return `(${unique.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(',')})`;
 }
 
+function nextDayKey(key) {
+  const parts = String(key || '')
+    .split('-')
+    .map((v) => Number(v));
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return '';
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (!Number.isFinite(dt.getTime())) return '';
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
 async function sbSelectAll(table, { select = '*', filters = [], order } = {}) {
   const batchSize = 1000;
   const maxBatches = 1000;
@@ -296,8 +310,7 @@ export async function checkoutCart(payload) {
     let calculatedPrice = unitPriceOriginal;
     if (isPeter && unitPriceOriginal > 1000) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
-    } else
-    if (isMrMoon && unitPriceOriginal > 1000) {
+    } else if (isMrMoon && unitPriceOriginal > 1000) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
     }
 
@@ -311,7 +324,7 @@ export async function checkoutCart(payload) {
 
     const unitPriceCharged = isExplicitlyFree
       ? 0
-      : (isPeter || isMrMoon)
+      : isPeter || isMrMoon
         ? calculatedPrice
         : Number.isFinite(unitPriceChargedCandidate)
           ? unitPriceChargedCandidate
@@ -941,7 +954,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         listPricePhp: listUnit || undefined,
         unitPricePhp: isRefunded || isFreeGift ? 0 : listUnit || unit,
         discountUnitPricePhp:
-          !isRefunded && !isFreeGift && listUnit > 0 && unit > 0 && unit !== listUnit ? unit : undefined,
+          !isRefunded && !isFreeGift && listUnit > 0 && unit > 0 && unit !== listUnit
+            ? unit
+            : undefined,
         lineTotalPhp: finalUnit * qtyN,
         freeGift: isFreeGift,
         refundedAt,
@@ -956,9 +971,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         // If Mr. Moon or Peter, commission is 0. Otherwise 10%.
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
-          guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift
-            ? finalUnit * qtyN * 0.1
-            : 0,
+          guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift ? finalUnit * qtyN * 0.1 : 0,
       };
     })
     .filter((r) => r.qty > 0);
@@ -968,7 +981,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       .filter((n) => n.isPeter && !n.isRefunded)
       .filter((n) => {
         const listUnit = Number(n.listPricePhp || 0) || 0;
-        const unit = Number(n.discountUnitPricePhp != null ? n.discountUnitPricePhp : n.unitPricePhp || 0) || 0;
+        const unit =
+          Number(n.discountUnitPricePhp != null ? n.discountUnitPricePhp : n.unitPricePhp || 0) ||
+          0;
         return listUnit > 1000 && unit === listUnit;
       });
     for (const n of toFix) {
@@ -1022,18 +1037,126 @@ export async function getSalesHistoryFilteredResult({
   return { hasAnySales, rows };
 }
 
-export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onSummary, mode = 'full' } = {}) {
+export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
+  const hasFrom = !!fromDate;
+  const hasTo = !!toDate;
+  const fromKey = String(fromDate || '').trim();
+  const toKey = String(toDate || '').trim();
+  const filters = [];
+
+  if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: `${fromKey}T00:00:00.000Z` });
+  if (hasTo) {
+    const upper = nextDayKey(toKey);
+    if (upper) filters.push({ column: 'sold_at', op: 'lt', value: `${upper}T00:00:00.000Z` });
+  }
+
+  let sales;
+  try {
+    sales = await sbSelectAll('sales', {
+      select: 'id,sold_at,code,qty,list_price,price,free_gift,refunded_at,sale_group_id',
+      filters,
+      order: { column: 'sold_at', ascending: false },
+    });
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (msg.includes('list_price')) {
+      sales = await sbSelectAll('sales', {
+        select: 'id,sold_at,code,qty,price,free_gift,refunded_at,sale_group_id',
+        filters,
+        order: { column: 'sold_at', ascending: false },
+      });
+    } else {
+      throw e;
+    }
+  }
+
+  const groupIds = [
+    ...new Set((sales || []).map((row) => String(row?.sale_group_id || '').trim()).filter(Boolean)),
+  ];
+  const groupMap = new Map();
+  if (groupIds.length) {
+    const chunkSize = 200;
+    for (let i = 0; i < groupIds.length; i += chunkSize) {
+      const chunk = groupIds.slice(i, i + chunkSize);
+      const inList = buildInList(chunk);
+      if (inList === '()') continue;
+      const page = await sbSelect('sale_groups', {
+        select: 'id,guide_id',
+        filters: [{ column: 'id', op: 'in', value: inList }],
+      });
+      (page || []).forEach((row) => {
+        const key = String(row?.id || '').trim();
+        if (key) groupMap.set(key, row?.guide_id ?? null);
+      });
+    }
+  }
+
+  let guideNameMap = new Map();
+  const guideIds = [...new Set([...groupMap.values()].filter(Boolean).map((id) => String(id)))];
+  if (guideIds.length) {
+    const guides = await sbSelect('guides', { select: 'id,name' });
+    guideNameMap = new Map((guides || []).map((row) => [String(row?.id), String(row?.name || '')]));
+  }
+
+  return (sales || [])
+    .map((row) => {
+      const qty = Number(row?.qty || 0) || 0;
+      const unit = Number(row?.price || 0) || 0;
+      const listUnit = Number(row?.list_price || 0) || 0;
+      const refundedAt = row?.refunded_at || null;
+      const isRefunded = Boolean(toMsFromIso(refundedAt));
+      const groupId = String(row?.sale_group_id || '').trim();
+      const guideId = groupId ? groupMap.get(groupId) || null : null;
+      const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
+      const guideNameNorm = guideName.toLowerCase().replace(/[\s.]/g, '');
+      const isMrMoon = guideNameNorm.includes('mrmoon');
+      const isElla = guideNameNorm.includes('ella');
+      const isPeter = guideNameNorm.includes('peter');
+      const freeGift = Boolean(row?.free_gift ?? false) || unit === 0;
+      const finalUnit = isRefunded || freeGift ? 0 : unit;
+
+      return {
+        saleId: row?.id,
+        soldAt: row?.sold_at,
+        code: row?.code,
+        qty,
+        listPricePhp: listUnit || undefined,
+        lineTotalPhp: finalUnit * qty,
+        freeGift,
+        refundedAt,
+        isRefunded,
+        guideId,
+        saleGroupId: row?.sale_group_id,
+        isMrMoon,
+        isElla,
+        isPeter,
+        commission:
+          guideId && !isMrMoon && !isElla && !isPeter && !freeGift && !isRefunded
+            ? finalUnit * qty * 0.1
+            : 0,
+      };
+    })
+    .filter((row) => row.qty > 0);
+}
+
+export async function getAnalytics({
+  fromDate = '',
+  toDate = '',
+  onProgress,
+  onSummary,
+  mode = 'full',
+} = {}) {
   const report =
-    typeof onProgress === 'function'
-      ? (pct, label) => onProgress({ pct, label })
-      : () => {};
+    typeof onProgress === 'function' ? (pct, label) => onProgress({ pct, label }) : () => {};
   const hasFrom = !!fromDate;
   const hasTo = !!toDate;
   const fromKey = String(fromDate || '').trim();
   const toKey = String(toDate || '').trim();
 
   const nextDayKey = (key) => {
-    const parts = String(key || '').split('-').map((v) => Number(v));
+    const parts = String(key || '')
+      .split('-')
+      .map((v) => Number(v));
     const y = parts[0];
     const m = parts[1];
     const d = parts[2];
@@ -1055,7 +1178,8 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   try {
     report(10, '판매 데이터 조회 중…');
     sales = await sbSelectAll('sales', {
-      select: 'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,refunded_at,sale_group_id',
+      select:
+        'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,refunded_at,sale_group_id',
       filters,
       order: { column: 'sold_at', ascending: false },
     });
@@ -1074,9 +1198,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   }
 
   const inRange = sales || [];
-  const srcSoldAts = (inRange || [])
-    .map((r) => String(r?.sold_at || '').trim())
-    .filter(Boolean);
+  const srcSoldAts = (inRange || []).map((r) => String(r?.sold_at || '').trim()).filter(Boolean);
   let sourceSoldAtMin = '';
   let sourceSoldAtMax = '';
   srcSoldAts.forEach((s) => {
@@ -1314,9 +1436,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
 
   const discountRate = 0.1;
 
-  const codesForCost = [...new Set(rows.map((r) => String(r.code || '').trim()))].filter(
-    Boolean
-  );
+  const codesForCost = [...new Set(rows.map((r) => String(r.code || '').trim()))].filter(Boolean);
   let kpriceByCode = new Map();
   let p1priceByCode = new Map();
   if (codesForCost.length) {

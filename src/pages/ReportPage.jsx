@@ -4,7 +4,7 @@ import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import { sbSelect } from '../db/supabaseRest';
 import { getExpenseCategories } from '../features/expenses/expensesApi';
-import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
+import { getSalesSummaryRows } from '../features/sales/salesApiClient';
 
 const START_YEAR = 2025;
 const MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -338,8 +338,8 @@ async function buildMonthlyReport(year, onProgress) {
     reportProgress(10 + (fetchDone / 3) * 30, label);
   };
 
-  const [salesHistoryResult, expensesRaw, expenseCategories] = await Promise.all([
-    getSalesHistoryFilteredResult({ fromDate: range.from, toDate: range.to, query: '' }).then((result) => {
+  const [salesRows, expensesRaw, expenseCategories] = await Promise.all([
+    getSalesSummaryRows({ fromDate: range.from, toDate: range.to }).then((result) => {
       updateFetchProgress('판매 데이터 불러오는 중...');
       return result;
     }),
@@ -356,7 +356,6 @@ async function buildMonthlyReport(year, onProgress) {
     (expenseCategories || []).map((row) => [String(row?.id || '').trim(), String(row?.name || '').trim()])
   );
 
-  const salesRows = Array.isArray(salesHistoryResult?.rows) ? salesHistoryResult.rows : [];
   reportProgress(45, '상품 원가 계산 준비 중...');
   const salesCodes = salesRows.map((row) => row?.code);
   const uniqueSalesCodes = [...new Set(salesCodes.map((code) => String(code || '').trim()).filter(Boolean))];
@@ -400,7 +399,6 @@ async function buildMonthlyReport(year, onProgress) {
   for (const row of salesRows) {
     const soldKey = String(row?.soldAt || '').slice(0, 7);
     if (!monthMap.has(soldKey)) continue;
-    if (row?.isElla) continue;
 
     const bucket = monthMap.get(soldKey);
     const qty = Number(row?.qty || 0) || 0;

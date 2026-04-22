@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import Button from '../components/common/Button';
 import DataTable from '../components/common/DataTable';
 import { sbSelect } from '../db/supabaseRest';
-import { getExpenses } from '../features/expenses/expensesApi';
-import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
+import { getExpenseCategories, getExpensesLite } from '../features/expenses/expensesApi';
+import { getSalesSummaryRows } from '../features/sales/salesApiClient';
 
 // Helper for date formatting without date-fns
 function formatDate(dateStr, fmt = 'yyyy-MM-dd') {
@@ -50,7 +50,9 @@ function clampProgress(value) {
 
 async function fetchGiftCostByCode(codes, onProgress) {
   const out = new Map();
-  const uniqueCodes = [...new Set((codes || []).map((v) => String(v || '').trim()).filter(Boolean))];
+  const uniqueCodes = [
+    ...new Set((codes || []).map((v) => String(v || '').trim()).filter(Boolean)),
+  ];
   const chunkSize = 200;
   const totalChunks = Math.max(1, Math.ceil(uniqueCodes.length / chunkSize));
 
@@ -109,34 +111,48 @@ export default function ProfitPage() {
       let fetchDone = 0;
       const updateFetchProgress = (label) => {
         fetchDone += 1;
-        reportProgress(10 + (fetchDone / 2) * 30, label);
+        reportProgress(10 + (fetchDone / 3) * 30, label);
       };
 
-      const [hist, expenses] = await Promise.all([
-        getSalesHistoryFilteredResult({
+      const [salesRows, expenses, expenseCategories] = await Promise.all([
+        getSalesSummaryRows({
           fromDate: from,
           toDate: to,
-          query: '',
         }).then((result) => {
           updateFetchProgress('판매 데이터 불러오는 중...');
           return result;
         }),
-        getExpenses({ from, to }).then((result) => {
+        getExpensesLite({ from, to }).then((result) => {
           updateFetchProgress('지출 데이터 불러오는 중...');
+          return result;
+        }),
+        getExpenseCategories().then((result) => {
+          updateFetchProgress('지출 카테고리 불러오는 중...');
           return result;
         }),
       ]);
 
-      const salesRows = Array.isArray(hist?.rows) ? hist.rows : [];
       const giftCodes = salesRows
         .filter((row) => Boolean(row?.freeGift) && !row?.isRefunded)
         .map((row) => row?.code);
       reportProgress(45, '선물 원가 계산 준비 중...');
-      const giftCostByCode = await fetchGiftCostByCode(giftCodes, ({ currentChunk, totalChunks }) => {
-        reportProgress(45 + (currentChunk / totalChunks) * 20, `선물 원가 조회 중... ${currentChunk}/${totalChunks}`);
-      });
+      const giftCostByCode = await fetchGiftCostByCode(
+        giftCodes,
+        ({ currentChunk, totalChunks }) => {
+          reportProgress(
+            45 + (currentChunk / totalChunks) * 20,
+            `선물 원가 조회 중... ${currentChunk}/${totalChunks}`
+          );
+        }
+      );
 
       const dailyMap = new Map();
+      const expenseCategoryMap = new Map(
+        (expenseCategories || []).map((row) => [
+          String(row?.id || '').trim(),
+          String(row?.name || '').trim(),
+        ])
+      );
       const ensureEntry = (key) => {
         if (!dailyMap.has(key)) {
           dailyMap.set(key, {
@@ -180,7 +196,9 @@ export default function ProfitPage() {
       for (const expense of expenses || []) {
         const key = String(expense?.expense_date || '').slice(0, 10);
         if (!key) continue;
-        const categoryName = String(expense?.expense_categories?.name || '').trim();
+        const categoryName = String(
+          expenseCategoryMap.get(String(expense?.category_id || '').trim()) || ''
+        ).trim();
         if (categoryName.includes('기타')) continue;
         const entry = ensureEntry(key);
         entry.expense += toExpensePhp(expense);
@@ -412,7 +430,9 @@ export default function ProfitPage() {
               }}
             >
               <span>{loadingMessage || '손익 로딩 중...'}</span>
-              <strong style={{ color: 'var(--gold-soft)' }}>{clampProgress(loadingPercent)}%</strong>
+              <strong style={{ color: 'var(--gold-soft)' }}>
+                {clampProgress(loadingPercent)}%
+              </strong>
             </div>
             <div
               style={{
