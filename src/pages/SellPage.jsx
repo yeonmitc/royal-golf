@@ -453,7 +453,12 @@ export default function SellPage() {
                     style={{ borderColor: 'var(--border-soft)' }}
                   >
                     <option value="">No Guide</option>
-                    <option value={LOCAL_GUIDE_ID}>Local Guide</option>
+                    <option
+                      value={LOCAL_GUIDE_ID}
+                      style={{ backgroundColor: 'rgba(34,197,94,0.2)', color: 'var(--text-main)' }}
+                    >
+                      Local Guide
+                    </option>
                     {(guides || [])
                       .slice()
                       .sort((a, b) => {
@@ -467,6 +472,7 @@ export default function SellPage() {
                         const nameLower = String(g.name || '').toLowerCase();
                         const isMrMoon = nameLower === 'mr.moon';
                         const isElla = nameLower.includes('ella');
+                        const isPeter = nameLower.replace(/[\s.]/g, '').includes('peter');
                         return (
                           <option
                             key={g.id}
@@ -476,6 +482,8 @@ export default function SellPage() {
                                 ? { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' }
                                 : isElla
                                   ? { backgroundColor: 'rgba(255, 105, 180, 0.1)', color: 'var(--text-main)' }
+                                  : isPeter
+                                    ? { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' }
                                   : {}
                             }
                           >

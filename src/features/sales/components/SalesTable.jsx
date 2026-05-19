@@ -909,11 +909,23 @@ export default function SalesTable({
             onChange={(e) => setSelectedGuide(e.target.value)}
           >
             <option value="">No Guide</option>
-            {(guides || []).map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
+            {(guides || []).map((g) => {
+              const nameLower = String(g?.name || '').toLowerCase();
+              const isPeter = nameLower.replace(/[\s.]/g, '').includes('peter');
+              return (
+                <option
+                  key={g.id}
+                  value={g.id}
+                  style={
+                    isPeter
+                      ? { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' }
+                      : {}
+                  }
+                >
+                  {g.name}
+                </option>
+              );
+            })}
           </select>
           <label
             style={{

@@ -167,13 +167,16 @@ async function attachLocalProductMeta(items) {
     const qtyN = Number(i.qty || 0) || 0;
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
     const isFreeGift = Boolean(i.freeGift ?? false) || i.unitPricePhp === 0;
-    const commission = i.guideId && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
+    const localGuideName = String(i.localGuideName || '').trim();
+    const hasAnyGuide = Boolean(i.guideId) || Boolean(localGuideName);
+    const commission = hasAnyGuide && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
     const unitForTotal = Number(i.discountUnitPricePhp ?? i.unitPricePhp ?? 0) || 0;
     return {
       ...i,
       productNo: product?.no ?? i.productNo ?? 0,
       kprice: product?.kprice ?? i.kprice ?? 0,
       p1price: product?.p1price ?? i.p1price ?? 0,
+      localGuideName,
       nameKo:
         (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code,
       sizeDisplay: i.sizeDisplay ?? i.size,
