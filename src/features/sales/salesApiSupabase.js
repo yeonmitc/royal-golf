@@ -193,6 +193,7 @@ export async function checkoutCart(payload) {
   let localGuideName = '';
   let isMrMoon = false;
   let isPeter = false;
+  let isKakaoFriend = false;
 
   if (!Array.isArray(payload) && payload?.items) {
     cartItems = payload.items;
@@ -200,6 +201,7 @@ export async function checkoutCart(payload) {
     localGuideName = String(payload.localGuideName || '').trim();
     isMrMoon = payload.isMrMoon;
     isPeter = Boolean(payload.isPeter);
+    isKakaoFriend = Boolean(payload.isKakaoFriend);
   }
 
   if (guideId) {
@@ -330,6 +332,8 @@ export async function checkoutCart(payload) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
     } else if (isMrMoon && unitPriceOriginal > 1000) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
+    } else if (isKakaoFriend && unitPriceOriginal > 1000) {
+      calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
     }
 
     const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
@@ -344,6 +348,8 @@ export async function checkoutCart(payload) {
       ? 0
       : isPeter || isMrMoon
         ? calculatedPrice
+        : isKakaoFriend
+          ? calculatedPrice
         : Number.isFinite(unitPriceChargedCandidate)
           ? unitPriceChargedCandidate
           : unitPriceOriginal;

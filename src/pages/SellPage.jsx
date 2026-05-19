@@ -22,6 +22,7 @@ import {
   saveRentalMetaForSoldAt,
 } from '../utils/rentalMeta';
 
+const KAKAO_FRIEND_ID = '__KAKAO_FRIEND__';
 const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
 
 export default function SellPage() {
@@ -43,8 +44,10 @@ export default function SellPage() {
   const localGuideName = useCartStore((s) => s.localGuideName);
   const setLocalGuideName = useCartStore((s) => s.setLocalGuideName);
 
-  const isLocalGuideSelected = String(guideId || '') === LOCAL_GUIDE_ID;
-  const selectedGuide = isLocalGuideSelected
+  const guideKey = String(guideId || '');
+  const isKakaoFriendSelected = guideKey === KAKAO_FRIEND_ID;
+  const isLocalGuideSelected = guideKey === LOCAL_GUIDE_ID;
+  const selectedGuide = isLocalGuideSelected || isKakaoFriendSelected
     ? null
     : (guides || []).find((g) => String(g.id) === String(guideId));
   const selectedGuideNameNorm = selectedGuide
@@ -53,6 +56,18 @@ export default function SellPage() {
 
   const isMrMoonSelected = selectedGuideNameNorm.includes('mrmoon');
   const isPeterSelected = selectedGuideNameNorm.includes('peter');
+
+  const guideNorm = (s) => String(s || '').toLowerCase().replace(/[\s.]/g, '');
+  const guideList = Array.isArray(guides) ? guides.slice() : [];
+  const mrMoonGuide = guideList.find((g) => guideNorm(g?.name) === 'mrmoon') || null;
+  const peterGuide = guideList.find((g) => guideNorm(g?.name).includes('peter')) || null;
+  const ellaGuide = guideList.find((g) => guideNorm(g?.name).includes('ella')) || null;
+  const otherGuides = guideList
+    .filter((g) => {
+      const n = guideNorm(g?.name);
+      return n && n !== 'mrmoon' && !n.includes('peter') && !n.includes('ella');
+    })
+    .sort((a, b) => String(a?.name || '').trim().localeCompare(String(b?.name || '').trim()));
 
   const [localGuideModalOpen, setLocalGuideModalOpen] = useState(false);
   const [localGuideDraft, setLocalGuideDraft] = useState('');
@@ -66,6 +81,10 @@ export default function SellPage() {
       return Math.ceil((p * 0.8) / 100) * 100;
     }
     if (isMrMoonSelected && p > 1000) {
+      // 10% discount, rounded up to nearest 100 (Ceiling)
+      return Math.ceil((p * 0.9) / 100) * 100;
+    }
+    if (isKakaoFriendSelected && p > 1000) {
       // 10% discount, rounded up to nearest 100 (Ceiling)
       return Math.ceil((p * 0.9) / 100) * 100;
     }
@@ -89,7 +108,8 @@ export default function SellPage() {
     const currentLocalGuideName = useCartStore.getState().localGuideName;
     if (currentItems.length === 0) return;
 
-    if (String(currentGuideId || '') === LOCAL_GUIDE_ID) {
+    const currentGuideKey = String(currentGuideId || '');
+    if (currentGuideKey === LOCAL_GUIDE_ID) {
       const name = String(currentLocalGuideName || '').trim();
       if (!name) {
         setLocalGuideErr('Please enter Local Guide name.');
@@ -104,11 +124,15 @@ export default function SellPage() {
       // UPDATE: We now calculate price explicitly to enforce Ceiling rounding for Mr. Moon.
       const result = await checkoutCart({
         items: currentItems,
-        guideId: String(currentGuideId || '') === LOCAL_GUIDE_ID ? null : currentGuideId,
+        guideId:
+          currentGuideKey === LOCAL_GUIDE_ID || currentGuideKey === KAKAO_FRIEND_ID
+            ? null
+            : currentGuideId,
         localGuideName:
-          String(currentGuideId || '') === LOCAL_GUIDE_ID ? String(currentLocalGuideName || '').trim() : '',
+          currentGuideKey === LOCAL_GUIDE_ID ? String(currentLocalGuideName || '').trim() : '',
         isMrMoon: isMrMoonSelected,
         isPeter: isPeterSelected,
+        isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
       });
 
       // Prepare receipt data with LOCAL calculation to match DB trigger
@@ -119,6 +143,9 @@ export default function SellPage() {
           finalPrice = Math.ceil((original * 0.8) / 100) * 100;
         } else
         if (isMrMoonSelected && original > 1000) {
+          finalPrice = Math.ceil((original * 0.9) / 100) * 100;
+        } else
+        if (isKakaoFriendSelected && original > 1000) {
           finalPrice = Math.ceil((original * 0.9) / 100) * 100;
         }
         return {
@@ -440,6 +467,11 @@ export default function SellPage() {
                         setLocalGuideName('');
                         return;
                       }
+                      if (v === KAKAO_FRIEND_ID) {
+                        setGuideId(KAKAO_FRIEND_ID);
+                        setLocalGuideName('');
+                        return;
+                      }
                       if (v === LOCAL_GUIDE_ID) {
                         setGuideId(LOCAL_GUIDE_ID);
                         setLocalGuideDraft(String(localGuideName || ''));
@@ -453,44 +485,53 @@ export default function SellPage() {
                     style={{ borderColor: 'var(--border-soft)' }}
                   >
                     <option value="">No Guide</option>
+                    {mrMoonGuide ? (
+                      <option
+                        key={mrMoonGuide.id}
+                        value={mrMoonGuide.id}
+                        style={{ backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' }}
+                      >
+                        Mr.Moon (10%)
+                      </option>
+                    ) : null}
+                    <option
+                      value={KAKAO_FRIEND_ID}
+                      style={{ backgroundColor: 'rgba(249,115,22,0.2)', color: 'var(--text-main)' }}
+                    >
+                      Kakao (10%)
+                    </option>
                     <option
                       value={LOCAL_GUIDE_ID}
                       style={{ backgroundColor: 'rgba(34,197,94,0.2)', color: 'var(--text-main)' }}
                     >
                       Local Guide
                     </option>
-                    {(guides || [])
-                      .slice()
-                      .sort((a, b) => {
-                        const nameA = String(a.name || '').toLowerCase();
-                        const nameB = String(b.name || '').toLowerCase();
-                        if (nameA === 'mr.moon') return -1;
-                        if (nameB === 'mr.moon') return 1;
-                        return nameA.localeCompare(nameB);
-                      })
-                      .map((g) => {
-                        const nameLower = String(g.name || '').toLowerCase();
-                        const isMrMoon = nameLower === 'mr.moon';
-                        const isElla = nameLower.includes('ella');
-                        const isPeter = nameLower.replace(/[\s.]/g, '').includes('peter');
-                        return (
-                          <option
-                            key={g.id}
-                            value={g.id}
-                            style={
-                              isMrMoon
-                                ? { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' }
-                                : isElla
-                                  ? { backgroundColor: 'rgba(255, 105, 180, 0.1)', color: 'var(--text-main)' }
-                                  : isPeter
-                                    ? { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' }
-                                  : {}
-                            }
-                          >
-                            {g.name}
-                          </option>
-                        );
-                      })}
+                    {peterGuide ? (
+                      <option
+                        key={peterGuide.id}
+                        value={peterGuide.id}
+                        style={{ backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' }}
+                      >
+                        Peter (20%)
+                      </option>
+                    ) : null}
+                    {ellaGuide ? (
+                      <option
+                        key={ellaGuide.id}
+                        value={ellaGuide.id}
+                        style={{
+                          backgroundColor: 'rgba(255, 105, 180, 0.1)',
+                          color: 'var(--text-main)',
+                        }}
+                      >
+                        Ella
+                      </option>
+                    ) : null}
+                    {otherGuides.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
