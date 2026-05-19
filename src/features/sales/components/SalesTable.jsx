@@ -377,7 +377,13 @@ export default function SalesTable({
         ) : (
           brand
         ),
-      commission: giftChecked ? 'gift' : isElla ? '-' : localGuideName || guideName || '-',
+      commission: isRefunded
+        ? 'refund'
+        : giftChecked
+          ? 'gift'
+          : isElla
+            ? '-'
+            : localGuideName || guideName || '-',
       unitPricePhp: (
         <div
           style={{
