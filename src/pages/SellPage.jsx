@@ -7,6 +7,7 @@ import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import Input from '../components/common/Input';
+import Modal from '../components/common/Modal';
 import ReceiptModal from '../components/sales/ReceiptModal';
 import { useToast } from '../context/ToastContext';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
@@ -20,6 +21,8 @@ import {
   RENTAL_CODE,
   saveRentalMetaForSoldAt,
 } from '../utils/rentalMeta';
+
+const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -37,14 +40,23 @@ export default function SellPage() {
   const setRentalInfo = useCartStore((s) => s.setRentalInfo);
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
+  const localGuideName = useCartStore((s) => s.localGuideName);
+  const setLocalGuideName = useCartStore((s) => s.setLocalGuideName);
 
-  const selectedGuide = (guides || []).find((g) => String(g.id) === String(guideId));
+  const isLocalGuideSelected = String(guideId || '') === LOCAL_GUIDE_ID;
+  const selectedGuide = isLocalGuideSelected
+    ? null
+    : (guides || []).find((g) => String(g.id) === String(guideId));
   const selectedGuideNameNorm = selectedGuide
     ? String(selectedGuide.name || '').toLowerCase().replace(/[\s.]/g, '')
     : '';
 
   const isMrMoonSelected = selectedGuideNameNorm.includes('mrmoon');
   const isPeterSelected = selectedGuideNameNorm.includes('peter');
+
+  const [localGuideModalOpen, setLocalGuideModalOpen] = useState(false);
+  const [localGuideDraft, setLocalGuideDraft] = useState('');
+  const [localGuideErr, setLocalGuideErr] = useState('');
 
   // Calculate item price with Mr. Moon (10%) or Peter (20%) discount logic
   const calculateItemPrice = (price) => {
@@ -74,14 +86,27 @@ export default function SellPage() {
     // Get latest items from store directly
     const currentItems = useCartStore.getState().items;
     const currentGuideId = useCartStore.getState().guideId;
+    const currentLocalGuideName = useCartStore.getState().localGuideName;
     if (currentItems.length === 0) return;
+
+    if (String(currentGuideId || '') === LOCAL_GUIDE_ID) {
+      const name = String(currentLocalGuideName || '').trim();
+      if (!name) {
+        setLocalGuideErr('Please enter Local Guide name.');
+        setLocalGuideDraft('');
+        setLocalGuideModalOpen(true);
+        return;
+      }
+    }
 
     try {
       // We send original items; DB trigger handles the actual price modification.
       // UPDATE: We now calculate price explicitly to enforce Ceiling rounding for Mr. Moon.
       const result = await checkoutCart({
         items: currentItems,
-        guideId: currentGuideId,
+        guideId: String(currentGuideId || '') === LOCAL_GUIDE_ID ? null : currentGuideId,
+        localGuideName:
+          String(currentGuideId || '') === LOCAL_GUIDE_ID ? String(currentLocalGuideName || '').trim() : '',
         isMrMoon: isMrMoonSelected,
         isPeter: isPeterSelected,
       });
@@ -408,10 +433,27 @@ export default function SellPage() {
                   <select
                     className="w-full border rounded px-2 py-1.5 text-sm"
                     value={guideId || ''}
-                    onChange={(e) => setGuideId(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) {
+                        setGuideId(null);
+                        setLocalGuideName('');
+                        return;
+                      }
+                      if (v === LOCAL_GUIDE_ID) {
+                        setGuideId(LOCAL_GUIDE_ID);
+                        setLocalGuideDraft(String(localGuideName || ''));
+                        setLocalGuideErr('');
+                        setLocalGuideModalOpen(true);
+                        return;
+                      }
+                      setGuideId(v);
+                      setLocalGuideName('');
+                    }}
                     style={{ borderColor: 'var(--border-soft)' }}
                   >
                     <option value="">No Guide</option>
+                    <option value={LOCAL_GUIDE_ID}>Local Guide</option>
                     {(guides || [])
                       .slice()
                       .sort((a, b) => {
@@ -494,6 +536,57 @@ export default function SellPage() {
         </div>
       </div>
       <ReceiptModal open={receiptOpen} receiptData={receiptData} onClose={handleReceiptClose} />
+      <Modal
+        open={localGuideModalOpen}
+        onClose={() => {
+          setLocalGuideModalOpen(false);
+          setLocalGuideErr('');
+        }}
+        title="Local Guide"
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLocalGuideModalOpen(false);
+                setLocalGuideErr('');
+              }}
+              style={{ width: 100 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                const name = String(localGuideDraft || '').trim();
+                if (!name) {
+                  setLocalGuideErr('Please enter Local Guide name.');
+                  return;
+                }
+                setLocalGuideName(name);
+                setGuideId(LOCAL_GUIDE_ID);
+                setLocalGuideModalOpen(false);
+                setLocalGuideErr('');
+              }}
+              style={{ width: 120 }}
+            >
+              Save
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Input
+            label="Local Guide Name"
+            value={localGuideDraft}
+            onChange={(e) => setLocalGuideDraft(e.target.value)}
+            placeholder="Enter name"
+            maxLength={50}
+            error={localGuideErr || undefined}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

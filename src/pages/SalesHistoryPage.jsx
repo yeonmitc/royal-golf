@@ -31,6 +31,7 @@ export default function SalesHistoryPage() {
   const [sortAscending, setSortAscending] = useState(false);
   const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'ella', 'no-ella'
   const [refundOnly, setRefundOnly] = useState(false);
+  const [localGuideInput, setLocalGuideInput] = useState('');
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
   const [filters, setFilters] = useState({
@@ -140,6 +141,7 @@ export default function SalesHistoryPage() {
 
     const filtered = base.filter((r) => {
       const gid = r.guideId;
+      const localGuideName = String(r?.localGuideName || '').trim();
       const isMrMoon = gid && mrMoonGuideIds.has(String(gid));
       const isElla = gid && ellaGuideIds.has(String(gid));
 
@@ -158,6 +160,12 @@ export default function SalesHistoryPage() {
       if (filterMode === 'no-ella') {
         return !isElla;
       }
+      if (filterMode === 'local-guide') {
+        if (!localGuideName) return false;
+        const q = String(localGuideInput || '').trim().toLowerCase();
+        if (!q) return true;
+        return localGuideName.toLowerCase().includes(q);
+      }
       return true;
     });
 
@@ -167,7 +175,7 @@ export default function SalesHistoryPage() {
       const bt = new Date(b.soldAt || 0).getTime();
       return at - bt;
     });
-  }, [allRows, sortAscending, filterMode, guides, refundOnly]);
+  }, [allRows, sortAscending, filterMode, guides, refundOnly, localGuideInput]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -256,7 +264,7 @@ export default function SalesHistoryPage() {
     const rows = visibleRows || [];
     const itemCount = rows.length;
 
-    const { totalQty, totalAmount, txCount } = rows.reduce(
+    const { totalQty, totalAmount, txCount, totalCommission } = rows.reduce(
       (acc, r) => {
         const isRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
         const original = Number(r?.unitPricePhp || 0) || 0;
@@ -266,20 +274,22 @@ export default function SalesHistoryPage() {
         const finalUnit = isRefunded ? 0 : finalUnitRaw;
         const qty = Number(r?.qty || 0) || 0;
         const qtyForTotal = isRefunded ? 0 : qty;
+        const comm = Number(r?.commission || 0) || 0;
         const txKey = String(r?.saleGroupId || '').trim() || String(r?.soldAt || '').trim();
         const txKeys = acc.txKeys;
         if (txKey) txKeys.add(txKey);
         return {
           totalQty: acc.totalQty + qtyForTotal,
           totalAmount: acc.totalAmount + finalUnit * qtyForTotal,
+          totalCommission: acc.totalCommission + (isRefunded ? 0 : comm),
           txCount: txKeys.size,
           txKeys,
         };
       },
-      { totalQty: 0, totalAmount: 0, txCount: 0, txKeys: new Set() }
+      { totalQty: 0, totalAmount: 0, totalCommission: 0, txCount: 0, txKeys: new Set() }
     );
 
-    return { itemCount, totalQty, totalAmount, txCount };
+    return { itemCount, totalQty, totalAmount, totalCommission, txCount };
   }, [visibleRows]);
 
   const cardActions = useMemo(() => {
@@ -323,6 +333,16 @@ export default function SalesHistoryPage() {
         style={{ minWidth: 90 }}
       >
         NoGuide
+      </Button>,
+      <Button
+        key="local-guide-toggle"
+        type="button"
+        onClick={() => setFilterMode((prev) => (prev === 'local-guide' ? 'all' : 'local-guide'))}
+        size="sm"
+        variant={filterMode === 'local-guide' ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        Local
       </Button>,
       <Button
         key="refund-toggle"
@@ -526,6 +546,15 @@ export default function SalesHistoryPage() {
             }}
             style={{ flex: '1 1 0', minWidth: 0 }}
           />
+          {filterMode === 'local-guide' ? (
+            <input
+              type="text"
+              placeholder="Local Guide name"
+              value={localGuideInput}
+              onChange={(e) => setLocalGuideInput(e.target.value)}
+              style={{ width: 180, maxWidth: '40vw' }}
+            />
+          ) : null}
           <Button
             type="button"
             onClick={applySearch}
@@ -581,6 +610,14 @@ export default function SalesHistoryPage() {
               <span style={{ color: 'var(--gold-soft)', fontWeight: 'bold' }}>
                 {summary.totalAmount.toLocaleString()} PHP
               </span>
+              {filterMode === 'local-guide' ? (
+                <span style={{ marginLeft: 10 }}>
+                  Comm:{' '}
+                  <span style={{ color: 'var(--gold-soft)', fontWeight: 'bold' }}>
+                    {Math.round(summary.totalCommission).toLocaleString()} PHP
+                  </span>
+                </span>
+              ) : null}
             </span>
           </div>
         }

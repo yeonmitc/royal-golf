@@ -275,6 +275,7 @@ export default function SalesTable({
     const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
     const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
     const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
+    const localGuideName = String(row?.localGuideName || '').trim();
     const isRental = row.code === RENTAL_CODE;
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
@@ -376,7 +377,7 @@ export default function SalesTable({
         ) : (
           brand
         ),
-      commission: giftChecked ? 'gift' : isElla ? '-' : guideName || '-',
+      commission: giftChecked ? 'gift' : isElla ? '-' : localGuideName || guideName || '-',
       unitPricePhp: (
         <div
           style={{

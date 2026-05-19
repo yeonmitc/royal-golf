@@ -37,11 +37,12 @@ export const useCartStore = create(
       totalQty: 0,
       totalPrice: 0,
       guideId: null,
+      localGuideName: '',
 
   /**
    * 장바구니 비우기 (결제 완료 후 호출)
    */
-      clearCart: () => set({ items: [], totalQty: 0, totalPrice: 0, guideId: null }),
+      clearCart: () => set({ items: [], totalQty: 0, totalPrice: 0, guideId: null, localGuideName: '' }),
 
   /**
    * 장바구니에 아이템 추가
@@ -210,17 +211,19 @@ export const useCartStore = create(
   getTotalAmount: () => get().items.reduce((sum, i) => sum + i.qty * (i.unitPricePhp || 0), 0),
 
   setGuideId: (id) => set({ guideId: id }),
+  setLocalGuideName: (name) => set({ localGuideName: String(name || '') }),
     }),
     {
       name: 'royal_cart_v1',
       version: 1,
-      partialize: (s) => ({ items: s.items, guideId: s.guideId }),
+      partialize: (s) => ({ items: s.items, guideId: s.guideId, localGuideName: s.localGuideName }),
       merge: (persistedState, currentState) => {
         const ps = persistedState && typeof persistedState === 'object' ? persistedState : {};
         const items = Array.isArray(ps.items) ? ps.items : currentState.items;
         const guideId = ps.guideId ?? currentState.guideId;
+        const localGuideName = ps.localGuideName ?? currentState.localGuideName;
         const { totalQty, totalPrice } = computeTotals(items);
-        return { ...currentState, items, guideId, totalQty, totalPrice };
+        return { ...currentState, items, guideId, localGuideName, totalQty, totalPrice };
       },
     }
   )

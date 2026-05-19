@@ -187,12 +187,14 @@ async function attachLocalProductMeta(items) {
 export async function checkoutCart(payload) {
   let cartItems = payload;
   let guideId = null;
+  let localGuideName = '';
   let isMrMoon = false;
   let isPeter = false;
 
   if (!Array.isArray(payload) && payload?.items) {
     cartItems = payload.items;
     guideId = payload.guideId;
+    localGuideName = String(payload.localGuideName || '').trim();
     isMrMoon = payload.isMrMoon;
     isPeter = Boolean(payload.isPeter);
   }
@@ -281,21 +283,34 @@ export async function checkoutCart(payload) {
 
   // Create the group first (parent record)
   // We initialize totals to 0; finalize_sale_group will calculate them
-  await sbInsert(
-    'sale_groups',
-    [
-      {
-        id: saleGroupId,
-        guide_id: guideId || null,
-        guide_rate: guideRate,
-        sold_at: soldAt,
-        subtotal: 0,
-        total: 0,
-        guide_commission: 0,
-      },
-    ],
-    { returning: 'minimal' }
-  );
+  {
+    const baseRow = {
+      id: saleGroupId,
+      guide_id: guideId || null,
+      guide_rate: guideRate,
+      sold_at: soldAt,
+      subtotal: 0,
+      total: 0,
+      guide_commission: 0,
+    };
+    const withLocal =
+      !guideId && localGuideName
+        ? {
+            ...baseRow,
+            local_guide_name: localGuideName,
+          }
+        : baseRow;
+    try {
+      await sbInsert('sale_groups', [withLocal], { returning: 'minimal' });
+    } catch (e) {
+      const msg = String(e?.message || '').toLowerCase();
+      if ((msg.includes('local_guide_name') || msg.includes('local guide')) && withLocal !== baseRow) {
+        await sbInsert('sale_groups', [baseRow], { returning: 'minimal' });
+      } else {
+        throw e;
+      }
+    }
+  }
 
   for (const item of items) {
     const { code, size, qty } = item;
@@ -506,7 +521,6 @@ export async function getSaleItemsBySaleId(saleId) {
 }
 
 export async function processRefund({ saleId, reason, qty: _qty, code: _code, size: _size } = {}) {
-  requireAdminOrThrow();
   const sid = Number(saleId);
   if (!sid) throw new Error('INVALID_SALE_ID');
 
@@ -881,11 +895,29 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     const inList = buildInList(groupIds);
     if (inList !== '()') {
       try {
-        const groups = await sbSelectAll('sale_groups', {
-          select: 'id,guide_id',
-          filters: [{ column: 'id', op: 'in', value: inList }],
-        });
-        groups.forEach((g) => groupMap.set(g.id, g.guide_id));
+        let groups;
+        try {
+          groups = await sbSelectAll('sale_groups', {
+            select: 'id,guide_id,local_guide_name',
+            filters: [{ column: 'id', op: 'in', value: inList }],
+          });
+        } catch (e) {
+          const msg = String(e?.message || '').toLowerCase();
+          if (msg.includes('local_guide_name') || msg.includes('local guide')) {
+            groups = await sbSelectAll('sale_groups', {
+              select: 'id,guide_id',
+              filters: [{ column: 'id', op: 'in', value: inList }],
+            });
+          } else {
+            throw e;
+          }
+        }
+        (groups || []).forEach((g) =>
+          groupMap.set(g.id, {
+            guideId: g.guide_id ?? null,
+            localGuideName: String(g.local_guide_name || '').trim(),
+          })
+        );
       } catch {
         // If IN list is too long, fallback to fetching all sale_groups (lightweight select)
         // filtering by date if possible would be better, but we lack easy access to date range here if we used 'all'.
@@ -897,15 +929,44 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
           // Note: fromKey is YYYY-MM-DD, sold_at is ISO. This string compare works for >=.
           if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: toKey + 'T23:59:59' });
 
-          const groups = await sbSelectAll('sale_groups', {
-            select: 'id,guide_id',
-            filters,
-          });
-          groups.forEach((g) => groupMap.set(g.id, g.guide_id));
+          let groups;
+          try {
+            groups = await sbSelectAll('sale_groups', {
+              select: 'id,guide_id,local_guide_name',
+              filters,
+            });
+          } catch (e) {
+            const msg = String(e?.message || '').toLowerCase();
+            if (msg.includes('local_guide_name') || msg.includes('local guide')) {
+              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id', filters });
+            } else {
+              throw e;
+            }
+          }
+          (groups || []).forEach((g) =>
+            groupMap.set(g.id, {
+              guideId: g.guide_id ?? null,
+              localGuideName: String(g.local_guide_name || '').trim(),
+            })
+          );
         } else {
-          // Fallback: fetch all.
-          const groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
-          groups.forEach((g) => groupMap.set(g.id, g.guide_id));
+          let groups;
+          try {
+            groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,local_guide_name' });
+          } catch (e) {
+            const msg = String(e?.message || '').toLowerCase();
+            if (msg.includes('local_guide_name') || msg.includes('local guide')) {
+              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
+            } else {
+              throw e;
+            }
+          }
+          (groups || []).forEach((g) =>
+            groupMap.set(g.id, {
+              guideId: g.guide_id ?? null,
+              localGuideName: String(g.local_guide_name || '').trim(),
+            })
+          );
         }
       }
     }
@@ -913,7 +974,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
 
   // Fetch guide names for mapping (to exclude Mr.Moon from commission)
   let guideNameMap = new Map();
-  const allGuideIds = [...new Set([...groupMap.values()].filter(Boolean))];
+  const allGuideIds = [
+    ...new Set(
+      [...groupMap.values()]
+        .map((v) => v?.guideId)
+        .filter(Boolean)
+    ),
+  ];
   if (allGuideIds.length > 0) {
     try {
       // Fetch all guides to map ID -> Name
@@ -932,7 +999,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const sizeKey = normalizeSizeKey(r.size_std);
       const refundedAt = r?.refunded_at || null;
       const isRefunded = Boolean(toMsFromIso(refundedAt));
-      const guideId = groupMap.get(r.sale_group_id) || null;
+      const ginfo = groupMap.get(r.sale_group_id) || null;
+      const guideId = ginfo?.guideId ?? null;
+      const localGuideName = String(ginfo?.localGuideName || '').trim();
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
       const isMrMoon = nameLower.includes('mrmoon');
@@ -940,6 +1009,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isPeter = nameLower.includes('peter');
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
+      const isLocalGuide = !guideId && !!localGuideName;
 
       return {
         saleId: r.id,
@@ -964,6 +1034,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         isRefunded,
         nameKo: '',
         guideId: guideId,
+        localGuideName,
         saleGroupId: r.sale_group_id,
         isMrMoon,
         isElla,
@@ -971,7 +1042,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         // If Mr. Moon or Peter, commission is 0. Otherwise 10%.
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
-          guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift ? finalUnit * qtyN * 0.1 : 0,
+          (guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift) || (isLocalGuide && !isFreeGift)
+            ? finalUnit * qtyN * 0.1
+            : 0,
       };
     })
     .filter((r) => r.qty > 0);

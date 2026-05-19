@@ -198,7 +198,6 @@ export async function getSalesList() {
 }
 
 export async function processRefund({ saleId, code, size, qty, reason }) {
-  requireAdminOrThrow();
   const sid = Number(saleId);
   if (!sid || !code) throw new Error('INVALID_REFUND_PAYLOAD');
   const q = Number(qty || 0);

@@ -3,12 +3,9 @@ import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
 import { useProcessRefundMutation } from '../../features/sales/salesHooks';
-import { useAdminStore } from '../../store/adminStore';
 import { useToast } from '../../context/ToastContext';
 
 export default function RefundModal({ open, onClose, saleItem }) {
-  const isAdmin = useAdminStore((s) => s.isAuthorized());
-  const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const [reason, setReason] = useState('');
   const [err, setErr] = useState('');
   const { showToast } = useToast();
@@ -30,10 +27,6 @@ export default function RefundModal({ open, onClose, saleItem }) {
 
   async function handleSubmit() {
     setErr('');
-    if (!isAdmin) {
-      openLoginModal();
-      return;
-    }
     const v = String(reason || '').trim();
     if (!v) {
       setErr('Please enter a reason.');
