@@ -168,7 +168,8 @@ async function attachLocalProductMeta(items) {
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
     const isFreeGift = Boolean(i.freeGift ?? false) || i.unitPricePhp === 0;
     const localGuideName = String(i.localGuideName || '').trim();
-    const hasAnyGuide = Boolean(i.guideId) || Boolean(localGuideName);
+    const isOnline = localGuideName === '__ONLINE__';
+    const hasAnyGuide = (Boolean(i.guideId) || Boolean(localGuideName)) && !isOnline;
     const commission = hasAnyGuide && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
     const unitForTotal = Number(i.discountUnitPricePhp ?? i.unitPricePhp ?? 0) || 0;
     return {
@@ -1018,7 +1019,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isPeter = nameLower.includes('peter');
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
-      const isLocalGuide = !guideId && !!localGuideName;
+      const isOnline = !guideId && localGuideName === '__ONLINE__';
+      const isLocalGuide = !guideId && !!localGuideName && !isOnline;
 
       return {
         saleId: r.id,

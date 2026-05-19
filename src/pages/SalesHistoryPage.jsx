@@ -161,7 +161,7 @@ export default function SalesHistoryPage() {
         return !isElla;
       }
       if (filterMode === 'local-guide') {
-        if (!localGuideName) return false;
+        if (!localGuideName || localGuideName === '__ONLINE__') return false;
         const q = String(localGuideInput || '').trim().toLowerCase();
         if (!q) return true;
         return localGuideName.toLowerCase().includes(q);

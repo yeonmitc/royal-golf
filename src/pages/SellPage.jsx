@@ -23,6 +23,7 @@ import {
 } from '../utils/rentalMeta';
 
 const KAKAO_FRIEND_ID = '__KAKAO_FRIEND__';
+const ONLINE_ID = '__ONLINE__';
 const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
 
 export default function SellPage() {
@@ -46,8 +47,9 @@ export default function SellPage() {
 
   const guideKey = String(guideId || '');
   const isKakaoFriendSelected = guideKey === KAKAO_FRIEND_ID;
+  const isOnlineSelected = guideKey === ONLINE_ID;
   const isLocalGuideSelected = guideKey === LOCAL_GUIDE_ID;
-  const selectedGuide = isLocalGuideSelected || isKakaoFriendSelected
+  const selectedGuide = isLocalGuideSelected || isKakaoFriendSelected || isOnlineSelected
     ? null
     : (guides || []).find((g) => String(g.id) === String(guideId));
   const selectedGuideNameNorm = selectedGuide
@@ -125,11 +127,15 @@ export default function SellPage() {
       const result = await checkoutCart({
         items: currentItems,
         guideId:
-          currentGuideKey === LOCAL_GUIDE_ID || currentGuideKey === KAKAO_FRIEND_ID
+          currentGuideKey === LOCAL_GUIDE_ID || currentGuideKey === KAKAO_FRIEND_ID || currentGuideKey === ONLINE_ID
             ? null
             : currentGuideId,
         localGuideName:
-          currentGuideKey === LOCAL_GUIDE_ID ? String(currentLocalGuideName || '').trim() : '',
+          currentGuideKey === LOCAL_GUIDE_ID
+            ? String(currentLocalGuideName || '').trim()
+            : currentGuideKey === ONLINE_ID
+              ? '__ONLINE__'
+              : '',
         isMrMoon: isMrMoonSelected,
         isPeter: isPeterSelected,
         isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
@@ -472,6 +478,11 @@ export default function SellPage() {
                         setLocalGuideName('');
                         return;
                       }
+                      if (v === ONLINE_ID) {
+                        setGuideId(ONLINE_ID);
+                        setLocalGuideName('');
+                        return;
+                      }
                       if (v === LOCAL_GUIDE_ID) {
                         setGuideId(LOCAL_GUIDE_ID);
                         setLocalGuideDraft(String(localGuideName || ''));
@@ -532,6 +543,12 @@ export default function SellPage() {
                         {g.name}
                       </option>
                     ))}
+                    <option
+                      value={ONLINE_ID}
+                      style={{ backgroundColor: 'rgba(168,85,247,0.3)', color: 'var(--text-main)' }}
+                    >
+                      Online
+                    </option>
                   </select>
                 </div>
 

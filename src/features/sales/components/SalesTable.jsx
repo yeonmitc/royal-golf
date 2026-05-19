@@ -276,6 +276,7 @@ export default function SalesTable({
     const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
     const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
     const localGuideName = String(row?.localGuideName || '').trim();
+    const localGuideLabel = localGuideName === '__ONLINE__' ? 'Online' : localGuideName;
     const isRental = row.code === RENTAL_CODE;
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
@@ -383,7 +384,7 @@ export default function SalesTable({
           ? 'gift'
           : isElla
             ? '-'
-            : localGuideName || guideName || '-',
+            : localGuideLabel || guideName || '-',
       unitPricePhp: (
         <div
           style={{
