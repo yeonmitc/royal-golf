@@ -62,6 +62,7 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
     win.document.write('</style></head><body>');
     win.document.write('<div class="receipt-container">');
     win.document.write(absoluteHtml);
+    win.document.write('<div style="height: 30mm; width: 100%;"></div>');
     win.document.write('</div>');
     win.document.write('</body></html>');
     win.document.close();
