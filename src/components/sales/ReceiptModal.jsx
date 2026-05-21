@@ -14,7 +14,17 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
 
   if (!open || !receiptData) return null;
 
-  const { id: _id, soldAt, items = [], totalAmount, totalQty, guideId } = receiptData;
+  const { id: _id, soldAt, items = [], guideId } = receiptData;
+  const printableItems = (items || []).filter((item) => {
+    const qty = Number(item?.qty || 0) || 0;
+    const unit = Number(item?.price || 0) || 0;
+    return qty > 0 && unit > 0;
+  });
+  const displayTotalAmount = printableItems.reduce(
+    (sum, item) => sum + (Number(item?.price || 0) || 0) * (Number(item?.qty || 0) || 0),
+    0
+  );
+  const displayTotalQty = printableItems.reduce((sum, item) => sum + (Number(item?.qty || 0) || 0), 0);
 
   const handlePrint = () => {
     const printContent = printRef.current;
@@ -127,10 +137,10 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
           <div className="divider" />
 
           <div className="items">
-            {items.map((item, idx) => (
+            {printableItems.map((item, idx) => (
               <div key={idx} className="item-row">
                 <div className="item-name">
-                  <div>{(item.name || item.code).replace(/ - /g, ' ')}</div>
+                  <div>{String(item.code || '').trim()}</div>
                   <div style={{ fontSize: '11px', color: '#555' }}>
                     {item.color ? `${item.color} / ` : ''}
                     {item.size}
@@ -146,10 +156,10 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
 
           <div className="total-row">
             <span>TOTAL</span>
-            <span>{Number(totalAmount).toLocaleString()}</span>
+            <span>{Number(displayTotalAmount || 0).toLocaleString()}</span>
           </div>
           <div className="info" style={{ textAlign: 'right', marginTop: '0' }}>
-            Items: {totalQty}
+            Items: {displayTotalQty || 0}
           </div>
 
           <div className="footer">
