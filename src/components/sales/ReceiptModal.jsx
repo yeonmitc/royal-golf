@@ -29,14 +29,14 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
 
     const win = window.open('', '', 'width=400,height=600');
     win.document.write('<html><head><title>Receipt</title>');
-    win.document.write('<style>');
+    win.document.write('<style id="receipt-print-style">');
     win.document.write(`
       @media print {
-        @page { size: 58mm auto; margin: 0; }
+        @page { size: 55mm 200mm; margin: 0; }
         html, body { margin: 0; padding: 0; }
       }
       body { margin: 0; padding: 0; font-family: monospace; font-size: 13px; color: #000; }
-      .receipt-container { width: 58mm; margin: 0 auto; padding: 10px; box-sizing: border-box; }
+      .receipt-container { width: 55mm; margin: 0 auto; padding: 10px; box-sizing: border-box; }
       .receipt-logo { display: block; margin: 0 auto 5px auto; width: 80px; height: 90px; object-fit: contain; filter: grayscale(100%) brightness(0%); }
       .header { text-align: center; margin-bottom: 5px; }
       .title { font-size: 15px; font-weight: bold; margin-bottom: 0; }
@@ -56,11 +56,47 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
     win.document.write('</body></html>');
     win.document.close();
     win.focus();
-    // Allow time for images to load in the new window
+
+    const pxToMm = (px) => (Number(px || 0) * 25.4) / 96;
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const updatePageHeight = () => {
+      const styleEl = win.document.getElementById('receipt-print-style');
+      const container = win.document.querySelector('.receipt-container');
+      if (!styleEl || !container) return;
+      const px = container.scrollHeight || container.offsetHeight || 0;
+      const mmRaw = pxToMm(px) + 2;
+      const mm = Math.ceil(clamp(mmRaw, 60, 2000));
+      styleEl.textContent = `
+        @media print {
+          @page { size: 55mm ${mm}mm; margin: 0; }
+          html, body { margin: 0; padding: 0; }
+        }
+        body { margin: 0; padding: 0; font-family: monospace; font-size: 13px; color: #000; }
+        .receipt-container { width: 55mm; margin: 0 auto; padding: 10px; box-sizing: border-box; }
+        .receipt-logo { display: block; margin: 0 auto 5px auto; width: 80px; height: 90px; object-fit: contain; filter: grayscale(100%) brightness(0%); }
+        .header { text-align: center; margin-bottom: 5px; }
+        .title { font-size: 15px; font-weight: bold; margin-bottom: 0; }
+        .info { font-size: 11px; margin-bottom: 0; }
+        .divider { border-bottom: 1px dashed #000; margin: 4px 0; }
+        .item-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .item-name { flex: 1; overflow: hidden; padding-right: 4px; }
+        .item-qty { width: 25px; text-align: right; }
+        .item-price { width: 60px; text-align: right; }
+        .total-row { display: flex; justify-content: space-between; font-weight: bold; margin-top: 4px; font-size: 15px; }
+        .footer { text-align: center; margin-top: 8px; font-size: 11px; }
+      `;
+    };
+
+    // Allow time for images/layout to settle in the new window
     setTimeout(() => {
+      try {
+        updatePageHeight();
+      } catch {
+        void 0;
+      }
       win.print();
       win.close();
-    }, 500);
+    }, 650);
   };
 
   const formattedDate = new Date(soldAt).toLocaleString('en-PH', {
