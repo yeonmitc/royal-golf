@@ -3,15 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import {
   useCheckDailyAttendance,
+  useDeleteAttendanceMutation,
   useMonthlyAttendance,
   useRecordAttendanceMutation,
-  useDeleteAttendanceMutation,
   useUpdateAttendanceMutation,
 } from '../../features/attendance/attendanceHooks';
 import { useEmployees } from '../../features/employees/employeesHooks';
 import { useAdminStore } from '../../store/adminStore';
-import Modal from '../common/Modal';
 import Button from '../common/Button';
+import Modal from '../common/Modal';
 
 // Helper to get score based on time diff with discrete buckets
 // Rules:
@@ -152,8 +152,12 @@ const AttendanceCalendar = () => {
       );
 
       const target = new Date(checkTime);
-      if (l.shift_type === '6AM') target.setHours(6, 0, 0, 0);
-      else target.setHours(9, 0, 0, 0);
+      if (l.shift_type === 'morning') target.setHours(6, 0, 0, 0);
+      else {
+        const dow = target.getDay();
+        const peak = dow === 5 || dow === 6 || dow === 0;
+        target.setHours(peak ? 11 : 11, peak ? 0 : 30, 0, 0);
+      }
 
       const score = getPunctualityScore(target, checkTime);
       const diffMs = checkTime - target;
@@ -308,8 +312,7 @@ const AttendanceCalendar = () => {
                 ❤️
               </div>
             );
-          } else
-          if (hasLog && score !== null) {
+          } else if (hasLog && score !== null) {
             const emojiData = getMoodEmoji(score);
             // Custom colors based on score to match image style
             let bgColorClass = 'bg-[#A3E635]'; // Greenish
@@ -460,9 +463,7 @@ export default function AttendanceModal({ open, onClose }) {
   }, [monthLogs, todayKey, justCheckedSet]);
 
   const staffOptions = (() => {
-    const emp = (employees || [])
-      .map((e) => String(e?.english_name || '').trim())
-      .filter(Boolean);
+    const emp = (employees || []).map((e) => String(e?.english_name || '').trim()).filter(Boolean);
     if (emp.length > 0) return emp;
     return Array.from(
       new Set((monthLogs || []).map((l) => String(l?.employee_name || '').trim()).filter(Boolean))
@@ -475,7 +476,7 @@ export default function AttendanceModal({ open, onClose }) {
   const normalizeShiftType = (s) =>
     String(s || '')
       .trim()
-      .toUpperCase()
+      .toLowerCase()
       .replace(/\s+/g, '');
   const checkedShiftType = selectedStaffLog ? normalizeShiftType(selectedStaffLog.shift_type) : '';
   const isAlreadyChecked = Boolean(selectedStaffLog);
@@ -559,8 +560,12 @@ export default function AttendanceModal({ open, onClose }) {
 
     const now = new Date();
     const shiftStart = new Date(now);
-    if (selectedShift === '6AM') shiftStart.setHours(6, 0, 0, 0);
-    else shiftStart.setHours(9, 0, 0, 0);
+    if (selectedShift === 'morning') shiftStart.setHours(6, 0, 0, 0);
+    else {
+      const dow = now.getDay();
+      const peak = dow === 5 || dow === 6 || dow === 0;
+      shiftStart.setHours(peak ? 11 : 11, peak ? 0 : 30, 0, 0);
+    }
     const lateMins = Math.max(0, Math.floor((now.getTime() - shiftStart.getTime()) / 60000));
     const isTardy = lateMins >= 15;
 
@@ -684,7 +689,7 @@ export default function AttendanceModal({ open, onClose }) {
   }, [monthLogs, adminDate]);
 
   const [adminLogId, setAdminLogId] = useState('');
-  const [adminShiftType, setAdminShiftType] = useState('6AM');
+  const [adminShiftType, setAdminShiftType] = useState('morning');
   const [adminTimeStr, setAdminTimeStr] = useState('06:00');
   const adminLoadedKeyRef = useRef('');
 
@@ -705,9 +710,9 @@ export default function AttendanceModal({ open, onClose }) {
     if (adminLoadedKeyRef.current === key) return;
     const row = adminLogs.find((l) => l.id === adminLogId);
     if (!row) return;
-    setAdminShiftType(String(row.shift_type || '6AM'));
+    setAdminShiftType(String(row.shift_type || 'morning'));
     const d = parseLogTime(row);
-    setAdminTimeStr(toTimeInput(d) || (row.shift_type === '9AM' ? '09:00' : '06:00'));
+    setAdminTimeStr(toTimeInput(d) || (row.shift_type === 'evening' ? '09:00' : '06:00'));
     adminLoadedKeyRef.current = key;
   }, [open, isAdmin, adminDate, adminLogId, adminLogs]);
 
@@ -813,315 +818,321 @@ export default function AttendanceModal({ open, onClose }) {
   return (
     <>
       <Modal
-      open={open}
-      onClose={onClose}
-      title={
-        <span className="text-yellow-400 font-black text-3xl tracking-wider uppercase drop-shadow-md">
-          Daily Attendance Check
-        </span>
-      }
-      align="center"
-      size="content"
-      fullScreen={isCompact}
-      containerStyle={{
-        backgroundColor: '#5b21b6', // Deep purple (violet-800) for better contrast
-        backgroundImage: 'linear-gradient(to bottom right, #6d28d9, #4c1d95)', // Gradient for "prettier" look
-        border: '2px solid #8b5cf6', // Lighter purple border
-        boxShadow: '0 0 50px rgba(139, 92, 246, 0.3)', // Purple glow
-        width: 'fit-content', // Shrink to fit content
-        maxWidth: '95vw',
-        padding: '25px',
-        borderRadius: '32px',
-      }}
-      footer={<></>}
-    >
-      <div className="flex flex-col items-center gap-6 w-fit mx-auto text-center">
-        {/* Attendance Calendar (Top) */}
-        <div className="flex flex-col items-center gap-3">
-          <AttendanceCalendar />
-        </div>
-
-        <div className="flex flex-col gap-4 w-fit items-center justify-center text-center mx-auto">
-          <CurrentTimeDisplay />
-
-          <span className="text-xl font-bold text-white tracking-widest uppercase opacity-90 drop-shadow-sm mb-2 text-center w-full">
-            Select Shift & Staff
+        open={open}
+        onClose={onClose}
+        title={
+          <span className="text-yellow-400 font-black text-3xl tracking-wider uppercase drop-shadow-md">
+            Daily Attendance Check
           </span>
-
-          <div
-            className="grid grid-cols-2 gap-2 justify-center items-center w-fit mx-auto"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 180px)',
-              gap: '10px',
-              justifyContent: 'center',
-              margin: '0 auto',
-            }}
-          >
-            {/* 6AM Button */}
-            <button
-              disabled={isPending || isAlreadyChecked}
-              onClick={() => handleShiftChange('6AM')}
-              className={`
-                flex items-center justify-center font-black transition-all duration-300 transform
-                ${
-                  selectedShift === '6AM' || (isAlreadyChecked && checkedShiftType === '6AM')
-                    ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
-                    : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
-                }
-              `}
-              style={{
-                height: '60px',
-                fontSize: '1.5rem',
-                backgroundColor:
-                  selectedShift === '6AM' || (isAlreadyChecked && checkedShiftType === '6AM')
-                    ? '#FACC15'
-                    : 'rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
-                width: '100%',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '30px',
-                cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
-                opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
-                marginBottom: 2,
-              }}
-            >
-              6 AM
-            </button>
-
-            {/* 9AM Button */}
-            <button
-              disabled={isPending || isAlreadyChecked}
-              onClick={() => handleShiftChange('9AM')}
-              className={`
-                flex items-center justify-center font-black transition-all duration-300 transform
-                ${
-                  selectedShift === '9AM' || (isAlreadyChecked && checkedShiftType === '9AM')
-                    ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
-                    : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
-                }
-              `}
-              style={{
-                height: '60px',
-                fontSize: '1.5rem',
-                backgroundColor:
-                  selectedShift === '9AM' || (isAlreadyChecked && checkedShiftType === '9AM')
-                    ? '#FACC15'
-                    : 'rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
-                width: '100%',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '30px',
-                cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
-                opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
-                marginBottom: 2,
-              }}
-            >
-              9 AM
-            </button>
-
+        }
+        align="center"
+        size="content"
+        fullScreen={isCompact}
+        containerStyle={{
+          backgroundColor: '#5b21b6', // Deep purple (violet-800) for better contrast
+          backgroundImage: 'linear-gradient(to bottom right, #6d28d9, #4c1d95)', // Gradient for "prettier" look
+          border: '2px solid #8b5cf6', // Lighter purple border
+          boxShadow: '0 0 50px rgba(139, 92, 246, 0.3)', // Purple glow
+          width: 'fit-content', // Shrink to fit content
+          maxWidth: '95vw',
+          padding: '25px',
+          borderRadius: '32px',
+        }}
+        footer={<></>}
+      >
+        <div className="flex flex-col items-center gap-6 w-fit mx-auto text-center">
+          {/* Attendance Calendar (Top) */}
+          <div className="flex flex-col items-center gap-3">
+            <AttendanceCalendar />
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 10,
-              justifyContent: 'center',
-              alignItems: 'center',
-              width: '100%',
-              maxWidth: 380,
-            }}
-          >
-            {staffOptions.map((name) => (
-              (() => {
-                const isCheckedToday = checkedTodaySet.has(name);
-                const disabled = isPending || staffCheckLoading;
-                return (
+          <div className="flex flex-col gap-4 w-fit items-center justify-center text-center mx-auto">
+            <CurrentTimeDisplay />
+
+            <span className="text-xl font-bold text-white tracking-widest uppercase opacity-90 drop-shadow-sm mb-2 text-center w-full">
+              Select Shift & Staff
+            </span>
+
+            <div
+              className="grid grid-cols-2 gap-2 justify-center items-center w-fit mx-auto"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 180px)',
+                gap: '10px',
+                justifyContent: 'center',
+                margin: '0 auto',
+              }}
+            >
+              {/* Morning Button */}
               <button
-                key={name}
-                type="button"
-                onClick={() => handleStaffChange(name)}
-                disabled={disabled}
+                disabled={isPending || isAlreadyChecked}
+                onClick={() => handleShiftChange('morning')}
+                className={`
+                flex items-center justify-center font-black transition-all duration-300 transform
+                ${
+                  selectedShift === 'morning' ||
+                  (isAlreadyChecked && checkedShiftType === 'morning')
+                    ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
+                    : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
+                }
+              `}
                 style={{
                   height: '60px',
                   fontSize: '1.5rem',
-                  borderRadius: '30px',
-                  border: '1px solid rgba(255,255,255,0.20)',
-                  background:
-                    isCheckedToday
+                  backgroundColor:
+                    selectedShift === 'morning' ||
+                    (isAlreadyChecked && checkedShiftType === 'morning')
                       ? '#FACC15'
-                      : selectedStaff === name
-                        ? '#FACC15'
-                        : 'rgba(255, 255, 255, 0.10)',
-                  color: isCheckedToday || selectedStaff === name ? '#000' : 'white',
-                  fontWeight: 900,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: isCheckedToday ? 0.75 : isPending ? 0.7 : 1,
-                  padding: '0 22px',
+                      : 'rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(10px)',
+                  width: '100%',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '30px',
+                  cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
+                  opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
                   marginBottom: 2,
                 }}
               >
-                {name}
+                morning
               </button>
-                );
-              })()
-            ))}
-          </div>
 
-          <div className="text-red-300 text-lg font-bold bg-red-900/40 px-6 py-2 rounded-full border border-red-500/30 text-center w-fit mx-auto shadow-lg">
-            ⚠️ Attendance score will be 0 if late by more than 15 minutes.
-          </div>
+              {/* Evening Button */}
+              <button
+                disabled={isPending || isAlreadyChecked}
+                onClick={() => handleShiftChange('evening')}
+                className={`
+                flex items-center justify-center font-black transition-all duration-300 transform
+                ${
+                  selectedShift === 'evening' ||
+                  (isAlreadyChecked && checkedShiftType === 'evening')
+                    ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
+                    : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
+                }
+              `}
+                style={{
+                  height: '60px',
+                  fontSize: '1.5rem',
+                  backgroundColor:
+                    selectedShift === 'evening' ||
+                    (isAlreadyChecked && checkedShiftType === 'evening')
+                      ? '#FACC15'
+                      : 'rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(10px)',
+                  width: '100%',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '30px',
+                  cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
+                  opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
+                  marginBottom: 2,
+                }}
+              >
+                evening
+              </button>
+            </div>
 
-          {isPending && (
-            <div className="text-white/80 text-sm font-bold mt-2">Saving…</div>
-          )}
-
-          {isAdmin && (
             <div
-              className="mt-4 w-full"
               style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 10,
+                justifyContent: 'center',
+                alignItems: 'center',
+                width: '100%',
                 maxWidth: 380,
-                background: 'rgba(0,0,0,0.25)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 18,
-                padding: 14,
               }}
             >
-              <div className="text-white font-black tracking-widest uppercase text-sm mb-3">
-                Admin Edit
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <input
-                  type="date"
-                  value={adminDate}
-                  onChange={(e) => setAdminDate(e.target.value)}
-                  style={{
-                    height: 40,
-                    borderRadius: 12,
-                    background: 'rgba(255,255,255,0.12)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '0 10px',
-                    fontWeight: 800,
-                  }}
-                />
-                <select
-                  value={adminLogId}
-                  onChange={(e) => setAdminLogId(e.target.value)}
-                  style={{
-                    height: 40,
-                    borderRadius: 12,
-                    background: '#ffffff',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#000000',
-                    padding: '0 10px',
-                    fontWeight: 800,
-                  }}
-                >
-                  <option value="" style={{ color: '#000000', background: '#ffffff' }}>
-                    Select log
-                  </option>
-                  {adminLogs.map((l) => {
-                    const d = parseLogTime(l);
-                    const t = formatTimeForDisplay(d) || '';
-                    const n = String(l.employee_name || '').trim();
-                    return (
-                      <option key={l.id} value={l.id} style={{ color: '#000000', background: '#ffffff' }}>
-                        {n} {t}
-                      </option>
-                    );
-                  })}
-                </select>
-                <input
-                  type="time"
-                  value={adminTimeStr}
-                  onChange={(e) => setAdminTimeStr(e.target.value)}
-                  style={{
-                    height: 40,
-                    borderRadius: 12,
-                    background: 'rgba(255,255,255,0.12)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '0 10px',
-                    fontWeight: 800,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setAdminShiftType('6AM')}
-                  style={{
-                    height: 40,
-                    borderRadius: 12,
-                    background: adminShiftType === '6AM' ? '#FACC15' : 'rgba(255,255,255,0.12)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: adminShiftType === '6AM' ? '#000' : '#fff',
-                    fontWeight: 900,
-                    marginBottom: 2,
-                  }}
-                >
-                  6AM
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAdminShiftType('9AM')}
-                  style={{
-                    height: 40,
-                    borderRadius: 12,
-                    background: adminShiftType === '9AM' ? '#FACC15' : 'rgba(255,255,255,0.12)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: adminShiftType === '9AM' ? '#000' : '#fff',
-                    fontWeight: 900,
-                    marginBottom: 2,
-                  }}
-                >
-                  9AM
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                <button
-                  type="button"
-                  onClick={applyAdminEdit}
-                  disabled={isUpdating || !adminLogId}
-                  style={{
-                    flex: 1,
-                    height: 44,
-                    borderRadius: 14,
-                    background: isUpdating ? 'rgba(59,130,246,0.45)' : '#2563eb',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: 'white',
-                    fontWeight: 900,
-                    cursor: isUpdating ? 'not-allowed' : 'pointer',
-                    opacity: adminLogId ? 1 : 0.6,
-                    marginBottom: 2,
-                  }}
-                >
-                  {isUpdating ? 'Updating…' : 'Update'}
-                </button>
-                <button
-                  type="button"
-                  onClick={deleteAdminLog}
-                  disabled={isDeleting || !adminLogId}
-                  style={{
-                    flex: 1,
-                    height: 44,
-                    borderRadius: 14,
-                    background: isDeleting ? 'rgba(239,68,68,0.45)' : '#ef4444',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: 'white',
-                    fontWeight: 900,
-                    cursor: isDeleting ? 'not-allowed' : 'pointer',
-                    opacity: adminLogId ? 1 : 0.6,
-                    marginBottom: 2,
-                  }}
-                >
-                  {isDeleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
+              {staffOptions.map((name) =>
+                (() => {
+                  const isCheckedToday = checkedTodaySet.has(name);
+                  const disabled = isPending || staffCheckLoading;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => handleStaffChange(name)}
+                      disabled={disabled}
+                      style={{
+                        height: '60px',
+                        fontSize: '1.5rem',
+                        borderRadius: '30px',
+                        border: '1px solid rgba(255,255,255,0.20)',
+                        background: isCheckedToday
+                          ? '#FACC15'
+                          : selectedStaff === name
+                            ? '#FACC15'
+                            : 'rgba(255, 255, 255, 0.10)',
+                        color: isCheckedToday || selectedStaff === name ? '#000' : 'white',
+                        fontWeight: 900,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        opacity: isCheckedToday ? 0.75 : isPending ? 0.7 : 1,
+                        padding: '0 22px',
+                        marginBottom: 2,
+                      }}
+                    >
+                      {name}
+                    </button>
+                  );
+                })()
+              )}
             </div>
-          )}
+
+            <div className="text-red-300 text-lg font-bold bg-red-900/40 px-6 py-2 rounded-full border border-red-500/30 text-center w-fit mx-auto shadow-lg">
+              ⚠️ Attendance score will be 0 if late by more than 15 minutes.
+            </div>
+
+            {isPending && <div className="text-white/80 text-sm font-bold mt-2">Saving…</div>}
+
+            {isAdmin && (
+              <div
+                className="mt-4 w-full"
+                style={{
+                  maxWidth: 380,
+                  background: 'rgba(0,0,0,0.25)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 18,
+                  padding: 14,
+                }}
+              >
+                <div className="text-white font-black tracking-widest uppercase text-sm mb-3">
+                  Admin Edit
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <input
+                    type="date"
+                    value={adminDate}
+                    onChange={(e) => setAdminDate(e.target.value)}
+                    style={{
+                      height: 40,
+                      borderRadius: 12,
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: 'white',
+                      padding: '0 10px',
+                      fontWeight: 800,
+                    }}
+                  />
+                  <select
+                    value={adminLogId}
+                    onChange={(e) => setAdminLogId(e.target.value)}
+                    style={{
+                      height: 40,
+                      borderRadius: 12,
+                      background: '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: '#000000',
+                      padding: '0 10px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    <option value="" style={{ color: '#000000', background: '#ffffff' }}>
+                      Select log
+                    </option>
+                    {adminLogs.map((l) => {
+                      const d = parseLogTime(l);
+                      const t = formatTimeForDisplay(d) || '';
+                      const n = String(l.employee_name || '').trim();
+                      return (
+                        <option
+                          key={l.id}
+                          value={l.id}
+                          style={{ color: '#000000', background: '#ffffff' }}
+                        >
+                          {n} {t}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <input
+                    type="time"
+                    value={adminTimeStr}
+                    onChange={(e) => setAdminTimeStr(e.target.value)}
+                    style={{
+                      height: 40,
+                      borderRadius: 12,
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: 'white',
+                      padding: '0 10px',
+                      fontWeight: 800,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAdminShiftType('morning')}
+                    style={{
+                      height: 40,
+                      borderRadius: 12,
+                      background:
+                        adminShiftType === 'morning' ? '#FACC15' : 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: adminShiftType === 'morning' ? '#000' : '#fff',
+                      fontWeight: 900,
+                      marginBottom: 2,
+                    }}
+                  >
+                    morning
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminShiftType('evening')}
+                    style={{
+                      height: 40,
+                      borderRadius: 12,
+                      background:
+                        adminShiftType === 'evening' ? '#FACC15' : 'rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: adminShiftType === 'evening' ? '#000' : '#fff',
+                      fontWeight: 900,
+                      marginBottom: 2,
+                    }}
+                  >
+                    evening
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={applyAdminEdit}
+                    disabled={isUpdating || !adminLogId}
+                    style={{
+                      flex: 1,
+                      height: 44,
+                      borderRadius: 14,
+                      background: isUpdating ? 'rgba(59,130,246,0.45)' : '#2563eb',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      color: 'white',
+                      fontWeight: 900,
+                      cursor: isUpdating ? 'not-allowed' : 'pointer',
+                      opacity: adminLogId ? 1 : 0.6,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {isUpdating ? 'Updating…' : 'Update'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deleteAdminLog}
+                    disabled={isDeleting || !adminLogId}
+                    style={{
+                      flex: 1,
+                      height: 44,
+                      borderRadius: 14,
+                      background: isDeleting ? 'rgba(239,68,68,0.45)' : '#ef4444',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      color: 'white',
+                      fontWeight: 900,
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      opacity: adminLogId ? 1 : 0.6,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {isDeleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
       </Modal>
 
       <Modal

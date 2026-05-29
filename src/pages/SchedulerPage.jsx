@@ -1,509 +1,1101 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
+import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../db/supabaseRest';
 import { useEmployees } from '../features/employees/employeesHooks';
-import {
-  useCreateEmployeeScheduleMutation,
-  useDeleteEmployeeScheduleMutation,
-  useEmployeeSchedules,
-} from '../features/schedules/schedulesHooks';
 import { useAdminStore } from '../store/adminStore';
 
-function pad2(v) {
-  return String(v).padStart(2, '0');
-}
-
-function toDateKey(d) {
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function monthRange(d) {
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return { from: toDateKey(start), to: toDateKey(end) };
-}
-
-function buildCalendarCells(d) {
-  const first = new Date(d.getFullYear(), d.getMonth(), 1);
-  const startDow = first.getDay();
-  const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const cells = [];
-  for (let i = 0; i < startDow; i += 1) cells.push(null);
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(new Date(d.getFullYear(), d.getMonth(), day));
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
-  return cells;
-}
-
-function shiftBadgeStyle(shiftType, faded) {
-  const base = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    fontSize: 11,
-    fontWeight: 700,
-    borderRadius: 999,
-    padding: '2px 8px',
-    border: '1px solid rgba(255,255,255,0.14)',
-    background: 'rgba(255,255,255,0.06)',
-    color: 'var(--text-main)',
-    opacity: faded ? 0.35 : 1,
-    whiteSpace: 'nowrap',
-  };
-  if (shiftType === '6AM') {
-    return {
-      ...base,
-      background: 'rgba(59,130,246,0.18)',
-      border: '1px solid rgba(59,130,246,0.35)',
-      color: '#bfdbfe',
-    };
-  }
-  if (shiftType === '9AM') {
-    return {
-      ...base,
-      background: 'rgba(249,115,22,0.18)',
-      border: '1px solid rgba(249,115,22,0.35)',
-      color: '#fed7aa',
-    };
-  }
-  return base;
-}
-
 export default function SchedulerPage() {
-  const isAdmin = useAdminStore((s) => s.isAuthorized());
   const { showToast } = useToast();
+  const isAdmin = useAdminStore((s) => s.isAuthorized());
   const { data: employees = [] } = useEmployees();
-  const [currentMonth, setCurrentMonth] = useState(() => new Date());
-  const [shiftType, setShiftType] = useState('6AM');
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => {
-    try {
-      return localStorage.getItem('scheduler_employee_id') || '';
-    } catch {
-      return '';
-    }
-  });
-  const [myOnly, setMyOnly] = useState(() => {
-    try {
-      return localStorage.getItem('scheduler_my_only') === '1';
-    } catch {
-      return false;
-    }
-  });
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailDate, setDetailDate] = useState('');
 
-  const range = useMemo(() => monthRange(currentMonth), [currentMonth]);
-  const { data: schedules = [], isLoading } = useEmployeeSchedules(range);
-  const createMutation = useCreateEmployeeScheduleMutation();
-  const deleteMutation = useDeleteEmployeeScheduleMutation();
+  const toDateKey = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
-  const employeeMap = useMemo(() => {
-    return new Map((employees || []).map((e) => [String(e.id), String(e.english_name || '')]));
+  const parseDateKey = (key) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || '').trim());
+    if (!m) return null;
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const d = Number(m[3]);
+    const dt = new Date(y, mo, d);
+    if (Number.isNaN(dt.getTime())) return null;
+    return dt;
+  };
+
+  const parseMonthKey = (key) => {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(key || '').trim());
+    if (!m) return null;
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const dt = new Date(y, mo, 1);
+    if (Number.isNaN(dt.getTime())) return null;
+    return dt;
+  };
+
+  const toMonthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+  const addDays = (d, days) => {
+    const x = new Date(d);
+    x.setDate(x.getDate() + days);
+    return x;
+  };
+
+  const getWeekMonday = (d) => {
+    const base = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dow = base.getDay();
+    const diff = (dow + 6) % 7;
+    base.setDate(base.getDate() - diff);
+    return base;
+  };
+
+  const getWeekParity = (monday) => {
+    const epochMonday = new Date(1970, 0, 5);
+    const a = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).getTime();
+    const b = epochMonday.getTime();
+    const weeks = Math.floor((a - b) / (7 * 24 * 60 * 60 * 1000));
+    return Math.abs(weeks) % 2;
+  };
+
+  const isPeakDay = (d) => {
+    const dow = d.getDay();
+    return dow === 5 || dow === 6 || dow === 0;
+  };
+
+  const shiftTimeLabel = (d, shift) => {
+    const peak = isPeakDay(d);
+    if (shift === 'all_day') return '08:00~16:00';
+    if (shift === 'morning') return peak ? '06:00~12:30' : '06:00~12:00';
+    return peak ? '11:00~17:00' : '11:30~17:00';
+  };
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => {
+      const ua = navigator.userAgent;
+      const isMobileUA =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet|Kindle|Silk|PlayBook/i.test(
+          ua
+        );
+      const isIOSDesktop = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+      setIsMobile(isMobileUA || isIOSDesktop || window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const [monthStr, setMonthStr] = useState(() => toMonthKey(new Date()));
+  const monthDate = useMemo(
+    () => parseMonthKey(monthStr) || new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    [monthStr]
+  );
+  const monthStart = useMemo(
+    () => new Date(monthDate.getFullYear(), monthDate.getMonth(), 1),
+    [monthDate]
+  );
+  const monthEnd = useMemo(
+    () => new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0),
+    [monthDate]
+  );
+  const monthStartKey = toDateKey(monthStart);
+  const monthEndKey = toDateKey(monthEnd);
+
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [selectedShift, setSelectedShift] = useState('morning');
+  const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
+  const [dragOverDateKey, setDragOverDateKey] = useState(null);
+
+  const normalizeName = (s) =>
+    String(s || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
+
+  const employeeOptions = useMemo(() => {
+    return (employees || [])
+      .slice()
+      .sort((a, b) => String(a?.english_name || '').localeCompare(String(b?.english_name || '')));
   }, [employees]);
 
-  const schedulesByDate = useMemo(() => {
+  const employeeNameById = useMemo(() => {
     const m = new Map();
-    for (const s of schedules || []) {
-      const date = String(s.work_date || '');
-      if (!date) continue;
-      const list = m.get(date) || [];
-      list.push(s);
-      m.set(date, list);
-    }
+    (employees || []).forEach((e) => {
+      if (!e?.id) return;
+      m.set(e.id, String(e.english_name || '').trim() || e.id);
+    });
     return m;
-  }, [schedules]);
+  }, [employees]);
 
-  const monthTitle = useMemo(() => {
-    const d = currentMonth;
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
-  }, [currentMonth]);
+  const employeeKeyById = useMemo(() => {
+    const m = new Map();
+    (employees || []).forEach((e) => {
+      if (!e?.id) return;
+      m.set(e.id, normalizeName(e.english_name));
+    });
+    return m;
+  }, [employees]);
 
-  const cells = useMemo(() => buildCalendarCells(currentMonth), [currentMonth]);
-
-  const onPickEmployee = (id) => {
-    const value = String(id || '');
-    setSelectedEmployeeId(value);
+  const loadMonth = useCallback(async () => {
     try {
-      localStorage.setItem('scheduler_employee_id', value);
-    } catch {}
+      setLoading(true);
+      const data = await sbSelect('employee_schedules', {
+        select: 'id,employee_id,work_date,shift_type',
+        filters: [
+          { column: 'work_date', op: 'gte', value: monthStartKey },
+          { column: 'work_date', op: 'lte', value: monthEndKey },
+        ],
+        orders: [
+          { column: 'work_date', ascending: true },
+          { column: 'shift_type', ascending: true },
+        ],
+        limit: 3000,
+      });
+      setRows(Array.isArray(data) ? data : []);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (msg === 'SUPABASE_CONFIG_MISSING') {
+        showToast(
+          'Supabase 설정이 없습니다. .env에 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY를 넣어주세요.'
+        );
+        return;
+      }
+      showToast(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [monthStartKey, monthEndKey, showToast]);
+
+  useEffect(() => {
+    void loadMonth();
+  }, [loadMonth]);
+
+  const scheduleByDate = useMemo(() => {
+    const m = new Map();
+    rows.forEach((r) => {
+      const k = String(r.work_date || '');
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    });
+    const order = { morning: 0, evening: 1, all_day: 2 };
+    m.forEach((list) => {
+      list.sort((a, b) => {
+        const ao = order[String(a.shift_type || '')] ?? 99;
+        const bo = order[String(b.shift_type || '')] ?? 99;
+        if (ao !== bo) return ao - bo;
+        return String(a.employee_id || '').localeCompare(String(b.employee_id || ''));
+      });
+    });
+    return m;
+  }, [rows]);
+
+  const getDayList = (dateKey) => scheduleByDate.get(dateKey) || [];
+  const getDayCount = (dateKey) => getDayList(dateKey).length;
+  const getDayHasEmployee = (dateKey, employeeId) =>
+    getDayList(dateKey).some((r) => String(r.employee_id) === String(employeeId));
+  const getDayHasShift = (dateKey, shiftType) =>
+    getDayList(dateKey).some((r) => String(r.shift_type) === String(shiftType));
+
+  const filterVisibleSchedules = useCallback(
+    (list) => {
+      if (isAdmin) return list || [];
+      if (!employees || employees.length === 0) return [];
+      return (list || []).filter((r) => employeeKeyById.get(r.employee_id) !== 'maeshi');
+    },
+    [isAdmin, employeeKeyById, employees]
+  );
+
+  const getDayCapacity = (dateKey) => {
+    const d = parseDateKey(dateKey);
+    if (!d) return 2;
+    return d.getDay() === 3 ? 1 : 2;
   };
 
-  const onToggleMyOnly = () => {
-    const next = !myOnly;
-    setMyOnly(next);
-    try {
-      localStorage.setItem('scheduler_my_only', next ? '1' : '0');
-    } catch {}
+  const validateShiftRules = ({ dateKey, shiftType, employeeId }) => {
+    const d = parseDateKey(dateKey);
+    if (!d) return { ok: false, message: 'Invalid date.' };
+
+    const dow = d.getDay();
+    const isWed = dow === 3;
+    const isTue = dow === 2;
+
+    if (isWed && shiftType !== 'all_day') {
+      return { ok: false, message: '수요일은 all_day만 가능합니다.' };
+    }
+    if (!isWed && shiftType === 'all_day') {
+      return { ok: false, message: 'all_day는 수요일만 가능합니다.' };
+    }
+
+    const empKey = employeeKeyById.get(employeeId);
+    if (empKey === 'maeshi') {
+      if (isTue && shiftType !== 'evening') {
+        return { ok: false, message: 'Maeshi는 화요일 evening만 가능합니다.' };
+      }
+      if (isWed && shiftType !== 'all_day') {
+        return { ok: false, message: 'Maeshi는 수요일 all_day만 가능합니다.' };
+      }
+      if (!isTue && !isWed) {
+        return { ok: false, message: 'Maeshi는 화요일/수요일만 배치 가능합니다.' };
+      }
+    }
+
+    return { ok: true };
   };
 
-  const openDetail = (dateKey) => {
-    setDetailDate(String(dateKey || ''));
-    setDetailOpen(true);
-  };
+  const grid = useMemo(() => {
+    const blanks = Array.from({ length: monthStart.getDay() }).map((_, i) => ({
+      kind: 'blank',
+      key: `b:${i}`,
+    }));
+    const daysInMonth = monthEnd.getDate();
+    const days = Array.from({ length: daysInMonth }).map((_, i) => {
+      const d = new Date(monthStart.getFullYear(), monthStart.getMonth(), i + 1);
+      const dateKey = toDateKey(d);
+      return { kind: 'day', date: d, dateKey, dayNum: i + 1, key: `d:${dateKey}` };
+    });
+    return blanks.concat(days);
+  }, [monthStart, monthEnd]);
 
-  const closeDetail = () => {
-    setDetailOpen(false);
-  };
+  const autoGenerateMonthForRange = async ({ startDate, endDate }) => {
+    const byName = new Map();
+    (employees || []).forEach((e) => {
+      const n = normalizeName(e?.english_name);
+      if (!n) return;
+      if (!byName.has(n)) byName.set(n, e);
+    });
 
-  const canAddOnDate = (dateKey) => {
-    const list = schedulesByDate.get(dateKey) || [];
-    return list.length < 2;
-  };
+    const berlyn = byName.get(normalizeName('Berlyn'));
+    const janice = byName.get(normalizeName('Janice'));
+    const maeshi = byName.get(normalizeName('Maeshi'));
 
-  const createSchedule = async ({ employeeId, dateKey }) => {
-    if (!employeeId || !dateKey) return;
-    if (!canAddOnDate(dateKey)) {
-      showToast('하루 최대 2명까지만 배정할 수 있습니다.');
+    if (!maeshi || !berlyn || !janice) {
+      const missing = [
+        !maeshi ? 'Maeshi' : null,
+        !berlyn ? 'Berlyn' : null,
+        !janice ? 'Janice' : null,
+      ].filter(Boolean);
+      showToast(`employees 테이블에 영어 이름이 없습니다: ${missing.join(', ')}`);
       return;
     }
+
+    const startKey = toDateKey(startDate);
+    const endKey = toDateKey(endDate);
+
+    const rowsToInsert = [];
+    for (let d = new Date(startDate); d <= endDate; d = addDays(d, 1)) {
+      const dateKey = toDateKey(d);
+      const dow = d.getDay();
+      const weekMonday = getWeekMonday(d);
+      const weekType = getWeekParity(weekMonday) === 0 ? 'A' : 'B';
+
+      if (dow === 3) {
+        rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'all_day' });
+        continue;
+      }
+
+      if (dow === 2) {
+        const tueMorning = weekType === 'A' ? janice : berlyn;
+        rowsToInsert.push({
+          employee_id: tueMorning.id,
+          work_date: dateKey,
+          shift_type: 'morning',
+        });
+        rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'evening' });
+        continue;
+      }
+
+      const morningEmp = weekType === 'A' ? berlyn : janice;
+      const eveningEmp = weekType === 'A' ? janice : berlyn;
+      rowsToInsert.push({ employee_id: morningEmp.id, work_date: dateKey, shift_type: 'morning' });
+      rowsToInsert.push({ employee_id: eveningEmp.id, work_date: dateKey, shift_type: 'evening' });
+    }
+
+    await sbDelete('employee_schedules', {
+      filters: [
+        { column: 'work_date', op: 'gte', value: startKey },
+        { column: 'work_date', op: 'lte', value: endKey },
+      ],
+    });
+    await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
+    showToast(`Auto 생성 완료 (Month): ${startKey} ~ ${endKey}`);
+  };
+
+  const upsertSchedule = async ({ dateKey, shiftType, employeeId }) => {
+    if (!employeeId) return;
+    const v = validateShiftRules({ dateKey, shiftType, employeeId });
+    if (!v.ok) {
+      showToast(v.message);
+      return;
+    }
+
+    const cap = getDayCapacity(dateKey);
+    if (getDayCount(dateKey) >= cap) {
+      showToast(`하루 최대 ${cap}명까지만 배정 가능합니다.`);
+      return;
+    }
+    if (getDayHasEmployee(dateKey, employeeId)) {
+      showToast('같은 직원이 같은 날짜에 중복 배정될 수 없습니다.');
+      return;
+    }
+    if (getDayHasShift(dateKey, shiftType)) {
+      showToast(`이미 ${shiftType} 배정이 있습니다.`);
+      return;
+    }
+    await sbInsert(
+      'employee_schedules',
+      [{ employee_id: employeeId, work_date: dateKey, shift_type: shiftType }],
+      { returning: 'minimal' }
+    );
+  };
+
+  const moveSchedule = async ({
+    scheduleId,
+    fromDateKey,
+    toDateKey: targetDateKey,
+    employeeId,
+    nextShift,
+  }) => {
+    if (!scheduleId) return;
+    const v = validateShiftRules({ dateKey: targetDateKey, shiftType: nextShift, employeeId });
+    if (!v.ok) {
+      showToast(v.message);
+      return;
+    }
+    if (fromDateKey !== targetDateKey) {
+      const cap = getDayCapacity(targetDateKey);
+      if (getDayCount(targetDateKey) >= cap) {
+        showToast(`하루 최대 ${cap}명까지만 배정 가능합니다.`);
+        return;
+      }
+      if (getDayHasEmployee(targetDateKey, employeeId)) {
+        showToast('같은 직원이 같은 날짜에 중복 배정될 수 없습니다.');
+        return;
+      }
+    }
+    const existsSameShift = getDayHasShift(targetDateKey, nextShift);
+    const current = getDayList(targetDateKey).find((r) => String(r.id) === String(scheduleId));
+    const isSameDateAndShift =
+      fromDateKey === targetDateKey && String(current?.shift_type) === String(nextShift);
+    if (existsSameShift && !isSameDateAndShift) {
+      showToast(`이미 ${nextShift} 배정이 있습니다.`);
+      return;
+    }
+    await sbUpdate(
+      'employee_schedules',
+      { work_date: targetDateKey, shift_type: nextShift },
+      { filters: [{ column: 'id', op: 'eq', value: scheduleId }], returning: 'minimal' }
+    );
+  };
+
+  const deleteSchedule = async (scheduleId) => {
+    if (!scheduleId) return;
+    await sbDelete('employee_schedules', {
+      filters: [{ column: 'id', op: 'eq', value: scheduleId }],
+    });
+  };
+
+  const setDragData = (e, obj) => {
     try {
-      await createMutation.mutateAsync({
-        employee_id: employeeId,
-        shift_type: shiftType,
-        work_date: dateKey,
-      });
-      showToast('스케줄이 저장됐습니다.');
-    } catch (e) {
-      showToast(e?.message || '스케줄 저장 실패');
+      e.dataTransfer.setData('application/x-royal-scheduler', JSON.stringify(obj));
+    } catch {
+      e.dataTransfer.setData('text/plain', JSON.stringify(obj));
+    }
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const getDragData = (e) => {
+    const raw =
+      e.dataTransfer.getData('application/x-royal-scheduler') ||
+      e.dataTransfer.getData('text/plain');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
     }
   };
 
-  const deleteSchedule = async (id) => {
+  const onDropDate = async (e, dateKey) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    const data = getDragData(e);
+    if (!data) return;
     try {
-      await deleteMutation.mutateAsync(id);
-      showToast('삭제했습니다.');
-    } catch (e) {
-      showToast(e?.message || '삭제 실패');
+      setBusy(true);
+      if (data.kind === 'employee') {
+        await upsertSchedule({ dateKey, shiftType: selectedShift, employeeId: data.employeeId });
+        await loadMonth();
+        return;
+      }
+      if (data.kind === 'schedule') {
+        await moveSchedule({
+          scheduleId: data.scheduleId,
+          fromDateKey: data.workDate,
+          toDateKey: dateKey,
+          employeeId: data.employeeId,
+          nextShift: selectedShift,
+        });
+        await loadMonth();
+      }
+    } catch (err) {
+      showToast(String(err?.message || err));
+    } finally {
+      setBusy(false);
+      setDragOverDateKey(null);
     }
   };
 
-  const renderCell = (dateObj, idx) => {
-    const dateKey = dateObj ? toDateKey(dateObj) : '';
-    const list = dateKey ? schedulesByDate.get(dateKey) || [] : [];
-    const isSelectedDate = Boolean(detailOpen && detailDate && detailDate === dateKey);
+  const monthLabel = `${monthDate.getFullYear()}.${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+  const dowLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  const badgeStyle = (shiftType) => {
+    const bg =
+      shiftType === 'morning'
+        ? 'rgba(59, 130, 246, 0.18)'
+        : shiftType === 'evening'
+          ? 'rgba(250, 204, 21, 0.18)'
+          : 'rgba(168, 85, 247, 0.18)';
+    const border =
+      shiftType === 'morning'
+        ? 'rgba(59, 130, 246, 0.45)'
+        : shiftType === 'evening'
+          ? 'rgba(250, 204, 21, 0.45)'
+          : 'rgba(168, 85, 247, 0.45)';
+    return { bg, border };
+  };
+
+  const ShiftButton = ({ value, label }) => {
+    const active = selectedShift === value;
     return (
-      <div
-        key={`${monthTitle}-${idx}`}
-        onClick={() => (dateKey ? openDetail(dateKey) : null)}
-        onDragOver={(e) => {
-          if (!isAdmin || !dateKey) return;
-          e.preventDefault();
-        }}
-        onDrop={(e) => {
-          if (!isAdmin || !dateKey) return;
-          e.preventDefault();
-          const raw = e.dataTransfer?.getData('application/json') || '';
-          let payload = null;
-          try {
-            payload = raw ? JSON.parse(raw) : null;
-          } catch {
-            payload = null;
-          }
-          const employeeId = String(payload?.id || '').trim();
-          if (!employeeId) return;
-          createSchedule({ employeeId, dateKey });
-        }}
+      <button
+        type="button"
+        onClick={() => setSelectedShift(value)}
+        disabled={!isAdmin || busy || loading}
         style={{
-          border: isSelectedDate
-            ? '1px solid rgba(212,175,55,0.55)'
-            : '1px solid rgba(255,255,255,0.08)',
-          background: 'rgba(0,0,0,0.2)',
-          borderRadius: 12,
-          minHeight: 92,
-          padding: 8,
+          width: '100%',
+          height: 44,
+          borderRadius: 14,
+          border: `1px solid ${active ? 'rgba(250, 204, 21, 0.6)' : 'rgba(255,255,255,0.16)'}`,
+          background: active ? 'rgba(250, 204, 21, 0.14)' : 'rgba(255,255,255,0.06)',
+          color: 'white',
+          fontWeight: 900,
           display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-          cursor: dateKey ? 'pointer' : 'default',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0 14px',
+          whiteSpace: 'nowrap',
+          cursor: !isAdmin ? 'default' : 'pointer',
+          opacity: !isAdmin ? 0.7 : 1,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 800 }}>
-            {dateObj ? dateObj.getDate() : ''}
+        {label}
+      </button>
+    );
+  };
+
+  const ScheduleBadge = ({ row, date, dateKey }) => {
+    const shiftType = String(row.shift_type || '');
+    const { bg, border } = badgeStyle(shiftType);
+    const name = employeeNameById.get(row.employee_id) || row.employee_id;
+    if (isMobile) {
+      return (
+        <div
+          className="text-xs"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            padding: '6px 8px',
+            borderRadius: 12,
+            border: `1px solid ${border}`,
+            background: bg,
+            maxWidth: '100%',
+            boxSizing: 'border-box',
+            overflow: 'hidden',
+          }}
+          title={name}
+        >
+          <div
+            style={{
+              fontWeight: 950,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 11,
+              lineHeight: 1.1,
+              minWidth: 0,
+            }}
+          >
+            {name}
           </div>
-          {isAdmin && dateKey ? (
+        </div>
+      );
+    }
+    return (
+      <div
+        draggable={isAdmin}
+        onDragStart={(e) =>
+          setDragData(e, {
+            kind: 'schedule',
+            scheduleId: row.id,
+            employeeId: row.employee_id,
+            workDate: dateKey,
+            shiftType: row.shift_type,
+          })
+        }
+        onContextMenu={async (e) => {
+          if (!isAdmin) return;
+          e.preventDefault();
+          try {
+            setBusy(true);
+            await deleteSchedule(row.id);
+            await loadMonth();
+          } catch (err) {
+            showToast(String(err?.message || err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="text-xs"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          padding: '6px 8px',
+          borderRadius: 12,
+          border: `1px solid ${border}`,
+          background: bg,
+          cursor: isAdmin ? 'grab' : 'default',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
+            <div style={{ fontWeight: 1000, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              [{shiftType}]
+            </div>
             <div
               style={{
-                fontSize: 11,
-                color: canAddOnDate(dateKey) ? '#22c55e' : '#ef4444',
-                fontWeight: 800,
+                fontWeight: 900,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
-              {list.length}/2
+              {name}
             </div>
-          ) : null}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 800 }}>
+            {shiftTimeLabel(date, shiftType)}
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {list.map((s) => {
-            const empName = employeeMap.get(String(s.employee_id)) || 'Unknown';
-            const faded =
-              myOnly && selectedEmployeeId
-                ? String(s.employee_id) !== String(selectedEmployeeId)
-                : false;
-            return (
-              <div key={String(s.id)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={shiftBadgeStyle(String(s.shift_type || ''), faded)}>
-                  [{String(s.shift_type || '').toUpperCase()}] {empName}
-                </span>
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSchedule(s.id);
-                    }}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: faded ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)',
-                      fontWeight: 900,
-                      cursor: 'pointer',
-                      padding: 0,
-                      lineHeight: 1,
-                    }}
-                    aria-label="Delete schedule"
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                setBusy(true);
+                await deleteSchedule(row.id);
+                await loadMonth();
+              } catch (err) {
+                showToast(String(err?.message || err));
+              } finally {
+                setBusy(false);
+              }
+            }}
+            disabled={busy || loading}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(0,0,0,0.25)',
+              color: 'white',
+              fontWeight: 900,
+              cursor: 'pointer',
+              flex: '0 0 auto',
+            }}
+            aria-label="Delete schedule"
+          >
+            ✕
+          </button>
+        )}
       </div>
     );
   };
 
-  const detailRows = useMemo(() => {
-    if (!detailDate) return [];
-    const list = schedulesByDate.get(detailDate) || [];
-    return list.map((s) => ({
-      id: s.id,
-      employee: employeeMap.get(String(s.employee_id)) || 'Unknown',
-      shift: String(s.shift_type || ''),
-    }));
-  }, [detailDate, schedulesByDate, employeeMap]);
-
-  const adminPanel = (
-    <div className="page-card" style={{ minWidth: 260, flex: '0 0 320px' }}>
-      <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ fontWeight: 900, color: 'var(--gold-soft)' }}>SCHEDULER CONTROL</div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 800 }}>Shift</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button
-              size="sm"
-              variant={shiftType === '6AM' ? 'primary' : 'outline'}
-              onClick={() => setShiftType('6AM')}
-            >
-              6AM
-            </Button>
-            <Button
-              size="sm"
-              variant={shiftType === '9AM' ? 'primary' : 'outline'}
-              onClick={() => setShiftType('9AM')}
-            >
-              9AM
-            </Button>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gap: 8 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 800 }}>Employees</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {(employees || []).map((e) => (
-              <div
-                key={String(e.id)}
-                draggable
-                onDragStart={(ev) => {
-                  ev.dataTransfer.setData(
-                    'application/json',
-                    JSON.stringify({ id: String(e.id), name: String(e.english_name || '') })
-                  );
-                  ev.dataTransfer.effectAllowed = 'copy';
-                }}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  background: '#0f0f17',
-                  color: 'var(--text-main)',
-                  fontWeight: 800,
-                  cursor: 'grab',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {String(e.english_name || '')}
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: 900 }}>
-                  ↔
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailDateKey, setDetailDateKey] = useState(null);
+  const detailDate = useMemo(
+    () => (detailDateKey ? parseDateKey(detailDateKey) : null),
+    [detailDateKey]
   );
+  const detailList = useMemo(() => {
+    if (!detailDateKey) return [];
+    return filterVisibleSchedules(scheduleByDate.get(detailDateKey) || []);
+  }, [detailDateKey, scheduleByDate, filterVisibleSchedules]);
 
-  const mobileControls = (
-    <div className="page-card" style={{ padding: 12 }}>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 900, color: 'var(--gold-soft)' }}>MY SCHEDULE</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 800 }}>
-            내 일정만
-          </label>
-          <input type="checkbox" checked={myOnly} onChange={onToggleMyOnly} />
-        </div>
-        <select
-          value={selectedEmployeeId}
-          onChange={(e) => onPickEmployee(e.target.value)}
-          style={{
-            height: 34,
-            padding: '0 10px',
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: '#101018',
-            color: 'var(--text-main)',
-            fontWeight: 700,
-          }}
-        >
-          <option value="">직원 선택</option>
-          {(employees || []).map((e) => (
-            <option key={String(e.id)} value={String(e.id)}>
-              {String(e.english_name || '')}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+  const openDetail = (dateKey) => {
+    setSelectedDateKey(dateKey);
+    setDetailDateKey(dateKey);
+    if (isMobile || !isAdmin) setDetailOpen(true);
+  };
+
+  const handleAutoMonth = async () => {
+    if (!isAdmin) return;
+    try {
+      setBusy(true);
+      await autoGenerateMonthForRange({ startDate: monthStart, endDate: monthEnd });
+      await loadMonth();
+    } catch (err) {
+      showToast(String(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const todayKey = useMemo(() => toDateKey(new Date()), []);
+  const isTodayInView = todayKey >= monthStartKey && todayKey <= monthEndKey;
+  const todayDate = useMemo(() => parseDateKey(todayKey), [todayKey]);
+  const todayList = useMemo(
+    () => filterVisibleSchedules(scheduleByDate.get(todayKey) || []),
+    [filterVisibleSchedules, scheduleByDate, todayKey]
   );
 
   return (
-    <div className="page-container">
-      <div className="flex justify-between items-center mb-3 page-header">
-        <div style={{ display: 'grid', gap: 2 }}>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>
-            Scheduler
-          </h1>
-          <div className="page-subtitle">
-            {isAdmin ? 'Admin scheduling' : 'Mobile schedule view'}
-          </div>
+    <div className="page-root">
+      <div className="page-header">
+        <div>
+          <div className="page-title">Scheduler</div>
+          <div className="page-subtitle">{isAdmin ? 'Admin: drag & drop' : 'Staff: view only'}</div>
         </div>
         <div className="page-actions">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+          <button
+            type="button"
+            disabled={busy || loading}
+            onClick={() =>
+              setMonthStr(
+                toMonthKey(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1))
+              )
+            }
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--gold-soft)',
+              fontSize: 26,
+              fontWeight: 1000,
+              cursor: busy || loading ? 'not-allowed' : 'pointer',
+              padding: '4px 10px',
+              borderRadius: 999,
+              lineHeight: 1,
+              opacity: busy || loading ? 0.55 : 1,
+            }}
+            aria-label="Previous month"
           >
-            Prev
-          </Button>
-          <div style={{ fontWeight: 900, color: 'var(--gold)' }}>{monthTitle}</div>
-          <Button
-            variant="outline"
-            onClick={() => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            &lt;
+          </button>
+          <div
+            style={{
+              fontWeight: 1000,
+              letterSpacing: '0.12em',
+              color: 'var(--text-main)',
+              textTransform: 'uppercase',
+              padding: '4px 6px',
+              whiteSpace: 'nowrap',
+            }}
           >
-            Next
-          </Button>
+            {monthLabel}
+          </div>
+          <button
+            type="button"
+            disabled={busy || loading}
+            onClick={() =>
+              setMonthStr(
+                toMonthKey(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1))
+              )
+            }
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--gold-soft)',
+              fontSize: 26,
+              fontWeight: 1000,
+              cursor: busy || loading ? 'not-allowed' : 'pointer',
+              padding: '4px 10px',
+              borderRadius: 999,
+              lineHeight: 1,
+              opacity: busy || loading ? 0.55 : 1,
+            }}
+            aria-label="Next month"
+          >
+            &gt;
+          </button>
         </div>
       </div>
 
-      {!isAdmin ? mobileControls : null}
-
-      <div
-        className={`flex gap-3 ${isAdmin ? 'stack-mobile' : ''}`}
-        style={{ alignItems: 'flex-start' }}
-      >
-        {isAdmin ? adminPanel : null}
-
-        <div className="page-card" style={{ flex: 1, minWidth: 0 }}>
-          {isLoading ? <div style={{ color: 'var(--text-muted)' }}>Loading...</div> : null}
-          <div
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 10 }}
-          >
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+      <section className="page-card">
+        <div
+          className="flex gap-4 stack-mobile"
+          style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}
+        >
+          {isAdmin && !isMobile && (
+            <div
+              style={{
+                width: 320,
+                flex: '0 0 320px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
+              <div style={{ fontWeight: 1000, letterSpacing: '0.08em', color: 'var(--gold-soft)' }}>
+                SCHEDULER CONTROL
+              </div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                1. 배정할 Shift 선택
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+                <ShiftButton value="morning" label="Morning" />
+                <ShiftButton value="evening" label="Evening" />
+                <ShiftButton value="all_day" label="All Day (Wed)" />
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleAutoMonth}
+                disabled={busy || loading}
+                style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+              >
+                Auto month
+              </Button>
               <div
-                key={d}
+                className="text-sm"
+                style={{ color: 'var(--text-muted)', fontWeight: 800, marginTop: 4 }}
+              >
+                2. 직원 목록 (드래그 하세요)
+              </div>
+              <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
+                {employeeOptions.map((e) => (
+                  <div
+                    key={e.id}
+                    draggable
+                    onDragStart={(evt) => setDragData(evt, { kind: 'employee', employeeId: e.id })}
+                    style={{
+                      borderRadius: 14,
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      background: 'rgba(255,255,255,0.05)',
+                      padding: '10px 12px',
+                      cursor: 'grab',
+                      fontWeight: 900,
+                    }}
+                  >
+                    {e.english_name}
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                Tip: 배지는 드래그로 날짜 이동 가능 · 우클릭 또는 X로 삭제
+              </div>
+            </div>
+          )}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {isMobile && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 900,
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  padding: '0 6px',
+                  display: 'grid',
+                  gap: 8,
+                  marginBottom: 10,
+                  padding: '10px 12px',
+                  borderRadius: 16,
+                  border: '1px solid var(--border-soft)',
+                  background: 'rgba(255,255,255,0.03)',
                 }}
               >
-                {d}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ fontWeight: 1000, letterSpacing: '0.06em' }}>TODAY</div>
+                  <div style={{ color: 'var(--text-muted)', fontWeight: 900, fontSize: 12 }}>
+                    {todayKey}
+                  </div>
+                </div>
+                {!isTodayInView ? (
+                  <div style={{ color: 'var(--text-muted)', fontWeight: 800, fontSize: 12 }}>
+                    현재 보고 있는 달에 오늘 날짜가 없습니다.
+                  </div>
+                ) : todayDate ? (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {todayList.length === 0 ? (
+                      <div style={{ color: 'var(--text-muted)', fontWeight: 800, fontSize: 12 }}>
+                        No schedule.
+                      </div>
+                    ) : (
+                      todayList.map((r) => {
+                        const shiftType = String(r.shift_type || '');
+                        const name = employeeNameById.get(r.employee_id) || r.employee_id;
+                        return (
+                          <div
+                            key={r.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                              fontSize: 12,
+                              fontWeight: 900,
+                            }}
+                          >
+                            <div
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {name}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', flex: '0 0 auto' }}>
+                              {shiftType} {shiftTimeLabel(todayDate, shiftType)}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ))}
-            {cells.map((dateObj, idx) => renderCell(dateObj, idx))}
+            )}
+            {loading ? (
+              <div className="text-[var(--text-muted)]">Loading…</div>
+            ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                  gap: isMobile ? 6 : 10,
+                }}
+              >
+                {dowLabels.map((l) => (
+                  <div
+                    key={l}
+                    className="text-sm"
+                    style={{
+                      color: 'var(--text-muted)',
+                      fontWeight: 900,
+                      textAlign: 'center',
+                      paddingBottom: isMobile ? 2 : 4,
+                      fontSize: isMobile ? 11 : 14,
+                    }}
+                  >
+                    {l}
+                  </div>
+                ))}
+                {grid.map((cell) => {
+                  if (cell.kind === 'blank') return <div key={cell.key} />;
+                  const list = filterVisibleSchedules(getDayList(cell.dateKey));
+                  const count = list.length;
+                  const cap = getDayCapacity(cell.dateKey);
+                  const isToday = (() => {
+                    const now = new Date();
+                    return (
+                      now.getFullYear() === cell.date.getFullYear() &&
+                      now.getMonth() === cell.date.getMonth() &&
+                      now.getDate() === cell.date.getDate()
+                    );
+                  })();
+                  const weekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
+                  const selected = selectedDateKey === cell.dateKey;
+                  const dragging = dragOverDateKey === cell.dateKey;
+                  return (
+                    <div
+                      key={cell.key}
+                      onClick={() => openDetail(cell.dateKey)}
+                      onDragOver={(e) => {
+                        if (!isAdmin) return;
+                        e.preventDefault();
+                        setDragOverDateKey(cell.dateKey);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverDateKey === cell.dateKey) setDragOverDateKey(null);
+                      }}
+                      onDrop={(e) => onDropDate(e, cell.dateKey)}
+                      style={{
+                        borderRadius: isMobile ? 14 : 16,
+                        border: `1px solid ${
+                          dragging
+                            ? 'rgba(250, 204, 21, 0.7)'
+                            : isToday
+                              ? 'rgba(250, 204, 21, 0.55)'
+                              : selected
+                                ? 'rgba(59, 130, 246, 0.55)'
+                                : 'var(--border-soft)'
+                        }`,
+                        background: dragging
+                          ? 'rgba(250, 204, 21, 0.06)'
+                          : 'rgba(255,255,255,0.03)',
+                        padding: isMobile ? 6 : 10,
+                        minHeight: isMobile ? 92 : 124,
+                        maxHeight: isMobile ? 128 : 176,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 1000,
+                            letterSpacing: '0.04em',
+                            color: weekend ? 'var(--gold-soft)' : 'var(--text-main)',
+                          }}
+                        >
+                          {cell.dayNum}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 900,
+                            color: count >= cap ? '#ef4444' : '#22c55e',
+                          }}
+                        >
+                          {count}/{cap}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          marginTop: isMobile ? 6 : 8,
+                          display: 'grid',
+                          gap: isMobile ? 4 : 6,
+                          minHeight: 0,
+                          flex: 1,
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                        }}
+                      >
+                        {list.map((r) => (
+                          <ScheduleBadge
+                            key={r.id}
+                            row={r}
+                            dateKey={cell.dateKey}
+                            date={cell.date}
+                          />
+                        ))}
+                        {list.length === 0 && (
+                          <div
+                            className="text-xs"
+                            style={{ color: 'var(--text-muted)', fontWeight: 800, opacity: 0.7 }}
+                          >
+                            -
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      </section>
 
       <Modal
         open={detailOpen}
-        title={detailDate ? `Schedule: ${detailDate}` : 'Schedule'}
-        onClose={closeDetail}
+        onClose={() => setDetailOpen(false)}
+        title={isMobile ? null : detailDateKey ? detailDateKey : 'Schedule'}
         size="content"
-        align={isAdmin ? 'center' : 'top'}
-        containerStyle={
-          isAdmin
-            ? { width: 'min(520px, 96vw)', maxWidth: '96vw' }
-            : {
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                width: '100vw',
-                maxWidth: '100vw',
-                borderRadius: '18px 18px 0 0',
-                maxHeight: '70vh',
-              }
-        }
-        footer={<></>}
       >
-        <div style={{ display: 'grid', gap: 10 }}>
-          {detailRows.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontWeight: 800 }}>No schedules.</div>
-          ) : (
-            detailRows.map((r) => (
+        {isMobile ? (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {detailDate && (
               <div
-                key={String(r.id)}
                 style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: '#0f0f17',
                   display: 'flex',
+                  alignItems: 'baseline',
                   justifyContent: 'space-between',
-                  gap: 10,
-                  alignItems: 'center',
+                  paddingBottom: 4,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={shiftBadgeStyle(r.shift, false)}>[{r.shift}]</span>
-                  <div style={{ fontWeight: 900 }}>{r.employee}</div>
+                <div style={{ fontWeight: 1000, fontSize: 18 }}>{detailDate.getDate()}</div>
+                <div style={{ fontWeight: 900, color: 'var(--text-muted)', fontSize: 12 }}>
+                  {detailList.length}/{getDayCapacity(detailDateKey)}
                 </div>
-                {isAdmin ? (
-                  <Button size="sm" variant="danger" onClick={() => deleteSchedule(r.id)}>
-                    Delete
-                  </Button>
-                ) : null}
               </div>
-            ))
-          )}
-        </div>
+            )}
+            {detailDate && (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {detailList.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', fontWeight: 800 }}>No schedule.</div>
+                ) : (
+                  detailList.map((r) => {
+                    const shiftType = String(r.shift_type || '');
+                    const { bg, border } = badgeStyle(shiftType);
+                    const name = employeeNameById.get(r.employee_id) || r.employee_id;
+                    return (
+                      <div
+                        key={r.id}
+                        style={{
+                          padding: '12px 12px',
+                          borderRadius: 16,
+                          border: `1px solid ${border}`,
+                          background: bg,
+                          display: 'grid',
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ fontWeight: 1000, fontSize: 14 }}>{name}</div>
+                        <div style={{ fontWeight: 900, fontSize: 12, color: 'var(--text-muted)' }}>
+                          {shiftType} {shiftTimeLabel(detailDate, shiftType)}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-sm" style={{ display: 'grid', gap: 10 }}>
+            <div style={{ color: 'var(--text-muted)', fontWeight: 900 }}>
+              {isAdmin ? '관리자는 PC에서 드래그로 배정/수정합니다.' : '조회 전용 화면입니다.'}
+            </div>
+            {detailDate && (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {detailList.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', fontWeight: 800 }}>No schedule.</div>
+                ) : (
+                  detailList.map((r) => (
+                    <ScheduleBadge key={r.id} row={r} dateKey={detailDateKey} date={detailDate} />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

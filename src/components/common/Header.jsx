@@ -113,7 +113,6 @@ export default function Header() {
     { to: '/sell', label: 'sell product', adminOnly: false },
     { to: '/sales', label: 'sell list', adminOnly: false },
     { to: '/staff-sold', label: 'sold', adminOnly: false },
-    { to: '/scheduler', label: 'scheduler', adminOnly: false },
     { to: '/sold-products', label: 'sold products', adminOnly: true },
     { to: '/expenses', label: 'expenses', adminOnly: true },
     { to: '/profit', label: 'profit', adminOnly: true },
@@ -192,7 +191,7 @@ export default function Header() {
           }}
         >
           <NavLink
-            to="/"
+            to="/scheduler"
             style={{
               display: 'flex',
               alignItems: 'center',

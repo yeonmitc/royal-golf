@@ -3,7 +3,7 @@ import Button from '../components/common/Button';
 import DataTable from '../components/common/DataTable';
 import { sbSelect } from '../db/supabaseRest';
 import { getExpenseCategories, getExpensesLite } from '../features/expenses/expensesApi';
-import { getSalesSummaryRows } from '../features/sales/salesApiSupabase';
+import { getSalesSummaryRows } from '../features/sales/salesApiClient';
 
 // Helper for date formatting without date-fns
 function formatDate(dateStr, fmt = 'yyyy-MM-dd') {
@@ -61,13 +61,15 @@ async function fetchGiftCostByCode(codes, onProgress) {
     const inList = buildInList(chunk);
     if (inList === '()') continue;
     const rows = await sbSelect('products', {
-      select: 'code,p1price',
+      select: 'code,kprice,p1price',
       filters: [{ column: 'code', op: 'in', value: inList }],
     });
     (rows || []).forEach((row) => {
       const code = String(row?.code || '').trim();
       const p1price = Number(row?.p1price || 0) || 0;
-      if (code) out.set(code, p1price);
+      const kprice = Number(row?.kprice || 0) || 0;
+      const unitPhp = p1price > 0 ? p1price : kprice > 0 ? kprice / 25 : 0;
+      if (code) out.set(code, unitPhp);
     });
     if (typeof onProgress === 'function') {
       onProgress({
@@ -131,9 +133,9 @@ export default function ProfitPage() {
       ]);
 
       const giftCodes = salesRows
-        .filter((row) => !row?.isElla && Boolean(row?.freeGift) && !row?.isRefunded)
+        .filter((row) => Boolean(row?.freeGift) && !row?.isRefunded)
         .map((row) => row?.code);
-      reportProgress(45, '선물 원가 조회 중...');
+      reportProgress(45, '선물 원가 계산 준비 중...');
       const giftCostByCode = await fetchGiftCostByCode(
         giftCodes,
         ({ currentChunk, totalChunks }) => {
@@ -154,8 +156,9 @@ export default function ProfitPage() {
       const ensureEntry = (key) => {
         if (!dailyMap.has(key)) {
           dailyMap.set(key, {
-            sales: 0,
-            commission: 0,
+            grossSales: 0,
+            ellaSales: 0,
+            guideCommission: 0,
             giftCost: 0,
             expense: 0,
           });
@@ -167,15 +170,23 @@ export default function ProfitPage() {
       for (const row of salesRows) {
         const key = String(row?.soldAt || '').slice(0, 10);
         if (!key) continue;
-        if (row?.isElla) continue;
         const entry = ensureEntry(key);
         const lineTotal = Number(row?.lineTotalPhp || 0) || 0;
         const commission = Number(row?.commission || 0) || 0;
         const qty = Number(row?.qty || 0) || 0;
         const code = String(row?.code || '').trim();
-        const giftUnitCost = Number(giftCostByCode.get(code) || 0) || 0;
-        entry.sales += lineTotal;
-        entry.commission += commission;
+        const giftUnitCost = giftCostByCode.get(code) || 0;
+
+        entry.grossSales += lineTotal;
+
+        if (row?.isElla) {
+          entry.ellaSales += lineTotal;
+        }
+
+        if (!row?.isElla && !row?.isPeter && !row?.isMrMoon) {
+          entry.guideCommission += commission;
+        }
+
         if (row?.freeGift && !row?.isRefunded) {
           entry.giftCost += giftUnitCost * qty;
         }
@@ -197,12 +208,15 @@ export default function ProfitPage() {
       let cumulative = 0;
       const rows = getDateKeysBetween(from, to).map((date) => {
         const entry = dailyMap.get(date) || {
-          sales: 0,
-          commission: 0,
+          grossSales: 0,
+          ellaSales: 0,
+          guideCommission: 0,
           giftCost: 0,
           expense: 0,
         };
-        const revenue = Math.round(entry.sales - entry.commission - entry.giftCost);
+        const revenue = Math.round(
+          entry.grossSales - entry.ellaSales - entry.guideCommission - entry.giftCost
+        );
         const expense = Math.round(entry.expense);
         const profit = revenue - expense;
         cumulative += profit;

@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_name TEXT NOT NULL,
   attendance_time TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-  shift_type TEXT NOT NULL CHECK (shift_type IN ('6AM', '9AM')),
+  shift_type TEXT NOT NULL CHECK (shift_type IN ('morning', 'evening')),
   location JSONB, -- Stores { latitude, longitude, ... }
   is_tardy BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
