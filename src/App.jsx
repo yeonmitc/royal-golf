@@ -16,6 +16,7 @@ import SoldProductPage from './pages/SoldProductPage';
 import StaffSoldProductPage from './pages/StaffSoldProductPage';
 import ProfitPage from './pages/ProfitPage';
 import ReportPage from './pages/ReportPage';
+import SchedulerPage from './pages/SchedulerPage';
 
 export default function App() {
   return (
@@ -90,6 +91,7 @@ export default function App() {
             </AdminRoute>
           }
         />
+        <Route path="/scheduler" element={<SchedulerPage />} />
         <Route path="/staff-sold" element={<StaffSoldProductPage />} />
         <Route path="/check-stock" element={<CheckStockPage />} />
         {/* 404 */}
