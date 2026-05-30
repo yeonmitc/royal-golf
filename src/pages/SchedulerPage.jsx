@@ -72,7 +72,7 @@ export default function SchedulerPage() {
     const peak = isPeakDay(d);
     if (shift === 'all_day') return '08:00~16:00';
     if (shift === 'morning') return peak ? '06:00~12:30' : '06:00~12:00';
-    return peak ? '11:00~17:00' : '11:30~17:00';
+    return peak ? '10:30~17:00' : '11:30~17:00';
   };
 
   const [isMobile, setIsMobile] = useState(false);
@@ -225,25 +225,103 @@ export default function SchedulerPage() {
 
     const dow = d.getDay();
     const isWed = dow === 3;
-    const isTue = dow === 2;
+    const isThu = dow === 4;
 
-    if (isWed && shiftType !== 'all_day') {
-      return { ok: false, message: '수요일은 all_day만 가능합니다.' };
+    const empKey = employeeKeyById.get(employeeId);
+    if (isWed) {
+      if (empKey === 'maeshi') {
+        if (shiftType !== 'all_day') {
+          return { ok: false, message: '수요일은 Maeshi all_day만 가능합니다.' };
+        }
+        return { ok: true };
+      }
+      return { ok: false, message: '수요일은 Berlyn/Janice 휴무입니다.' };
     }
-    if (!isWed && shiftType === 'all_day') {
+
+    if (shiftType === 'all_day') {
       return { ok: false, message: 'all_day는 수요일만 가능합니다.' };
     }
 
-    const empKey = employeeKeyById.get(employeeId);
-    if (empKey === 'maeshi') {
-      if (isTue && shiftType !== 'evening') {
-        return { ok: false, message: 'Maeshi는 화요일 evening만 가능합니다.' };
+    if (empKey === 'berlyn' || empKey === 'janice') {
+      const otherKey = (k) => (k === 'berlyn' ? 'janice' : 'berlyn');
+      const weekMonday = getWeekMonday(d);
+      const weekMorningKeys = new Set();
+      const weekEveningKeys = new Set();
+      for (let i = 0; i < 7; i += 1) {
+        const wk = toDateKey(addDays(weekMonday, i));
+        (scheduleByDate.get(wk) || []).forEach((r) => {
+          const k = employeeKeyById.get(r.employee_id);
+          if (k !== 'berlyn' && k !== 'janice') return;
+          if (r.shift_type === 'morning') weekMorningKeys.add(k);
+          if (r.shift_type === 'evening') weekEveningKeys.add(k);
+        });
       }
-      if (isWed && shiftType !== 'all_day') {
-        return { ok: false, message: 'Maeshi는 수요일 all_day만 가능합니다.' };
+
+      const existingMorning = Array.from(weekMorningKeys);
+      const existingEvening = Array.from(weekEveningKeys);
+
+      if (existingMorning.length > 1) {
+        return {
+          ok: false,
+          message: '해당 주(월요일 기준)의 morning 배정이 이미 섞여있습니다. 먼저 정리해주세요.',
+        };
       }
-      if (!isTue && !isWed) {
-        return { ok: false, message: 'Maeshi는 화요일/수요일만 배치 가능합니다.' };
+      if (existingEvening.length > 1) {
+        return {
+          ok: false,
+          message: '해당 주(월요일 기준)의 evening 배정이 이미 섞여있습니다. 먼저 정리해주세요.',
+        };
+      }
+
+      let weekMorning = existingMorning[0] || null;
+      let weekEvening = existingEvening[0] || null;
+
+      if (!weekMorning && !weekEvening) {
+        if (shiftType === 'morning') {
+          weekMorning = empKey;
+          weekEvening = otherKey(empKey);
+        } else if (shiftType === 'evening') {
+          weekEvening = empKey;
+          weekMorning = otherKey(empKey);
+        }
+      } else if (weekMorning && !weekEvening) {
+        weekEvening = otherKey(weekMorning);
+      } else if (!weekMorning && weekEvening) {
+        weekMorning = otherKey(weekEvening);
+      }
+
+      if (weekMorning && weekEvening && weekMorning === weekEvening) {
+        return {
+          ok: false,
+          message: '해당 주(월요일 기준)의 morning/evening 규칙이 깨져있습니다. 먼저 정리해주세요.',
+        };
+      }
+
+      if (isThu) {
+        if (weekEvening && empKey === weekEvening) {
+          return { ok: false, message: '목요일은 해당 직원 day-off 입니다. (주 단위 로테이션)' };
+        }
+        if (weekMorning && empKey === weekMorning && shiftType !== 'morning') {
+          return { ok: false, message: '목요일은 morning만 배정합니다. (주 단위 로테이션)' };
+        }
+        if (shiftType === 'evening') {
+          return { ok: false, message: '목요일 evening은 Berlyn/Janice 배정이 아닙니다.' };
+        }
+      }
+
+      if (!isThu) {
+        if (shiftType === 'morning' && weekMorning && weekMorning !== empKey) {
+          return { ok: false, message: '해당 주는 morning 담당이 고정입니다. (월요일 기준)' };
+        }
+        if (shiftType === 'evening' && weekEvening && weekEvening !== empKey) {
+          return { ok: false, message: '해당 주는 evening 담당이 고정입니다. (월요일 기준)' };
+        }
+        if (shiftType === 'morning' && weekEvening && weekEvening === empKey) {
+          return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
+        }
+        if (shiftType === 'evening' && weekMorning && weekMorning === empKey) {
+          return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
+        }
       }
     }
 
@@ -264,7 +342,7 @@ export default function SchedulerPage() {
     return blanks.concat(days);
   }, [monthStart, monthEnd]);
 
-  const autoGenerateMonthForRange = async ({ startDate, endDate }) => {
+  const autoGenerateMonthForRange = async ({ startDate, endDate, startMorningKey }) => {
     const byName = new Map();
     (employees || []).forEach((e) => {
       const n = normalizeName(e?.english_name);
@@ -276,9 +354,8 @@ export default function SchedulerPage() {
     const janice = byName.get(normalizeName('Janice'));
     const maeshi = byName.get(normalizeName('Maeshi'));
 
-    if (!maeshi || !berlyn || !janice) {
+    if (!berlyn || !janice) {
       const missing = [
-        !maeshi ? 'Maeshi' : null,
         !berlyn ? 'Berlyn' : null,
         !janice ? 'Janice' : null,
       ].filter(Boolean);
@@ -289,33 +366,81 @@ export default function SchedulerPage() {
     const startKey = toDateKey(startDate);
     const endKey = toDateKey(endDate);
 
+    const otherEmp = (emp) => (String(emp?.id) === String(berlyn.id) ? janice : berlyn);
+    const defaultMorningForWeek = (monday) => (getWeekParity(monday) === 0 ? berlyn : janice);
+
+    const firstWeekMonday = getWeekMonday(startDate);
+    const prevWeekMonday = addDays(firstWeekMonday, -7);
+    const prevWeekStartKey = toDateKey(prevWeekMonday);
+    const prevWeekEndKey = toDateKey(addDays(prevWeekMonday, 6));
+
+    let firstWeekMorning = null;
+    if (startMorningKey === 'berlyn') firstWeekMorning = berlyn;
+    if (startMorningKey === 'janice') firstWeekMorning = janice;
+    try {
+      const prevRows = await sbSelect('employee_schedules', {
+        select: 'employee_id,work_date,shift_type',
+        filters: [
+          { column: 'work_date', op: 'gte', value: prevWeekStartKey },
+          { column: 'work_date', op: 'lte', value: prevWeekEndKey },
+          { column: 'shift_type', op: 'eq', value: 'morning' },
+        ],
+        orders: [{ column: 'work_date', ascending: true }],
+        limit: 50,
+      });
+      const hit = (Array.isArray(prevRows) ? prevRows : []).find(
+        (r) =>
+          String(r.employee_id) === String(berlyn.id) || String(r.employee_id) === String(janice.id)
+      );
+      if (hit) {
+        const isBerlyn = String(hit.employee_id) === String(berlyn.id);
+        const isJanice = String(hit.employee_id) === String(janice.id);
+        if (isBerlyn) firstWeekMorning = otherEmp(berlyn);
+        if (isJanice) firstWeekMorning = otherEmp(janice);
+      }
+    } catch {
+      firstWeekMorning = null;
+    }
+    if (!firstWeekMorning) firstWeekMorning = defaultMorningForWeek(firstWeekMonday);
+
+    const weekMorningByMondayKey = new Map();
+
     const rowsToInsert = [];
     for (let d = new Date(startDate); d <= endDate; d = addDays(d, 1)) {
       const dateKey = toDateKey(d);
       const dow = d.getDay();
       const weekMonday = getWeekMonday(d);
-      const weekType = getWeekParity(weekMonday) === 0 ? 'A' : 'B';
+      const weekMondayKey = toDateKey(weekMonday);
+      if (!weekMorningByMondayKey.has(weekMondayKey)) {
+        const prevMondayKey = toDateKey(addDays(weekMonday, -7));
+        if (weekMorningByMondayKey.has(prevMondayKey)) {
+          weekMorningByMondayKey.set(weekMondayKey, otherEmp(weekMorningByMondayKey.get(prevMondayKey)));
+        } else if (weekMondayKey === toDateKey(firstWeekMonday)) {
+          weekMorningByMondayKey.set(weekMondayKey, firstWeekMorning);
+        } else {
+          weekMorningByMondayKey.set(weekMondayKey, defaultMorningForWeek(weekMonday));
+        }
+      }
+      const weekMorning = weekMorningByMondayKey.get(weekMondayKey);
+      const weekEvening = otherEmp(weekMorning);
 
       if (dow === 3) {
-        rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'all_day' });
+        if (maeshi?.id) {
+          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'all_day' });
+        }
         continue;
       }
 
-      if (dow === 2) {
-        const tueMorning = weekType === 'A' ? janice : berlyn;
-        rowsToInsert.push({
-          employee_id: tueMorning.id,
-          work_date: dateKey,
-          shift_type: 'morning',
-        });
-        rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'evening' });
+      if (dow === 4) {
+        rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning' });
+        if (maeshi?.id) {
+          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'evening' });
+        }
         continue;
       }
 
-      const morningEmp = weekType === 'A' ? berlyn : janice;
-      const eveningEmp = weekType === 'A' ? janice : berlyn;
-      rowsToInsert.push({ employee_id: morningEmp.id, work_date: dateKey, shift_type: 'morning' });
-      rowsToInsert.push({ employee_id: eveningEmp.id, work_date: dateKey, shift_type: 'evening' });
+      rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning' });
+      rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'evening' });
     }
 
     await sbDelete('employee_schedules', {
@@ -337,6 +462,10 @@ export default function SchedulerPage() {
     }
 
     const cap = getDayCapacity(dateKey);
+    if (cap <= 0) {
+      showToast('해당 날짜는 휴무입니다.');
+      return;
+    }
     if (getDayCount(dateKey) >= cap) {
       showToast(`하루 최대 ${cap}명까지만 배정 가능합니다.`);
       return;
@@ -371,6 +500,10 @@ export default function SchedulerPage() {
     }
     if (fromDateKey !== targetDateKey) {
       const cap = getDayCapacity(targetDateKey);
+      if (cap <= 0) {
+        showToast('해당 날짜는 휴무입니다.');
+        return;
+      }
       if (getDayCount(targetDateKey) >= cap) {
         showToast(`하루 최대 ${cap}명까지만 배정 가능합니다.`);
         return;
@@ -459,15 +592,15 @@ export default function SchedulerPage() {
   const badgeStyle = (shiftType) => {
     const bg =
       shiftType === 'morning'
-        ? 'rgba(59, 130, 246, 0.18)'
+        ? 'rgba(250, 204, 21, 0.18)'
         : shiftType === 'evening'
-          ? 'rgba(250, 204, 21, 0.18)'
+          ? 'rgba(59, 130, 246, 0.18)'
           : 'rgba(168, 85, 247, 0.18)';
     const border =
       shiftType === 'morning'
-        ? 'rgba(59, 130, 246, 0.45)'
+        ? 'rgba(250, 204, 21, 0.45)'
         : shiftType === 'evening'
-          ? 'rgba(250, 204, 21, 0.45)'
+          ? 'rgba(59, 130, 246, 0.45)'
           : 'rgba(168, 85, 247, 0.45)';
     return { bg, border };
   };
@@ -512,7 +645,7 @@ export default function SchedulerPage() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'space-between',
             gap: 6,
             padding: '6px 8px',
             borderRadius: 12,
@@ -524,18 +657,23 @@ export default function SchedulerPage() {
           }}
           title={name}
         >
-          <div
-            style={{
-              fontWeight: 950,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: 11,
-              lineHeight: 1.1,
-              minWidth: 0,
-            }}
-          >
-            {name}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+            <div
+              style={{
+                fontWeight: 950,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: 11,
+                lineHeight: 1.1,
+                minWidth: 0,
+              }}
+            >
+              {name}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 800 }}>
+              {shiftType} {shiftTimeLabel(date, shiftType)}
+            </div>
           </div>
         </div>
       );
@@ -577,26 +715,28 @@ export default function SchedulerPage() {
           background: bg,
           cursor: isAdmin ? 'grab' : 'default',
           userSelect: 'none',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
-            <div style={{ fontWeight: 1000, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              [{shiftType}]
-            </div>
             <div
               style={{
-                fontWeight: 900,
+                fontWeight: 950,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                minWidth: 0,
+                flex: 1,
               }}
             >
               {name}
             </div>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 800 }}>
-            {shiftTimeLabel(date, shiftType)}
+            {shiftType} {shiftTimeLabel(date, shiftType)}
           </div>
         </div>
         {isAdmin && (
@@ -652,11 +792,38 @@ export default function SchedulerPage() {
     if (isMobile || !isAdmin) setDetailOpen(true);
   };
 
+  const [autoMonthStartMorning, setAutoMonthStartMorning] = useState('berlyn');
+
+  const [resetMonthOpen, setResetMonthOpen] = useState(false);
+  const handleResetMonth = async () => {
+    if (!isAdmin) return;
+    try {
+      setBusy(true);
+      await sbDelete('employee_schedules', {
+        filters: [
+          { column: 'work_date', op: 'gte', value: monthStartKey },
+          { column: 'work_date', op: 'lte', value: monthEndKey },
+        ],
+      });
+      showToast(`월 스케줄 초기화 완료: ${monthStartKey} ~ ${monthEndKey}`);
+      await loadMonth();
+    } catch (err) {
+      showToast(String(err?.message || err));
+    } finally {
+      setBusy(false);
+      setResetMonthOpen(false);
+    }
+  };
+
   const handleAutoMonth = async () => {
     if (!isAdmin) return;
     try {
       setBusy(true);
-      await autoGenerateMonthForRange({ startDate: monthStart, endDate: monthEnd });
+      await autoGenerateMonthForRange({
+        startDate: monthStart,
+        endDate: monthEnd,
+        startMorningKey: autoMonthStartMorning,
+      });
       await loadMonth();
     } catch (err) {
       showToast(String(err?.message || err));
@@ -770,6 +937,56 @@ export default function SchedulerPage() {
                 <ShiftButton value="evening" label="Evening" />
                 <ShiftButton value="all_day" label="All Day (Wed)" />
               </div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                Auto month 시작 Morning
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 10,
+                }}
+              >
+                {[
+                  { key: 'berlyn', label: 'Berlyn' },
+                  { key: 'janice', label: 'Janice' },
+                ].map((opt) => {
+                  const active = autoMonthStartMorning === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setAutoMonthStartMorning(opt.key)}
+                      disabled={busy || loading}
+                      style={{
+                        width: '100%',
+                        height: 44,
+                        borderRadius: 14,
+                        border: `1px solid ${
+                          active ? 'rgba(250, 204, 21, 0.65)' : 'rgba(255,255,255,0.16)'
+                        }`,
+                        background: active ? 'rgba(250, 204, 21, 0.14)' : 'rgba(255,255,255,0.06)',
+                        color: 'white',
+                        fontWeight: 950,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '0 14px',
+                        whiteSpace: 'nowrap',
+                        cursor: busy || loading ? 'not-allowed' : 'pointer',
+                        opacity: busy || loading ? 0.6 : 1,
+                      }}
+                      aria-pressed={active}
+                    >
+                      <span style={{ width: 14, textAlign: 'center', opacity: active ? 1 : 0.25 }}>
+                        ✓
+                      </span>
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
               <Button
                 variant="primary"
                 size="sm"
@@ -804,6 +1021,15 @@ export default function SchedulerPage() {
                   </div>
                 ))}
               </div>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setResetMonthOpen(true)}
+                disabled={busy || loading}
+                style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+              >
+                Reset month
+              </Button>
               <div className="text-xs" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
                 Tip: 배지는 드래그로 날짜 이동 가능 · 우클릭 또는 X로 삭제
               </div>
@@ -1096,6 +1322,27 @@ export default function SchedulerPage() {
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={resetMonthOpen}
+        onClose={() => setResetMonthOpen(false)}
+        title="Reset month"
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
+            <Button variant="outline" size="sm" onClick={() => setResetMonthOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleResetMonth} disabled={busy || loading}>
+              Reset
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ width: 'min(520px, 90vw)', whiteSpace: 'pre-line', fontWeight: 800 }}>
+          {`해당 월 스케줄을 모두 삭제합니다.\n${monthStartKey} ~ ${monthEndKey}`}
+        </div>
       </Modal>
     </div>
   );

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import {
-  useCheckDailyAttendance,
   useDeleteAttendanceMutation,
   useMonthlyAttendance,
   useRecordAttendanceMutation,
@@ -66,6 +65,12 @@ const toUtcDateKey = (d) => {
   const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
+
+const normalizeShiftType = (s) =>
+  String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
 
 const CurrentTimeDisplay = () => {
   const [now, setNow] = useState(new Date());
@@ -152,11 +157,16 @@ const AttendanceCalendar = () => {
       );
 
       const target = new Date(checkTime);
-      if (l.shift_type === 'morning') target.setHours(6, 0, 0, 0);
-      else {
-        const dow = target.getDay();
-        const peak = dow === 5 || dow === 6 || dow === 0;
-        target.setHours(peak ? 11 : 11, peak ? 0 : 30, 0, 0);
+      const dow = target.getDay();
+      if (l.shift_type === 'morning') {
+        target.setHours(dow === 3 ? 8 : 6, 0, 0, 0);
+      } else {
+        if (dow === 3) {
+          target.setHours(8, 0, 0, 0);
+        } else {
+          const peak = dow === 5 || dow === 6 || dow === 0;
+          target.setHours(peak ? 10 : 11, 30, 0, 0);
+        }
       }
 
       const score = getPunctualityScore(target, checkTime);
@@ -178,24 +188,17 @@ const AttendanceCalendar = () => {
     details.forEach((d) => {
       if (!scoreByName.has(d.name)) scoreByName.set(d.name, Number(d.score ?? 0) || 0);
     });
-    const jScoreVal = scoreByName.get('JESHEICA');
-    const bScoreVal = scoreByName.get('BERLYN');
+    const scores = Array.from(scoreByName.values());
+    const finalScore =
+      scores.length === 0 ? 100 : scores.reduce((sum, v) => sum + v, 0) / scores.length;
 
-    const dow = targetDate.getDay();
-    const isMonTue = dow === 1 || dow === 2;
-    let finalScore;
-    if (isMonTue) {
-      if (jScoreVal != null && bScoreVal == null) finalScore = jScoreVal;
-      else if (bScoreVal != null && jScoreVal == null) finalScore = bScoreVal;
-      else if (jScoreVal != null && bScoreVal != null) finalScore = (jScoreVal + bScoreVal) / 2;
-      else finalScore = 100;
-    } else {
-      const jPart = jScoreVal != null ? jScoreVal : 100;
-      const bPart = bScoreVal != null ? bScoreVal : 100;
-      finalScore = (jPart + bPart) / 2;
-    }
-    finalScore = Math.max(0, Math.min(100, finalScore));
-    return { score: Math.round(finalScore), isFuture, hasLog: true, details, noAttendance: false };
+    return {
+      score: Math.round(Math.max(0, Math.min(100, finalScore))),
+      isFuture,
+      hasLog: true,
+      details,
+      noAttendance: false,
+    };
   };
 
   return (
@@ -395,6 +398,7 @@ const AttendanceCalendar = () => {
 export default function AttendanceModal({ open, onClose }) {
   const [selectedShift, setSelectedShift] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [hoverKey, setHoverKey] = useState(null);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
@@ -440,14 +444,25 @@ export default function AttendanceModal({ open, onClose }) {
   const { data: employees = [] } = useEmployees();
 
   const todayKey = toLocalDateKey(today);
-  const [justCheckedSet, setJustCheckedSet] = useState(() => new Set());
 
-  useEffect(() => {
-    if (!open) return;
-    setJustCheckedSet(new Set());
-  }, [open, todayKey]);
+  const isWedToday = today.getDay() === 3;
 
-  const checkedTodaySet = useMemo(() => {
+  const todayShiftTakenSet = useMemo(() => {
+    const set = new Set();
+    (monthLogs || []).forEach((l) => {
+      const stored = new Date(l.attendance_time);
+      const logKey = toLocalDateKey(
+        new Date(stored.getUTCFullYear(), stored.getUTCMonth(), stored.getUTCDate())
+      );
+      if (logKey !== todayKey) return;
+      const shift = normalizeShiftType(l?.shift_type);
+      if (!shift) return;
+      set.add(shift);
+    });
+    return set;
+  }, [monthLogs, todayKey]);
+
+  const todayStaffTakenSet = useMemo(() => {
     const set = new Set();
     (monthLogs || []).forEach((l) => {
       const stored = new Date(l.attendance_time);
@@ -456,30 +471,39 @@ export default function AttendanceModal({ open, onClose }) {
       );
       if (logKey !== todayKey) return;
       const name = String(l?.employee_name || '').trim();
-      if (name) set.add(name);
+      if (!name) return;
+      set.add(name);
     });
-    justCheckedSet.forEach((n) => set.add(n));
     return set;
-  }, [monthLogs, todayKey, justCheckedSet]);
+  }, [monthLogs, todayKey]);
 
-  const staffOptions = (() => {
-    const emp = (employees || []).map((e) => String(e?.english_name || '').trim()).filter(Boolean);
-    if (emp.length > 0) return emp;
+  const isShiftTaken = (shift) => todayShiftTakenSet.has(normalizeShiftType(shift));
+  const isStaffTaken = (name) => todayStaffTakenSet.has(String(name || '').trim());
+  const isShiftDisabled = (shift) => {
+    const s = normalizeShiftType(shift);
+    if (!s) return true;
+    if (isPending) return true;
+    if (s === 'evening' && isWedToday) return true;
+    return isShiftTaken(s);
+  };
+
+  const staffOptions = useMemo(() => {
+    if ((employees || []).length > 0) {
+      return (employees || [])
+        .map((e) => String(e?.english_name || '').trim())
+        .filter(Boolean);
+    }
     return Array.from(
       new Set((monthLogs || []).map((l) => String(l?.employee_name || '').trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b));
-  })();
+  }, [employees, monthLogs]);
 
-  const { data: selectedStaffLog, isLoading: staffCheckLoading } = useCheckDailyAttendance(
-    selectedStaff || ''
-  );
-  const normalizeShiftType = (s) =>
-    String(s || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '');
-  const checkedShiftType = selectedStaffLog ? normalizeShiftType(selectedStaffLog.shift_type) : '';
-  const isAlreadyChecked = Boolean(selectedStaffLog);
+  useEffect(() => {
+    if (!selectedStaff) return;
+    if (!staffOptions.includes(selectedStaff)) {
+      setSelectedStaff(null);
+    }
+  }, [selectedStaff, staffOptions]);
 
   const { mutate: recordAttendance, isPending } = useRecordAttendanceMutation();
   const { mutate: updateAttendance, isPending: isUpdating } = useUpdateAttendanceMutation();
@@ -502,49 +526,19 @@ export default function AttendanceModal({ open, onClose }) {
     d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
 
   const handleShiftChange = (shift) => {
-    if (selectedShift === shift) return;
-    setSelectedShift(shift);
+    const s = normalizeShiftType(shift);
+    if (!s) return;
+    if (selectedShift === s) return;
+    if (isShiftDisabled(s)) return;
+    setSelectedShift(s);
+    setSelectedStaff(null);
   };
 
   const handleStaffChange = (staff) => {
     const next = String(staff || '').trim();
     if (!next) return;
-    if (selectedStaff === next) {
-      setSelectedStaff(null);
-      setSelectedShift(null);
-      return;
-    }
-    setSelectedStaff(next);
-    setSelectedShift(null);
-    if (!checkedTodaySet.has(next)) return;
-    const msg = `Already checked in today: ${next}`;
-    if (isCompact) {
-      setAlertTone('info');
-      setAlertTitle('Attendance');
-      setAlertMessage(msg);
-      setAlertOpen(true);
-    } else {
-      showToast(msg);
-    }
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    if (!selectedStaff) return;
-    if (staffCheckLoading) return;
-    if (!selectedStaffLog) return;
-    setSelectedShift(checkedShiftType || null);
-  }, [open, selectedStaff, selectedStaffLog, checkedShiftType, staffCheckLoading]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!selectedShift || !selectedStaff) return;
-    if (savingRef.current) return;
-    if (isPending) return;
-    if (staffCheckLoading) return;
-    if (selectedStaffLog) {
-      const d = parseLogTime(selectedStaffLog);
-      const msg = `Already checked: ${selectedStaff} (${formatTimeForDisplay(d)})`;
+    if (!selectedShift) {
+      const msg = '먼저 shift를 선택하세요.';
       if (isCompact) {
         setAlertTone('info');
         setAlertTitle('Attendance');
@@ -553,6 +547,65 @@ export default function AttendanceModal({ open, onClose }) {
       } else {
         showToast(msg);
       }
+      return;
+    }
+    if (isShiftDisabled(selectedShift)) {
+      const msg = `이미 ${selectedShift} 스탬프가 있습니다.`;
+      if (isCompact) {
+        setAlertTone('info');
+        setAlertTitle('Attendance');
+        setAlertMessage(msg);
+        setAlertOpen(true);
+      } else {
+        showToast(msg);
+      }
+      return;
+    }
+    if (isStaffTaken(next)) {
+      const msg = `${next}는 오늘 이미 출석했습니다.`;
+      if (isCompact) {
+        setAlertTone('info');
+        setAlertTitle('Attendance');
+        setAlertMessage(msg);
+        setAlertOpen(true);
+      } else {
+        showToast(msg);
+      }
+      return;
+    }
+    setSelectedStaff(next);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    if (!selectedShift || !selectedStaff) return;
+    if (savingRef.current) return;
+    if (isPending) return;
+    if (todayShiftTakenSet.has(normalizeShiftType(selectedShift))) {
+      const msg = `이미 ${selectedShift} 스탬프가 있습니다.`;
+      if (isCompact) {
+        setAlertTone('info');
+        setAlertTitle('Attendance');
+        setAlertMessage(msg);
+        setAlertOpen(true);
+      } else {
+        showToast(msg);
+      }
+      setSelectedStaff(null);
+      savingRef.current = false;
+      return;
+    }
+    if (todayStaffTakenSet.has(String(selectedStaff || '').trim())) {
+      const msg = `${selectedStaff}는 오늘 이미 출석했습니다.`;
+      if (isCompact) {
+        setAlertTone('info');
+        setAlertTitle('Attendance');
+        setAlertMessage(msg);
+        setAlertOpen(true);
+      } else {
+        showToast(msg);
+      }
+      setSelectedStaff(null);
       savingRef.current = false;
       return;
     }
@@ -560,11 +613,18 @@ export default function AttendanceModal({ open, onClose }) {
 
     const now = new Date();
     const shiftStart = new Date(now);
-    if (selectedShift === 'morning') shiftStart.setHours(6, 0, 0, 0);
-    else {
+    {
       const dow = now.getDay();
-      const peak = dow === 5 || dow === 6 || dow === 0;
-      shiftStart.setHours(peak ? 11 : 11, peak ? 0 : 30, 0, 0);
+      if (selectedShift === 'morning') {
+        shiftStart.setHours(dow === 3 ? 8 : 6, 0, 0, 0);
+      } else {
+        if (dow === 3) {
+          shiftStart.setHours(8, 0, 0, 0);
+        } else {
+          const peak = dow === 5 || dow === 6 || dow === 0;
+          shiftStart.setHours(peak ? 10 : 11, 30, 0, 0);
+        }
+      }
     }
     const lateMins = Math.max(0, Math.floor((now.getTime() - shiftStart.getTime()) / 60000));
     const isTardy = lateMins >= 15;
@@ -590,11 +650,6 @@ export default function AttendanceModal({ open, onClose }) {
             } else {
               showToast(base);
             }
-            setJustCheckedSet((prev) => {
-              const next = new Set(prev);
-              next.add(selectedStaff);
-              return next;
-            });
             setSelectedStaff(null);
             setSelectedShift(null);
             savingRef.current = false;
@@ -675,9 +730,9 @@ export default function AttendanceModal({ open, onClose }) {
     showToast,
     isPending,
     updateAttendance,
-    staffCheckLoading,
-    selectedStaffLog,
     isCompact,
+    todayShiftTakenSet,
+    todayStaffTakenSet,
   ]);
 
   const [adminDate, setAdminDate] = useState(() => toLocalDateKey(today));
@@ -841,11 +896,6 @@ export default function AttendanceModal({ open, onClose }) {
         footer={<></>}
       >
         <div className="flex flex-col items-center gap-6 w-fit mx-auto text-center">
-          {/* Attendance Calendar (Top) */}
-          <div className="flex flex-col items-center gap-3">
-            <AttendanceCalendar />
-          </div>
-
           <div className="flex flex-col gap-4 w-fit items-center justify-center text-center mx-auto">
             <CurrentTimeDisplay />
 
@@ -865,86 +915,113 @@ export default function AttendanceModal({ open, onClose }) {
             >
               {/* Morning Button */}
               <button
-                disabled={isPending || isAlreadyChecked}
+                disabled={isShiftDisabled('morning')}
                 onClick={() => handleShiftChange('morning')}
                 className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
-                ${
-                  selectedShift === 'morning' ||
-                  (isAlreadyChecked && checkedShiftType === 'morning')
-                    ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
-                    : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
-                }
+                ${selectedShift === 'morning' && !isShiftDisabled('morning')
+                  ? 'scale-105 ring-4 ring-pink-200 translate-y-[-4px] shadow-[0_10px_20px_rgba(251,207,232,0.45)]'
+                  : 'hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'}
               `}
                 style={{
                   height: '60px',
                   fontSize: '1.5rem',
-                  backgroundColor:
-                    selectedShift === 'morning' ||
-                    (isAlreadyChecked && checkedShiftType === 'morning')
-                      ? '#FACC15'
-                      : 'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: isShiftDisabled('morning') ? '#4c1d95' : '#fbcfe8',
+                  color: isShiftDisabled('morning') ? '#fff' : '#000',
                   backdropFilter: 'blur(10px)',
                   width: '100%',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border:
+                    isShiftDisabled('morning')
+                      ? '1px solid rgba(255,255,255,0.22)'
+                      : '1px solid rgba(0,0,0,0.18)',
                   borderRadius: '30px',
-                  cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
-                  opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
-                  marginBottom: 2,
+                  cursor: isShiftDisabled('morning') ? 'not-allowed' : 'pointer',
+                  opacity: isPending ? 0.65 : isShiftDisabled('morning') ? 0.55 : 1,
+                  marginBottom: 4,
+                  ...(hoverKey === 'shift:morning' && !isShiftDisabled('morning')
+                    ? { backgroundColor: '#fb923c', borderColor: '#fb923c', color: '#fff' }
+                    : {}),
                 }}
+                onMouseEnter={() => setHoverKey('shift:morning')}
+                onMouseLeave={() => setHoverKey(null)}
+                aria-label="morning"
               >
-                morning
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>☀️</span>
+                  <span style={{ fontSize: '1.5rem', lineHeight: 1, letterSpacing: '0.04em' }}>
+                    morning
+                  </span>
+                </span>
               </button>
 
               {/* Evening Button */}
               <button
-                disabled={isPending || isAlreadyChecked}
+                disabled={isShiftDisabled('evening')}
                 onClick={() => handleShiftChange('evening')}
                 className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
-                ${
-                  selectedShift === 'evening' ||
-                  (isAlreadyChecked && checkedShiftType === 'evening')
-                    ? 'text-black scale-105 ring-4 ring-yellow-300 translate-y-[-4px] shadow-[0_10px_20px_rgba(250,204,21,0.5)]'
-                    : 'text-white hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
-                }
+                ${selectedShift === 'evening' && !isShiftDisabled('evening')
+                  ? 'scale-105 ring-4 ring-pink-200 translate-y-[-4px] shadow-[0_10px_20px_rgba(251,207,232,0.45)]'
+                  : 'hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'}
               `}
                 style={{
                   height: '60px',
                   fontSize: '1.5rem',
                   backgroundColor:
-                    selectedShift === 'evening' ||
-                    (isAlreadyChecked && checkedShiftType === 'evening')
-                      ? '#FACC15'
-                      : 'rgba(255, 255, 255, 0.1)',
+                    isShiftDisabled('evening') ? '#4c1d95' : '#fbcfe8',
+                  color: isShiftDisabled('evening') ? '#fff' : '#000',
                   backdropFilter: 'blur(10px)',
                   width: '100%',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border:
+                    isShiftDisabled('evening')
+                      ? '1px solid rgba(255,255,255,0.22)'
+                      : '1px solid rgba(0,0,0,0.18)',
                   borderRadius: '30px',
-                  cursor: isPending || isAlreadyChecked ? 'not-allowed' : 'pointer',
-                  opacity: isPending ? 0.65 : isAlreadyChecked ? 0.85 : 1,
-                  marginBottom: 2,
+                  cursor:
+                    isShiftDisabled('evening')
+                      ? 'not-allowed'
+                      : 'pointer',
+                  opacity: isPending ? 0.65 : isShiftDisabled('evening') ? 0.55 : 1,
+                  marginBottom: 4,
+                  ...(hoverKey === 'shift:evening' &&
+                  !isShiftDisabled('evening')
+                    ? { backgroundColor: '#fb923c', borderColor: '#fb923c', color: '#fff' }
+                    : {}),
                 }}
+                onMouseEnter={() => setHoverKey('shift:evening')}
+                onMouseLeave={() => setHoverKey(null)}
+                aria-label="evening"
               >
-                evening
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>🌙</span>
+                  <span style={{ fontSize: '1.5rem', lineHeight: 1, letterSpacing: '0.04em' }}>
+                    evening
+                  </span>
+                </span>
               </button>
             </div>
 
             <div
               style={{
                 display: 'flex',
-                flexWrap: 'wrap',
-                gap: 10,
+                flexWrap: 'nowrap',
+                gap: 8,
                 justifyContent: 'center',
                 alignItems: 'center',
                 width: '100%',
                 maxWidth: 380,
+                overflowX: 'auto',
+                paddingBottom: 4,
               }}
             >
               {staffOptions.map((name) =>
                 (() => {
-                  const isCheckedToday = checkedTodaySet.has(name);
-                  const disabled = isPending || staffCheckLoading;
+                  const disabled =
+                    isPending ||
+                    !selectedShift ||
+                    isShiftDisabled(selectedShift) ||
+                    isStaffTaken(name);
+                  const isSelected = selectedStaff === name;
                   return (
                     <button
                       key={name}
@@ -952,22 +1029,28 @@ export default function AttendanceModal({ open, onClose }) {
                       onClick={() => handleStaffChange(name)}
                       disabled={disabled}
                       style={{
-                        height: '60px',
-                        fontSize: '1.5rem',
-                        borderRadius: '30px',
-                        border: '1px solid rgba(255,255,255,0.20)',
-                        background: isCheckedToday
-                          ? '#FACC15'
-                          : selectedStaff === name
-                            ? '#FACC15'
-                            : 'rgba(255, 255, 255, 0.10)',
-                        color: isCheckedToday || selectedStaff === name ? '#000' : 'white',
-                        fontWeight: 900,
+                        height: 44,
+                        fontSize: '1.05rem',
+                        lineHeight: 1,
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        background: disabled ? '#d8b4fe' : '#FACC15',
+                        color: '#000',
+                        fontWeight: 950,
                         cursor: disabled ? 'not-allowed' : 'pointer',
-                        opacity: isCheckedToday ? 0.75 : isPending ? 0.7 : 1,
-                        padding: '0 22px',
+                        opacity: disabled ? 0.6 : 1,
+                        padding: '0 14px',
+                        whiteSpace: 'nowrap',
+                        flex: '0 0 auto',
+                        boxShadow:
+                          isSelected ? '0 0 0 3px rgba(255,255,255,0.35)' : 'none',
                         marginBottom: 2,
+                        ...(hoverKey === `staff:${name}` && !disabled
+                          ? { background: '#fb923c', color: '#fff', borderColor: '#fb923c' }
+                          : {}),
                       }}
+                      onMouseEnter={() => setHoverKey(`staff:${name}`)}
+                      onMouseLeave={() => setHoverKey(null)}
                     >
                       {name}
                     </button>
@@ -976,9 +1059,14 @@ export default function AttendanceModal({ open, onClose }) {
               )}
             </div>
 
+
+          <div className="flex flex-col items-center gap-3">
+            <AttendanceCalendar />
+          </div>
             <div className="text-red-300 text-lg font-bold bg-red-900/40 px-6 py-2 rounded-full border border-red-500/30 text-center w-fit mx-auto shadow-lg">
               ⚠️ Attendance score will be 0 if late by more than 15 minutes.
             </div>
+
 
             {isPending && <div className="text-white/80 text-sm font-bold mt-2">Saving…</div>}
 

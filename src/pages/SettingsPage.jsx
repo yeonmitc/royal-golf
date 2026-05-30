@@ -179,9 +179,8 @@ export default function SettingsPage() {
     const janice = byName.get(normalizeName('Janice'));
     const maeshi = byName.get(normalizeName('Maeshi'));
 
-    if (!maeshi || !berlyn || !janice) {
+    if (!berlyn || !janice) {
       const missing = [
-        !maeshi ? 'Maeshi' : null,
         !berlyn ? 'Berlyn' : null,
         !janice ? 'Janice' : null,
       ].filter(Boolean);
@@ -194,28 +193,58 @@ export default function SettingsPage() {
     const mondayStr = toDateKey(monday);
     const sundayStr = toDateKey(sunday);
 
-    const weekType = scheduleWeekType;
+    const otherEmp = (emp) => (String(emp?.id) === String(berlyn.id) ? janice : berlyn);
+    const prevMonday = addDays(monday, -7);
+    const prevMondayStr = toDateKey(prevMonday);
+    const prevSundayStr = toDateKey(addDays(prevMonday, 6));
+
+    let morningEmp = null;
+    try {
+      const prevRows = await sbSelect('employee_schedules', {
+        select: 'employee_id,work_date,shift_type',
+        filters: [
+          { column: 'work_date', op: 'gte', value: prevMondayStr },
+          { column: 'work_date', op: 'lte', value: prevSundayStr },
+          { column: 'shift_type', op: 'eq', value: 'morning' },
+        ],
+        orders: [{ column: 'work_date', ascending: true }],
+        limit: 50,
+      });
+      const hit = (Array.isArray(prevRows) ? prevRows : []).find(
+        (r) =>
+          String(r.employee_id) === String(berlyn.id) || String(r.employee_id) === String(janice.id)
+      );
+      if (hit) {
+        const isBerlyn = String(hit.employee_id) === String(berlyn.id);
+        const isJanice = String(hit.employee_id) === String(janice.id);
+        if (isBerlyn) morningEmp = otherEmp(berlyn);
+        if (isJanice) morningEmp = otherEmp(janice);
+      }
+    } catch {
+      morningEmp = null;
+    }
+    if (!morningEmp) {
+      morningEmp = scheduleWeekType === 'A' ? berlyn : janice;
+    }
+    const eveningEmp = otherEmp(morningEmp);
     const rowsToInsert = [];
     for (let i = 0; i < 7; i += 1) {
       const d = addDays(monday, i);
       const dow = d.getDay();
       const dateStr = toDateKey(d);
       if (dow === 3) {
-        rowsToInsert.push({ employee_id: maeshi.id, work_date: dateStr, shift_type: 'all_day' });
+        if (maeshi?.id) {
+          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateStr, shift_type: 'all_day' });
+        }
         continue;
       }
-      if (dow === 2) {
-        const tueMorning = weekType === 'A' ? janice : berlyn;
-        rowsToInsert.push({
-          employee_id: tueMorning.id,
-          work_date: dateStr,
-          shift_type: 'morning',
-        });
-        rowsToInsert.push({ employee_id: maeshi.id, work_date: dateStr, shift_type: 'evening' });
+      if (dow === 4) {
+        rowsToInsert.push({ employee_id: morningEmp.id, work_date: dateStr, shift_type: 'morning' });
+        if (maeshi?.id) {
+          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateStr, shift_type: 'evening' });
+        }
         continue;
       }
-      const morningEmp = weekType === 'A' ? berlyn : janice;
-      const eveningEmp = weekType === 'A' ? janice : berlyn;
       rowsToInsert.push({ employee_id: morningEmp.id, work_date: dateStr, shift_type: 'morning' });
       rowsToInsert.push({ employee_id: eveningEmp.id, work_date: dateStr, shift_type: 'evening' });
     }
@@ -230,7 +259,9 @@ export default function SettingsPage() {
       });
       await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
       showToast(
-        `Auto 생성 완료 (Week ${scheduleWeekType}): ${mondayStr} ~ ${sundayStr} (${rowsToInsert.length} rows)`
+        `Auto 생성 완료 (Week): ${mondayStr} ~ ${sundayStr} (Morning: ${String(
+          morningEmp?.english_name || ''
+        ).trim()})`
       );
       await loadEmployeeSchedulesForWeek();
     } catch (e) {
@@ -298,9 +329,8 @@ export default function SettingsPage() {
                 Range: {toDateKey(scheduleWeek.monday)} ~ {toDateKey(scheduleWeek.sunday)}
               </div>
               <div>
-                Week {scheduleWeekType} · Tue: (Week{' '}
-                {scheduleWeekType === 'A' ? 'A: Janice' : 'B: Berlyn'} morning) + Maeshi evening ·
-                Wed: Maeshi all_day
+                Week {scheduleWeekType} · 월요일 기준으로 주 단위로 Berlyn/Janice가 morning/evening을 유지하며,
+                전 주와 반대로 자동 배치됩니다. (Wed: Maeshi all_day · Thu: evening은 Maeshi가 있으면 고정)
               </div>
             </div>
             <div className="flex gap-2">
