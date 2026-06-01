@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
+import DateInput from '../../../components/common/DateInput';
 import Modal from '../../../components/common/Modal';
 import ColorChangeModal from '../../../components/sales/ColorChangeModal';
 import PriceEditModal from '../../../components/sales/PriceEditModal';
@@ -795,13 +796,12 @@ export default function SalesTable({
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
               <div>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>Date</div>
-                <input
-                  type="date"
-                  className="input-field date-control-input"
-                  value={timeDate}
-                  readOnly
-                  disabled
-                />
+                  <DateInput
+                    className="input-field date-control-input"
+                    value={timeDate}
+                    readOnly
+                    disabled
+                  />
               </div>
               <div>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>Time</div>

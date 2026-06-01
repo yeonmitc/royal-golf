@@ -10,6 +10,7 @@ import {
 import { useEmployees } from '../../features/employees/employeesHooks';
 import { useAdminStore } from '../../store/adminStore';
 import Button from '../common/Button';
+import DateInput from '../common/DateInput';
 import Modal from '../common/Modal';
 
 // Helper to get score based on time diff with discrete buckets
@@ -1085,8 +1086,7 @@ export default function AttendanceModal({ open, onClose }) {
                   Admin Edit
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <input
-                    type="date"
+                  <DateInput
                     value={adminDate}
                     onChange={(e) => setAdminDate(e.target.value)}
                     style={{

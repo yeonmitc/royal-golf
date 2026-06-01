@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import ellaIcon from '../assets/ella.svg';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
+import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
@@ -424,9 +425,8 @@ export default function SalesHistoryPage() {
             <div className="date-control">
               <span className="date-control-label">From</span>
               <div className="date-control-box">
-                <input
+                <DateInput
                   ref={fromInputRef}
-                  type="date"
                   className="input-field date-control-input"
                   value={fromInput}
                   onChange={(e) => {
@@ -447,9 +447,8 @@ export default function SalesHistoryPage() {
             <div className="date-control">
               <span className="date-control-label">To</span>
               <div className="date-control-box">
-                <input
+                <DateInput
                   ref={toInputRef}
-                  type="date"
                   className="input-field date-control-input"
                   value={toInput}
                   onChange={(e) => {

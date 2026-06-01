@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import settingIcon from '../assets/setting.svg';
 import Button from '../components/common/Button';
+import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
@@ -210,8 +211,7 @@ export default function ExpensesPage() {
             <div className="date-control">
               <span className="date-control-label">From</span>
               <div className="date-control-box">
-                <input
-                  type="date"
+                <DateInput
                   className="input-field date-control-input"
                   value={fromInput}
                   onChange={(e) => setFromInput(e.target.value)}
@@ -221,8 +221,7 @@ export default function ExpensesPage() {
             <div className="date-control">
               <span className="date-control-label">To</span>
               <div className="date-control-box">
-                <input
-                  type="date"
+                <DateInput
                   className="input-field date-control-input"
                   value={toInput}
                   onChange={(e) => setToInput(e.target.value)}

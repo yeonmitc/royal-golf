@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Button from '../components/common/Button';
+import DateInput from '../components/common/DateInput';
 import DataTable from '../components/common/DataTable';
 import { sbSelect } from '../db/supabaseRest';
 import { getExpenseCategories, getExpensesLite } from '../features/expenses/expensesApi';
@@ -357,8 +358,7 @@ export default function ProfitPage() {
           <div className="date-control">
             <span className="date-control-label">From</span>
             <div className="date-control-box">
-              <input
-                type="date"
+              <DateInput
                 className="input-field date-control-input"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
@@ -368,8 +368,7 @@ export default function ProfitPage() {
           <div className="date-control">
             <span className="date-control-label">To</span>
             <div className="date-control-box">
-              <input
-                type="date"
+              <DateInput
                 className="input-field date-control-input"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}

@@ -85,11 +85,49 @@
   cursor: not-allowed;
 }
 
-.input-field[type='date'] {
-  color-scheme: dark;
+.date-input-shell {
+  position: relative;
+  width: 100%;
 }
 
-.input-field[type='date']::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-  opacity: 0.85;
+.date-input-control {
+  color-scheme: dark;
+  padding-right: 48px !important;
+  cursor: pointer;
+}
+
+.date-input-control::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.date-input-trigger {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--gold-soft);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.date-input-trigger:hover {
+  color: #ffffff;
+}
+
+.date-input-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

@@ -292,11 +292,12 @@ input {
 }
 
 .date-control-box {
-  width: 160px;
+  width: 200px;
+  min-width: 200px;
 }
 
 .date-control-input {
-  padding-right: 40px;
+  padding-right: 48px;
 }
 
 .date-controls {
@@ -315,7 +316,8 @@ input {
   }
 
   .date-control-box {
-    width: 110px; /* Force smaller width for mobile */
+    width: 150px;
+    min-width: 150px;
   }
 
   .date-control-label {
@@ -336,17 +338,6 @@ input {
     padding-bottom: 4px; /* Space for scrollbar if any */
   }
 
-  /* Adjust calendar picker icon position/size */
-  .date-control-input::-webkit-calendar-picker-indicator {
-    width: 14px;
-    height: 14px;
-    margin-left: 0;
-  }
-}
-
-.date-control-input::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-  opacity: 0.7;
 }
 
 /* 인터랙티브 요소 커서 포인터 */

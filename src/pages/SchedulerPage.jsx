@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Button from '../components/common/Button';
+import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
 import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../db/supabaseRest';
@@ -68,10 +69,50 @@ export default function SchedulerPage() {
     return dow === 5 || dow === 6 || dow === 0;
   };
 
+  const parseHoursValue = (value) => {
+    const n = Number(String(value ?? '').trim());
+    if (!Number.isFinite(n)) return null;
+    const rounded = Math.round(n * 2) / 2;
+    if (rounded <= 0) return null;
+    return rounded;
+  };
+
+  const timeToMinutes = (value) => {
+    const m = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(value || '').trim());
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const minutesToTimeLabel = (minutes) => {
+    if (!Number.isFinite(minutes)) return '';
+    const normalized = ((Math.round(minutes) % 1440) + 1440) % 1440;
+    const hh = String(Math.floor(normalized / 60)).padStart(2, '0');
+    const mm = String(normalized % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  };
+
+  const formatHoursLabel = (value) => {
+    const num = parseHoursValue(value);
+    if (!num) return '';
+    return Number.isInteger(num) ? `${num}hr` : `${num.toFixed(1)}hr`;
+  };
+
+  const getManualRangeLabel = (startTime, hours) => {
+    const startMinutes = timeToMinutes(startTime);
+    const parsedHours = parseHoursValue(hours);
+    if (startMinutes == null || !parsedHours) return '';
+    const endMinutes = startMinutes + parsedHours * 60;
+    return `${minutesToTimeLabel(startMinutes)} ~ ${minutesToTimeLabel(endMinutes)}`;
+  };
+
   const shiftTimeLabel = (d, shift) => {
     const peak = isPeakDay(d);
     if (shift === 'all_day') return '08:00~16:00';
     if (shift === 'morning') return peak ? '06:00~12:30' : '06:00~12:00';
+    if (shift === 'manual') return 'manual';
     return peak ? '10:30~17:00' : '11:30~17:00';
   };
 
@@ -111,6 +152,9 @@ export default function SchedulerPage() {
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState([]);
   const [selectedShift, setSelectedShift] = useState('morning');
+  const [manualStartTime, setManualStartTime] = useState('09:00');
+  const [manualHours, setManualHours] = useState('4');
+  const [manualScheduleAvailable, setManualScheduleAvailable] = useState(true);
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [dragOverDateKey, setDragOverDateKey] = useState(null);
 
@@ -147,8 +191,7 @@ export default function SchedulerPage() {
   const loadMonth = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await sbSelect('employee_schedules', {
-        select: 'id,employee_id,work_date,shift_type',
+      const baseQuery = {
         filters: [
           { column: 'work_date', op: 'gte', value: monthStartKey },
           { column: 'work_date', op: 'lte', value: monthEndKey },
@@ -158,8 +201,33 @@ export default function SchedulerPage() {
           { column: 'shift_type', ascending: true },
         ],
         limit: 3000,
-      });
-      setRows(Array.isArray(data) ? data : []);
+      };
+      try {
+        const data = await sbSelect('employee_schedules', {
+          select: 'id,employee_id,work_date,shift_type,manual_start_time,manual_hours',
+          ...baseQuery,
+        });
+        setManualScheduleAvailable(true);
+        setRows(Array.isArray(data) ? data : []);
+      } catch (innerError) {
+        const innerMsg = String(innerError?.message || innerError || '').toLowerCase();
+        const missingManualColumn =
+          innerMsg.includes('manual_start_time') || innerMsg.includes('manual_hours');
+        if (!missingManualColumn) throw innerError;
+
+        const legacyData = await sbSelect('employee_schedules', {
+          select: 'id,employee_id,work_date,shift_type',
+          ...baseQuery,
+        });
+        setManualScheduleAvailable(false);
+        setRows(
+          (Array.isArray(legacyData) ? legacyData : []).map((row) => ({
+            ...row,
+            manual_start_time: null,
+            manual_hours: null,
+          }))
+        );
+      }
     } catch (e) {
       const msg = String(e?.message || e);
       if (msg === 'SUPABASE_CONFIG_MISSING') {
@@ -185,7 +253,7 @@ export default function SchedulerPage() {
       if (!m.has(k)) m.set(k, []);
       m.get(k).push(r);
     });
-    const order = { morning: 0, evening: 1, all_day: 2 };
+    const order = { morning: 0, evening: 1, all_day: 2, manual: 3 };
     m.forEach((list) => {
       list.sort((a, b) => {
         const ao = order[String(a.shift_type || '')] ?? 99;
@@ -204,6 +272,52 @@ export default function SchedulerPage() {
   const getDayHasShift = (dateKey, shiftType) =>
     getDayList(dateKey).some((r) => String(r.shift_type) === String(shiftType));
 
+  const buildManualSchedulePayload = useCallback(() => {
+    if (!manualScheduleAvailable) {
+      return {
+        ok: false,
+        message: '현재 DB에는 manual schedule 컬럼이 없어 수동 스케줄을 사용할 수 없습니다.',
+      };
+    }
+    const startTime = String(manualStartTime || '').trim();
+    const hours = parseHoursValue(manualHours);
+    if (!startTime || timeToMinutes(startTime) == null) {
+      return { ok: false, message: '수동 스케줄 시작 시간을 입력해주세요.' };
+    }
+    if (!hours) {
+      return { ok: false, message: '수동 스케줄 시간을 0.5시간 단위 이상으로 입력해주세요.' };
+    }
+    return {
+      ok: true,
+      values: {
+        manual_start_time: startTime,
+        manual_hours: hours,
+      },
+    };
+  }, [manualHours, manualScheduleAvailable, manualStartTime]);
+
+  const getScheduleTimeLabel = useCallback(
+    (date, row) => {
+      const shiftType = String(row?.shift_type || '');
+      if (shiftType === 'manual') {
+        const label = getManualRangeLabel(row?.manual_start_time, row?.manual_hours);
+        return label || '';
+      }
+      return shiftTimeLabel(date, shiftType);
+    },
+    []
+  );
+
+  const getScheduleMetaLabel = useCallback(
+    (date, row) => {
+      const shiftType = String(row?.shift_type || '');
+      const timeLabel = getScheduleTimeLabel(date, row);
+      if (shiftType === 'manual') return timeLabel;
+      return [shiftType, timeLabel].filter(Boolean).join(' ');
+    },
+    [getScheduleTimeLabel]
+  );
+
   const filterVisibleSchedules = useCallback(
     (list) => {
       if (isAdmin) return list || [];
@@ -216,7 +330,7 @@ export default function SchedulerPage() {
   const getDayCapacity = (dateKey) => {
     const d = parseDateKey(dateKey);
     if (!d) return 2;
-    return d.getDay() === 3 ? 1 : 2;
+    return 2;
   };
 
   const validateShiftRules = ({ dateKey, shiftType, employeeId }) => {
@@ -228,6 +342,9 @@ export default function SchedulerPage() {
     const isThu = dow === 4;
 
     const empKey = employeeKeyById.get(employeeId);
+    if (shiftType === 'manual') {
+      return { ok: true };
+    }
     if (isWed) {
       if (empKey === 'maeshi') {
         if (shiftType !== 'all_day') {
@@ -378,7 +495,7 @@ export default function SchedulerPage() {
     if (startMorningKey === 'berlyn') firstWeekMorning = berlyn;
     if (startMorningKey === 'janice') firstWeekMorning = janice;
     try {
-      const prevRows = await sbSelect('employee_schedules', {
+      const data = await sbSelect('employee_schedules', {
         select: 'employee_id,work_date,shift_type',
         filters: [
           { column: 'work_date', op: 'gte', value: prevWeekStartKey },
@@ -453,7 +570,7 @@ export default function SchedulerPage() {
     showToast(`Auto 생성 완료 (Month): ${startKey} ~ ${endKey}`);
   };
 
-  const upsertSchedule = async ({ dateKey, shiftType, employeeId }) => {
+  const upsertSchedule = async ({ dateKey, shiftType, employeeId, manualValues }) => {
     if (!employeeId) return;
     const v = validateShiftRules({ dateKey, shiftType, employeeId });
     if (!v.ok) {
@@ -474,13 +591,23 @@ export default function SchedulerPage() {
       showToast('같은 직원이 같은 날짜에 중복 배정될 수 없습니다.');
       return;
     }
-    if (getDayHasShift(dateKey, shiftType)) {
+    if (shiftType !== 'manual' && getDayHasShift(dateKey, shiftType)) {
       showToast(`이미 ${shiftType} 배정이 있습니다.`);
       return;
     }
+    const payload =
+      shiftType === 'manual'
+        ? { employee_id: employeeId, work_date: dateKey, shift_type: shiftType, ...manualValues }
+        : {
+            employee_id: employeeId,
+            work_date: dateKey,
+            shift_type: shiftType,
+            manual_start_time: null,
+            manual_hours: null,
+          };
     await sbInsert(
       'employee_schedules',
-      [{ employee_id: employeeId, work_date: dateKey, shift_type: shiftType }],
+      [payload],
       { returning: 'minimal' }
     );
   };
@@ -491,6 +618,7 @@ export default function SchedulerPage() {
     toDateKey: targetDateKey,
     employeeId,
     nextShift,
+    manualValues,
   }) => {
     if (!scheduleId) return;
     const v = validateShiftRules({ dateKey: targetDateKey, shiftType: nextShift, employeeId });
@@ -513,7 +641,7 @@ export default function SchedulerPage() {
         return;
       }
     }
-    const existsSameShift = getDayHasShift(targetDateKey, nextShift);
+    const existsSameShift = nextShift === 'manual' ? false : getDayHasShift(targetDateKey, nextShift);
     const current = getDayList(targetDateKey).find((r) => String(r.id) === String(scheduleId));
     const isSameDateAndShift =
       fromDateKey === targetDateKey && String(current?.shift_type) === String(nextShift);
@@ -521,9 +649,18 @@ export default function SchedulerPage() {
       showToast(`이미 ${nextShift} 배정이 있습니다.`);
       return;
     }
+    const updateValues =
+      nextShift === 'manual'
+        ? { work_date: targetDateKey, shift_type: nextShift, ...manualValues }
+        : {
+            work_date: targetDateKey,
+            shift_type: nextShift,
+            manual_start_time: null,
+            manual_hours: null,
+          };
     await sbUpdate(
       'employee_schedules',
-      { work_date: targetDateKey, shift_type: nextShift },
+      updateValues,
       { filters: [{ column: 'id', op: 'eq', value: scheduleId }], returning: 'minimal' }
     );
   };
@@ -563,8 +700,19 @@ export default function SchedulerPage() {
     if (!data) return;
     try {
       setBusy(true);
+      const manualPayload =
+        selectedShift === 'manual' ? buildManualSchedulePayload() : { ok: true, values: null };
+      if (!manualPayload.ok) {
+        showToast(manualPayload.message);
+        return;
+      }
       if (data.kind === 'employee') {
-        await upsertSchedule({ dateKey, shiftType: selectedShift, employeeId: data.employeeId });
+        await upsertSchedule({
+          dateKey,
+          shiftType: selectedShift,
+          employeeId: data.employeeId,
+          manualValues: manualPayload.values,
+        });
         await loadMonth();
         return;
       }
@@ -575,6 +723,7 @@ export default function SchedulerPage() {
           toDateKey: dateKey,
           employeeId: data.employeeId,
           nextShift: selectedShift,
+          manualValues: manualPayload.values,
         });
         await loadMonth();
       }
@@ -590,6 +739,12 @@ export default function SchedulerPage() {
   const dowLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const badgeStyle = (shiftType, employeeId) => {
+    if (shiftType === 'manual') {
+      return {
+        bg: 'rgba(236, 72, 153, 0.22)',
+        border: 'rgba(244, 114, 182, 0.58)',
+      };
+    }
     const employeeKey = employeeKeyById.get(employeeId);
     if (employeeKey === 'maeshi') {
       return {
@@ -645,6 +800,8 @@ export default function SchedulerPage() {
     const shiftType = String(row.shift_type || '');
     const { bg, border } = badgeStyle(shiftType, row.employee_id);
     const name = employeeNameById.get(row.employee_id) || row.employee_id;
+    const metaTextColor =
+      shiftType === 'manual' ? 'rgba(255, 232, 244, 0.98)' : 'var(--text-muted)';
     if (isMobile && compact) {
       return (
         <div
@@ -715,8 +872,8 @@ export default function SchedulerPage() {
             >
               {name}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 800 }}>
-              {shiftType} {shiftTimeLabel(date, shiftType)}
+            <div style={{ fontSize: 10, color: metaTextColor, fontWeight: 800 }}>
+              {getScheduleMetaLabel(date, row)}
             </div>
           </div>
         </div>
@@ -779,8 +936,8 @@ export default function SchedulerPage() {
               {name}
             </div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 800 }}>
-            {shiftType} {shiftTimeLabel(date, shiftType)}
+          <div style={{ fontSize: 11, color: metaTextColor, fontWeight: 800 }}>
+            {getScheduleMetaLabel(date, row)}
           </div>
         </div>
         {isAdmin && (
@@ -979,7 +1136,76 @@ export default function SchedulerPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
                 <ShiftButton value="morning" label="Morning" />
                 <ShiftButton value="evening" label="Evening" />
-                <ShiftButton value="all_day" label="All Day (Wed)" />
+                <ShiftButton value="all_day" label="All Day" />
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 14,
+                  border:
+                    selectedShift === 'manual'
+                      ? '1px solid rgba(250, 204, 21, 0.6)'
+                      : '1px solid rgba(255,255,255,0.12)',
+                  background:
+                    selectedShift === 'manual' ? 'rgba(250, 204, 21, 0.08)' : 'rgba(255,255,255,0.03)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedShift('manual')}
+                  disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
+                  style={{
+                    width: '100%',
+                    height: 42,
+                    borderRadius: 12,
+                    border:
+                      selectedShift === 'manual'
+                        ? '1px solid rgba(250, 204, 21, 0.65)'
+                        : '1px solid rgba(255,255,255,0.16)',
+                    background:
+                      selectedShift === 'manual'
+                        ? 'rgba(250, 204, 21, 0.14)'
+                        : 'rgba(255,255,255,0.06)',
+                    color: 'white',
+                    fontWeight: 950,
+                    cursor:
+                      !isAdmin || busy || loading || !manualScheduleAvailable
+                        ? 'not-allowed'
+                        : 'pointer',
+                    opacity: !isAdmin || !manualScheduleAvailable ? 0.7 : 1,
+                  }}
+                >
+                  Manual Schedule
+                </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <Input
+                    label="시작 시간"
+                    type="time"
+                    value={manualStartTime}
+                    onChange={(e) => setManualStartTime(e.target.value)}
+                    disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
+                  />
+                  <Input
+                    label="몇 시간"
+                    type="number"
+                    min="0.5"
+                    step="0.5"
+                    value={manualHours}
+                    onChange={(e) => setManualHours(e.target.value)}
+                    disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
+                    placeholder="4"
+                  />
+                </div>
+                <div className="text-xs" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                  {manualScheduleAvailable
+                    ? 'Manual 선택 후 직원을 드래그하면 입력한 시간대로 배정됩니다.'
+                    : '현재 DB에는 manual schedule 컬럼이 없어 수동 스케줄이 비활성화되었습니다.'}
+                  {manualScheduleAvailable && getManualRangeLabel(manualStartTime, manualHours)
+                    ? ` (${getManualRangeLabel(manualStartTime, manualHours)})`
+                    : ''}
+                </div>
               </div>
               <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
                 Auto month 시작 Morning
@@ -1141,7 +1367,7 @@ export default function SchedulerPage() {
                               {name}
                             </div>
                             <div style={{ color: 'var(--text-muted)', flex: '0 0 auto' }}>
-                              {shiftType} {shiftTimeLabel(todayDate, shiftType)}
+                              {getScheduleMetaLabel(todayDate, r)}
                             </div>
                           </div>
                         );
@@ -1179,8 +1405,6 @@ export default function SchedulerPage() {
                 {grid.map((cell) => {
                   if (cell.kind === 'blank') return <div key={cell.key} />;
                   const list = filterVisibleSchedules(getDayList(cell.dateKey));
-                  const count = list.length;
-                  const cap = getDayCapacity(cell.dateKey);
                   const isToday = (() => {
                     const now = new Date();
                     return (
@@ -1246,15 +1470,6 @@ export default function SchedulerPage() {
                         >
                           {cell.dayNum}
                         </div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 900,
-                            color: count >= cap ? '#ef4444' : '#22c55e',
-                          }}
-                        >
-                          {count}/{cap}
-                        </div>
                       </div>
                       <div
                         style={{
@@ -1312,9 +1527,6 @@ export default function SchedulerPage() {
                 }}
               >
                 <div style={{ fontWeight: 1000, fontSize: 18 }}>{detailDate.getDate()}</div>
-                <div style={{ fontWeight: 900, color: 'var(--text-muted)', fontSize: 12 }}>
-                  {detailList.length}/{getDayCapacity(detailDateKey)}
-                </div>
               </div>
             )}
             {detailDate && (
@@ -1340,7 +1552,7 @@ export default function SchedulerPage() {
                       >
                         <div style={{ fontWeight: 1000, fontSize: 14 }}>{name}</div>
                         <div style={{ fontWeight: 900, fontSize: 12, color: 'var(--text-muted)' }}>
-                          {shiftType} {shiftTimeLabel(detailDate, shiftType)}
+                          {getScheduleMetaLabel(detailDate, r)}
                         </div>
                       </div>
                     );

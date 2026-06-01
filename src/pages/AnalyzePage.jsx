@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
+import DateInput from '../components/common/DateInput';
 import DataTable from '../components/common/DataTable';
 import ExportActions from '../components/common/ExportActions';
 import { getAnalytics } from '../features/sales/salesApiClient';
@@ -118,9 +119,8 @@ export default function AnalyzePage() {
           <div className="date-control">
             <span className="date-control-label">From</span>
             <div className="date-control-box">
-              <input
+              <DateInput
                 ref={fromInputRef}
-                type="date"
                 className="input-field date-control-input"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
@@ -137,9 +137,8 @@ export default function AnalyzePage() {
           <div className="date-control">
             <span className="date-control-label">To</span>
             <div className="date-control-box">
-              <input
+              <DateInput
                 ref={toInputRef}
-                type="date"
                 className="input-field date-control-input"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}

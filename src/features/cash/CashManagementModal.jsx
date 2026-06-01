@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import Button from '../../components/common/Button';
+import DateInput from '../../components/common/DateInput';
 import { PencilIcon, TrashIcon } from '../../components/common/Icons';
 import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
@@ -665,9 +666,8 @@ export default function CashManagementModal({ open, onClose }) {
               <div>
                 <div className="text-xs text-[var(--text-muted)] mb-1">Date</div>
                 <div className="input-wrapper" style={{ marginBottom: 0 }}>
-                  <input
+                  <DateInput
                     ref={editDateRef}
-                    type="date"
                     className="input-field"
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
