@@ -589,7 +589,14 @@ export default function SchedulerPage() {
   const monthLabel = `${monthDate.getFullYear()}.${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
   const dowLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  const badgeStyle = (shiftType) => {
+  const badgeStyle = (shiftType, employeeId) => {
+    const employeeKey = employeeKeyById.get(employeeId);
+    if (employeeKey === 'maeshi') {
+      return {
+        bg: 'rgba(168, 85, 247, 0.18)',
+        border: 'rgba(168, 85, 247, 0.45)',
+      };
+    }
     const bg =
       shiftType === 'morning'
         ? 'rgba(250, 204, 21, 0.18)'
@@ -636,7 +643,7 @@ export default function SchedulerPage() {
 
   const ScheduleBadge = ({ row, date, dateKey }) => {
     const shiftType = String(row.shift_type || '');
-    const { bg, border } = badgeStyle(shiftType);
+    const { bg, border } = badgeStyle(shiftType, row.employee_id);
     const name = employeeNameById.get(row.employee_id) || row.employee_id;
     if (isMobile) {
       return (
@@ -1279,7 +1286,7 @@ export default function SchedulerPage() {
                 ) : (
                   detailList.map((r) => {
                     const shiftType = String(r.shift_type || '');
-                    const { bg, border } = badgeStyle(shiftType);
+                    const { bg, border } = badgeStyle(shiftType, r.employee_id);
                     const name = employeeNameById.get(r.employee_id) || r.employee_id;
                     return (
                       <div
