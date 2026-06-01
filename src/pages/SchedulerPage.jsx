@@ -641,10 +641,47 @@ export default function SchedulerPage() {
     );
   };
 
-  const ScheduleBadge = ({ row, date, dateKey }) => {
+  const ScheduleBadge = ({ row, date, dateKey, compact = false }) => {
     const shiftType = String(row.shift_type || '');
     const { bg, border } = badgeStyle(shiftType, row.employee_id);
     const name = employeeNameById.get(row.employee_id) || row.employee_id;
+    if (isMobile && compact) {
+      return (
+        <div
+          className="text-xs"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px 6px',
+            borderRadius: 10,
+            border: `1px solid ${border}`,
+            background: bg,
+            maxWidth: '100%',
+            boxSizing: 'border-box',
+            overflow: 'hidden',
+          }}
+          title={name}
+        >
+          <div
+            style={{
+              color: 'rgba(255,255,255,0.98)',
+              fontWeight: 1000,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 10,
+              lineHeight: 1.05,
+              letterSpacing: '0.01em',
+              textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+              minWidth: 0,
+            }}
+          >
+            {name}
+          </div>
+        </div>
+      );
+    }
     if (isMobile) {
       return (
         <div
@@ -1236,6 +1273,7 @@ export default function SchedulerPage() {
                             row={r}
                             dateKey={cell.dateKey}
                             date={cell.date}
+                            compact={isMobile}
                           />
                         ))}
                         {list.length === 0 && (
