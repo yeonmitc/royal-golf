@@ -34,10 +34,7 @@ language plpgsql
 as $$
 declare
   v_count integer;
-  v_dow integer;
 begin
-  v_dow := extract(dow from new.work_date);
-
   if new.shift_type = 'manual' then
     if new.manual_start_time is null or new.manual_hours is null or new.manual_hours <= 0 then
       raise exception 'manual shift requires manual_start_time and positive manual_hours';
@@ -47,28 +44,14 @@ begin
     new.manual_hours := null;
   end if;
 
-  if v_dow = 3 and new.shift_type not in ('all_day', 'manual') then
-    raise exception 'wednesday must be all_day';
-  end if;
-
-  if v_dow <> 3 and new.shift_type = 'all_day' then
-    raise exception 'all_day is allowed only on wednesday';
-  end if;
-
   select count(*)
     into v_count
   from public.employee_schedules es
   where es.work_date = new.work_date
     and (tg_op <> 'UPDATE' or es.id <> old.id);
 
-  if v_dow = 3 then
-    if v_count >= 1 then
-      raise exception 'daily schedule limit exceeded for %', new.work_date;
-    end if;
-  else
-    if v_count >= 2 then
-      raise exception 'daily schedule limit exceeded for %', new.work_date;
-    end if;
+  if v_count >= 2 then
+    raise exception 'daily schedule limit exceeded for %', new.work_date;
   end if;
 
   return new;
@@ -77,5 +60,5 @@ $$;
 
 drop trigger if exists employee_schedules_enforce_daily_limit on public.employee_schedules;
 create trigger employee_schedules_enforce_daily_limit
-before insert or update of work_date on public.employee_schedules
+before insert or update of work_date, shift_type, manual_start_time, manual_hours on public.employee_schedules
 for each row execute function public.trg_employee_schedules_enforce_daily_limit();

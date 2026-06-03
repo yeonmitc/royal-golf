@@ -177,7 +177,6 @@ export default function SettingsPage() {
 
     const berlyn = byName.get(normalizeName('Berlyn'));
     const janice = byName.get(normalizeName('Janice'));
-    const maeshi = byName.get(normalizeName('Maeshi'));
 
     if (!berlyn || !janice) {
       const missing = [
@@ -233,16 +232,9 @@ export default function SettingsPage() {
       const dow = d.getDay();
       const dateStr = toDateKey(d);
       if (dow === 3) {
-        if (maeshi?.id) {
-          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateStr, shift_type: 'all_day' });
-        }
         continue;
       }
       if (dow === 4) {
-        rowsToInsert.push({ employee_id: morningEmp.id, work_date: dateStr, shift_type: 'morning' });
-        if (maeshi?.id) {
-          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateStr, shift_type: 'evening' });
-        }
         continue;
       }
       rowsToInsert.push({ employee_id: morningEmp.id, work_date: dateStr, shift_type: 'morning' });
@@ -330,7 +322,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 Week {scheduleWeekType} · 월요일 기준으로 주 단위로 Berlyn/Janice가 morning/evening을 유지하며,
-                전 주와 반대로 자동 배치됩니다. (Wed: Maeshi all_day · Thu: evening은 Maeshi가 있으면 고정)
+                전 주와 반대로 자동 배치됩니다. (Wed/Thu는 비워둡니다.)
               </div>
             </div>
             <div className="flex gap-2">

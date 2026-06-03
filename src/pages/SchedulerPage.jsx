@@ -94,12 +94,6 @@ export default function SchedulerPage() {
     return `${hh}:${mm}`;
   };
 
-  const formatHoursLabel = (value) => {
-    const num = parseHoursValue(value);
-    if (!num) return '';
-    return Number.isInteger(num) ? `${num}hr` : `${num.toFixed(1)}hr`;
-  };
-
   const getManualRangeLabel = (startTime, hours) => {
     const startMinutes = timeToMinutes(startTime);
     const parsedHours = parseHoursValue(hours);
@@ -110,7 +104,7 @@ export default function SchedulerPage() {
 
   const shiftTimeLabel = (d, shift) => {
     const peak = isPeakDay(d);
-    if (shift === 'all_day') return '08:00~16:00';
+    if (shift === 'all_day') return '7:00 ~ 16:00';
     if (shift === 'morning') return peak ? '06:00~12:30' : '06:00~12:00';
     if (shift === 'manual') return 'manual';
     return peak ? '10:30~17:00' : '11:30~17:00';
@@ -152,8 +146,8 @@ export default function SchedulerPage() {
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState([]);
   const [selectedShift, setSelectedShift] = useState('morning');
-  const [manualStartTime, setManualStartTime] = useState('09:00');
-  const [manualHours, setManualHours] = useState('4');
+  const [manualStartTime, setManualStartTime] = useState('07:00');
+  const [manualHours, setManualHours] = useState('9');
   const [manualScheduleAvailable, setManualScheduleAvailable] = useState(true);
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [dragOverDateKey, setDragOverDateKey] = useState(null);
@@ -296,27 +290,21 @@ export default function SchedulerPage() {
     };
   }, [manualHours, manualScheduleAvailable, manualStartTime]);
 
-  const getScheduleTimeLabel = useCallback(
-    (date, row) => {
-      const shiftType = String(row?.shift_type || '');
-      if (shiftType === 'manual') {
-        const label = getManualRangeLabel(row?.manual_start_time, row?.manual_hours);
-        return label || '';
-      }
-      return shiftTimeLabel(date, shiftType);
-    },
-    []
-  );
+  const getScheduleTimeLabel = (date, row) => {
+    const shiftType = String(row?.shift_type || '');
+    if (shiftType === 'manual') {
+      const label = getManualRangeLabel(row?.manual_start_time, row?.manual_hours);
+      return label || '';
+    }
+    return shiftTimeLabel(date, shiftType);
+  };
 
-  const getScheduleMetaLabel = useCallback(
-    (date, row) => {
-      const shiftType = String(row?.shift_type || '');
-      const timeLabel = getScheduleTimeLabel(date, row);
-      if (shiftType === 'manual') return timeLabel;
-      return [shiftType, timeLabel].filter(Boolean).join(' ');
-    },
-    [getScheduleTimeLabel]
-  );
+  const getScheduleMetaLabel = (date, row) => {
+    const shiftType = String(row?.shift_type || '');
+    const timeLabel = getScheduleTimeLabel(date, row);
+    if (shiftType === 'manual') return timeLabel;
+    return [shiftType, timeLabel].filter(Boolean).join(' ');
+  };
 
   const filterVisibleSchedules = useCallback(
     (list) => {
@@ -337,27 +325,11 @@ export default function SchedulerPage() {
     const d = parseDateKey(dateKey);
     if (!d) return { ok: false, message: 'Invalid date.' };
 
-    const dow = d.getDay();
-    const isWed = dow === 3;
-    const isThu = dow === 4;
-
     const empKey = employeeKeyById.get(employeeId);
     if (shiftType === 'manual') {
       return { ok: true };
     }
-    if (isWed) {
-      if (empKey === 'maeshi') {
-        if (shiftType !== 'all_day') {
-          return { ok: false, message: '수요일은 Maeshi all_day만 가능합니다.' };
-        }
-        return { ok: true };
-      }
-      return { ok: false, message: '수요일은 Berlyn/Janice 휴무입니다.' };
-    }
-
-    if (shiftType === 'all_day') {
-      return { ok: false, message: 'all_day는 수요일만 가능합니다.' };
-    }
+    if (shiftType === 'all_day') return { ok: true };
 
     if (empKey === 'berlyn' || empKey === 'janice') {
       const otherKey = (k) => (k === 'berlyn' ? 'janice' : 'berlyn');
@@ -414,31 +386,17 @@ export default function SchedulerPage() {
         };
       }
 
-      if (isThu) {
-        if (weekEvening && empKey === weekEvening) {
-          return { ok: false, message: '목요일은 해당 직원 day-off 입니다. (주 단위 로테이션)' };
-        }
-        if (weekMorning && empKey === weekMorning && shiftType !== 'morning') {
-          return { ok: false, message: '목요일은 morning만 배정합니다. (주 단위 로테이션)' };
-        }
-        if (shiftType === 'evening') {
-          return { ok: false, message: '목요일 evening은 Berlyn/Janice 배정이 아닙니다.' };
-        }
+      if (shiftType === 'morning' && weekMorning && weekMorning !== empKey) {
+        return { ok: false, message: '해당 주는 morning 담당이 고정입니다. (월요일 기준)' };
       }
-
-      if (!isThu) {
-        if (shiftType === 'morning' && weekMorning && weekMorning !== empKey) {
-          return { ok: false, message: '해당 주는 morning 담당이 고정입니다. (월요일 기준)' };
-        }
-        if (shiftType === 'evening' && weekEvening && weekEvening !== empKey) {
-          return { ok: false, message: '해당 주는 evening 담당이 고정입니다. (월요일 기준)' };
-        }
-        if (shiftType === 'morning' && weekEvening && weekEvening === empKey) {
-          return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
-        }
-        if (shiftType === 'evening' && weekMorning && weekMorning === empKey) {
-          return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
-        }
+      if (shiftType === 'evening' && weekEvening && weekEvening !== empKey) {
+        return { ok: false, message: '해당 주는 evening 담당이 고정입니다. (월요일 기준)' };
+      }
+      if (shiftType === 'morning' && weekEvening && weekEvening === empKey) {
+        return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
+      }
+      if (shiftType === 'evening' && weekMorning && weekMorning === empKey) {
+        return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
       }
     }
 
@@ -469,7 +427,6 @@ export default function SchedulerPage() {
 
     const berlyn = byName.get(normalizeName('Berlyn'));
     const janice = byName.get(normalizeName('Janice'));
-    const maeshi = byName.get(normalizeName('Maeshi'));
 
     if (!berlyn || !janice) {
       const missing = [
@@ -495,7 +452,7 @@ export default function SchedulerPage() {
     if (startMorningKey === 'berlyn') firstWeekMorning = berlyn;
     if (startMorningKey === 'janice') firstWeekMorning = janice;
     try {
-      const data = await sbSelect('employee_schedules', {
+      const prevRows = await sbSelect('employee_schedules', {
         select: 'employee_id,work_date,shift_type',
         filters: [
           { column: 'work_date', op: 'gte', value: prevWeekStartKey },
@@ -542,17 +499,10 @@ export default function SchedulerPage() {
       const weekEvening = otherEmp(weekMorning);
 
       if (dow === 3) {
-        if (maeshi?.id) {
-          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'all_day' });
-        }
         continue;
       }
 
       if (dow === 4) {
-        rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning' });
-        if (maeshi?.id) {
-          rowsToInsert.push({ employee_id: maeshi.id, work_date: dateKey, shift_type: 'evening' });
-        }
         continue;
       }
 
@@ -1343,7 +1293,6 @@ export default function SchedulerPage() {
                       </div>
                     ) : (
                       todayList.map((r) => {
-                        const shiftType = String(r.shift_type || '');
                         const name = employeeNameById.get(r.employee_id) || r.employee_id;
                         return (
                           <div
