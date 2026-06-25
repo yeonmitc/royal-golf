@@ -1,5 +1,6 @@
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
+import { KAKAO_FRIEND_ID } from '../guides/guideSelectOptions';
 import { requireAdminOrThrow } from '../../utils/admin';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
@@ -601,6 +602,8 @@ export async function setSaleGroupGuide({
   saleGroupId,
   saleId,
   guideId,
+  localGuideName = '',
+  isKakaoFriend = false,
   guideRate = 0.1,
   scope = 'group',
 } = {}) {
@@ -609,6 +612,8 @@ export async function setSaleGroupGuide({
   const sid = Number(saleId || 0);
   if (!gid) throw new Error('INVALID_SALE_GROUP_ID');
   const guide = guideId ? Number(guideId) : null;
+  const specialLocalGuideName = guide ? '' : String(localGuideName || '').trim();
+  const isKakaoGuide = !guide && (Boolean(isKakaoFriend) || specialLocalGuideName === KAKAO_FRIEND_ID);
 
   let guideNameNorm = '';
   if (guide) {
@@ -631,6 +636,40 @@ export async function setSaleGroupGuide({
   const isMrMoon = guideNameNorm.includes('mrmoon');
   const finalGuideRate = guide ? (isPeter || isMrMoon ? 0 : Number(guideRate || 0.1)) : 0;
 
+  async function insertSaleGroupRecord(row) {
+    try {
+      await sbInsert('sale_groups', [row], { returning: 'minimal' });
+    } catch (e) {
+      const msg = String(e?.message || '').toLowerCase();
+      if ((msg.includes('local_guide_name') || msg.includes('local guide')) && 'local_guide_name' in row) {
+        const { local_guide_name: _omit, ...fallbackRow } = row;
+        await sbInsert('sale_groups', [fallbackRow], { returning: 'minimal' });
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async function updateSaleGroupRecord(groupId, patch) {
+    try {
+      await sbUpdate('sale_groups', patch, {
+        filters: [{ column: 'id', op: 'eq', value: groupId }],
+        returning: 'minimal',
+      });
+    } catch (e) {
+      const msg = String(e?.message || '').toLowerCase();
+      if ((msg.includes('local_guide_name') || msg.includes('local guide')) && 'local_guide_name' in patch) {
+        const { local_guide_name: _omit, ...fallbackPatch } = patch;
+        await sbUpdate('sale_groups', fallbackPatch, {
+          filters: [{ column: 'id', op: 'eq', value: groupId }],
+          returning: 'minimal',
+        });
+      } else {
+        throw e;
+      }
+    }
+  }
+
   async function applyGuidePricingToSalesRows(targetRows) {
     for (const s of targetRows || []) {
       const rowSaleId = Number(s?.id || 0);
@@ -648,7 +687,7 @@ export async function setSaleGroupGuide({
       if (!isFreeGift && base > 0) {
         if (isPeter) {
           if (base > 1000) nextPrice = Math.ceil((base * 0.8) / 100) * 100;
-        } else if (isMrMoon && base > 1000) {
+        } else if ((isMrMoon || isKakaoGuide) && base > 1000) {
           nextPrice = Math.ceil((base * 0.9) / 100) * 100;
         }
       }
@@ -697,32 +736,27 @@ export async function setSaleGroupGuide({
     let targetGroupId = sourceGroupId;
     if (hasOtherItems) {
       targetGroupId = crypto.randomUUID();
-      await sbInsert(
-        'sale_groups',
-        [
-          {
-            id: targetGroupId,
-            guide_id: guide,
-            guide_rate: finalGuideRate,
-            sold_at: target?.sold_at || nowLocalIsoLikeUtc(),
-            subtotal: 0,
-            total: 0,
-            guide_commission: 0,
-          },
-        ],
-        { returning: 'minimal' }
-      );
+      await insertSaleGroupRecord({
+        id: targetGroupId,
+        guide_id: guide,
+        guide_rate: finalGuideRate,
+        local_guide_name: guide ? null : specialLocalGuideName || null,
+        sold_at: target?.sold_at || nowLocalIsoLikeUtc(),
+        subtotal: 0,
+        total: 0,
+        guide_commission: 0,
+      });
       await sbUpdate(
         'sales',
         { sale_group_id: targetGroupId },
         { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
       );
     } else {
-      await sbUpdate(
-        'sale_groups',
-        { guide_id: guide, guide_rate: finalGuideRate },
-        { filters: [{ column: 'id', op: 'eq', value: targetGroupId }], returning: 'minimal' }
-      );
+      await updateSaleGroupRecord(targetGroupId, {
+        guide_id: guide,
+        guide_rate: finalGuideRate,
+        local_guide_name: guide ? null : specialLocalGuideName || null,
+      });
     }
 
     await applyGuidePricingToSalesRows([
@@ -742,11 +776,11 @@ export async function setSaleGroupGuide({
     return { ok: true, scope: 'item', saleGroupId: targetGroupId, saleId: sid };
   }
 
-  await sbUpdate(
-    'sale_groups',
-    { guide_id: guide, guide_rate: finalGuideRate },
-    { filters: [{ column: 'id', op: 'eq', value: gid }], returning: 'minimal' }
-  );
+  await updateSaleGroupRecord(gid, {
+    guide_id: guide,
+    guide_rate: finalGuideRate,
+    local_guide_name: guide ? null : specialLocalGuideName || null,
+  });
 
   try {
     const sales = await sbSelect('sales', {

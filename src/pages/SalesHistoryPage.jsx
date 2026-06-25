@@ -8,6 +8,7 @@ import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
+import { isSpecialLocalGuideName } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
@@ -162,7 +163,7 @@ export default function SalesHistoryPage() {
         return !isElla;
       }
       if (filterMode === 'local-guide') {
-        if (!localGuideName || localGuideName === '__ONLINE__') return false;
+        if (!localGuideName || isSpecialLocalGuideName(localGuideName)) return false;
         const q = String(localGuideInput || '').trim().toLowerCase();
         if (!q) return true;
         return localGuideName.toLowerCase().includes(q);

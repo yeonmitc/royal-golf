@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import DateInput from '../../../components/common/DateInput';
+import Input from '../../../components/common/Input';
 import Modal from '../../../components/common/Modal';
 import ColorChangeModal from '../../../components/sales/ColorChangeModal';
 import PriceEditModal from '../../../components/sales/PriceEditModal';
@@ -11,6 +12,14 @@ import ReceiptModal from '../../../components/sales/ReceiptModal';
 import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
+import {
+  buildGuideAssignmentPayload,
+  formatLocalGuideLabel,
+  getGuideSelectOptions,
+  isSpecialLocalGuideName,
+  LOCAL_GUIDE_ID,
+  resolveGuideSelectValue,
+} from '../../guides/guideSelectOptions';
 import { useAdminStore } from '../../../store/adminStore';
 import { formatRentalName, getRentalMetaForRow, RENTAL_CODE } from '../../../utils/rentalMeta';
 import { getGuides } from '../../guides/guideApi';
@@ -39,7 +48,11 @@ export default function SalesTable({
   const [guideTargetSaleId, setGuideTargetSaleId] = useState(null);
   const [guideTargetCode, setGuideTargetCode] = useState('');
   const [selectedGuide, setSelectedGuide] = useState('');
+  const [selectedLocalGuideName, setSelectedLocalGuideName] = useState('');
   const [guideOnlyThisItem, setGuideOnlyThisItem] = useState(false);
+  const [localGuideModalOpen, setLocalGuideModalOpen] = useState(false);
+  const [localGuideDraft, setLocalGuideDraft] = useState('');
+  const [localGuideErr, setLocalGuideErr] = useState('');
   const [priceEditOpen, setPriceEditOpen] = useState(false);
   const [priceEditTarget, setPriceEditTarget] = useState(null);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -153,6 +166,7 @@ export default function SalesTable({
   const guideNameById = new Map(
     (guides || []).map((g) => [String(g.id), String(g.name || '').trim()])
   );
+  const guideOptions = useMemo(() => getGuideSelectOptions(guides), [guides]);
 
   useEffect(() => {
     if (!isAdmin || !ellaGuideId || autoEllaRunningRef.current) return;
@@ -189,6 +203,29 @@ export default function SalesTable({
         autoEllaRunningRef.current = false;
       });
   }, [ellaGuideId, isAdmin, setGroupGuide, showToast, visibleRows]);
+
+  function resetGuideEditorState() {
+    setGuideOpen(false);
+    setGuideTargetGroup(null);
+    setGuideTargetSaleId(null);
+    setGuideTargetCode('');
+    setSelectedGuide('');
+    setSelectedLocalGuideName('');
+    setGuideOnlyThisItem(false);
+    setLocalGuideModalOpen(false);
+    setLocalGuideDraft('');
+    setLocalGuideErr('');
+  }
+
+  function handleGuideSelectionChange(value) {
+    const nextValue = String(value || '');
+    setSelectedGuide(nextValue);
+    if (nextValue === LOCAL_GUIDE_ID) {
+      setLocalGuideDraft(String(selectedLocalGuideName || ''));
+      setLocalGuideErr('');
+      setLocalGuideModalOpen(true);
+    }
+  }
 
   if (isLoading) {
     return <div className="p-4 text-sm text-gray-500">Loading sales history…</div>;
@@ -277,7 +314,7 @@ export default function SalesTable({
     const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
     const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
     const localGuideName = String(row?.localGuideName || '').trim();
-    const localGuideLabel = localGuideName === '__ONLINE__' ? 'Online' : localGuideName;
+    const localGuideLabel = formatLocalGuideLabel(localGuideName);
     const isRental = row.code === RENTAL_CODE;
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
@@ -552,15 +589,19 @@ export default function SalesTable({
                 showToast('Admin required.');
                 return;
               }
+              const rowLocalGuideName = String(row?.localGuideName || '').trim();
               setGuideTargetGroup(row.saleGroupId);
               setGuideTargetSaleId(row.saleId || null);
               setGuideTargetCode(String(row.code || ''));
+              setSelectedLocalGuideName(
+                rowLocalGuideName && !isSpecialLocalGuideName(rowLocalGuideName) ? rowLocalGuideName : ''
+              );
               setSelectedGuide(
-                row.guideId != null
-                  ? String(row.guideId)
-                  : isEllaPriorityCode(row.code) && ellaGuideId
-                    ? ellaGuideId
-                    : ''
+                resolveGuideSelectValue({
+                  guideId: row.guideId,
+                  localGuideName: rowLocalGuideName,
+                  fallbackValue: isEllaPriorityCode(row.code) && ellaGuideId ? ellaGuideId : '',
+                })
               );
               setGuideOnlyThisItem(isEllaPriorityCode(row.code));
               setGuideOpen(true);
@@ -830,12 +871,7 @@ export default function SalesTable({
       <Modal
         open={guideOpen}
         onClose={() => {
-          setGuideOpen(false);
-          setGuideTargetGroup(null);
-          setGuideTargetSaleId(null);
-          setGuideTargetCode('');
-          setSelectedGuide('');
-          setGuideOnlyThisItem(false);
+          resetGuideEditorState();
         }}
         title="Assign Guide (10% Commission)"
         size="content"
@@ -844,12 +880,7 @@ export default function SalesTable({
             <Button
               variant="outline"
               onClick={() => {
-                setGuideOpen(false);
-                setGuideTargetGroup(null);
-                setGuideTargetSaleId(null);
-                setGuideTargetCode('');
-                setSelectedGuide('');
-                setGuideOnlyThisItem(false);
+                resetGuideEditorState();
               }}
             >
               Cancel
@@ -863,20 +894,25 @@ export default function SalesTable({
                   showToast('Admin required.');
                   return;
                 }
+                if (selectedGuide === LOCAL_GUIDE_ID && !String(selectedLocalGuideName || '').trim()) {
+                  setLocalGuideDraft('');
+                  setLocalGuideErr('Please enter Local Guide name.');
+                  setLocalGuideModalOpen(true);
+                  return;
+                }
+                const guidePayload = buildGuideAssignmentPayload({
+                  selectedGuide,
+                  localGuideName: selectedLocalGuideName,
+                });
                 try {
                   await setGroupGuide({
                     saleGroupId: guideTargetGroup,
                     saleId: guideTargetSaleId,
-                    guideId: selectedGuide || null,
+                    ...guidePayload,
                     guideRate: 0.1,
                     scope: guideOnlyThisItem ? 'item' : 'group',
                   });
-                  setGuideOpen(false);
-                  setGuideTargetGroup(null);
-                  setGuideTargetSaleId(null);
-                  setGuideTargetCode('');
-                  setSelectedGuide('');
-                  setGuideOnlyThisItem(false);
+                  resetGuideEditorState();
                   showToast(
                     guideOnlyThisItem
                       ? 'Guide updated for this item only.'
@@ -907,26 +943,17 @@ export default function SalesTable({
           <select
             className="w-full rounded-full border border-[#32324a] bg-[#141420] px-3 py-1.5 text-sm text-[var(--text-main)] pr-8 focus:outline-none focus:border-[var(--gold-soft)] focus:ring-1 focus:ring-[var(--gold-soft)]"
             value={selectedGuide}
-            onChange={(e) => setSelectedGuide(e.target.value)}
+            onChange={(e) => handleGuideSelectionChange(e.target.value)}
           >
-            <option value="">No Guide</option>
-            {(guides || []).map((g) => {
-              const nameLower = String(g?.name || '').toLowerCase();
-              const isPeter = nameLower.replace(/[\s.]/g, '').includes('peter');
-              return (
-                <option
-                  key={g.id}
-                  value={g.id}
-                  style={
-                    isPeter
-                      ? { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' }
-                      : {}
-                  }
-                >
-                  {g.name}
-                </option>
-              );
-            })}
+            {guideOptions.map((option) => (
+              <option
+                key={option.value || '__NO_GUIDE__'}
+                value={option.value}
+                style={option.style || undefined}
+              >
+                {option.label}
+              </option>
+            ))}
           </select>
           <label
             style={{
@@ -961,6 +988,57 @@ export default function SalesTable({
               </span>
             </span>
           </label>
+        </div>
+      </Modal>
+      <Modal
+        open={localGuideModalOpen}
+        onClose={() => {
+          setLocalGuideModalOpen(false);
+          setLocalGuideErr('');
+        }}
+        title="Local Guide"
+        size="content"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLocalGuideModalOpen(false);
+                setLocalGuideErr('');
+              }}
+              style={{ width: 100 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                const name = String(localGuideDraft || '').trim();
+                if (!name) {
+                  setLocalGuideErr('Please enter Local Guide name.');
+                  return;
+                }
+                setSelectedGuide(LOCAL_GUIDE_ID);
+                setSelectedLocalGuideName(name);
+                setLocalGuideModalOpen(false);
+                setLocalGuideErr('');
+              }}
+              style={{ width: 120 }}
+            >
+              Save
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Input
+            label="Local Guide Name"
+            value={localGuideDraft}
+            onChange={(e) => setLocalGuideDraft(e.target.value)}
+            placeholder="Enter name"
+            maxLength={50}
+            error={localGuideErr || undefined}
+          />
         </div>
       </Modal>
       <ColorChangeModal

@@ -12,6 +12,12 @@ import ReceiptModal from '../components/sales/ReceiptModal';
 import { useToast } from '../context/ToastContext';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
+import {
+  getGuideSelectOptions,
+  KAKAO_FRIEND_ID,
+  LOCAL_GUIDE_ID,
+  ONLINE_ID,
+} from '../features/guides/guideSelectOptions';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
 import { useCartStore } from '../store/cartStore';
@@ -21,10 +27,6 @@ import {
   RENTAL_CODE,
   saveRentalMetaForSoldAt,
 } from '../utils/rentalMeta';
-
-const KAKAO_FRIEND_ID = '__KAKAO_FRIEND__';
-const ONLINE_ID = '__ONLINE__';
-const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -59,17 +61,7 @@ export default function SellPage() {
   const isMrMoonSelected = selectedGuideNameNorm.includes('mrmoon');
   const isPeterSelected = selectedGuideNameNorm.includes('peter');
 
-  const guideNorm = (s) => String(s || '').toLowerCase().replace(/[\s.]/g, '');
-  const guideList = Array.isArray(guides) ? guides.slice() : [];
-  const mrMoonGuide = guideList.find((g) => guideNorm(g?.name) === 'mrmoon') || null;
-  const peterGuide = guideList.find((g) => guideNorm(g?.name).includes('peter')) || null;
-  const ellaGuide = guideList.find((g) => guideNorm(g?.name).includes('ella')) || null;
-  const otherGuides = guideList
-    .filter((g) => {
-      const n = guideNorm(g?.name);
-      return n && n !== 'mrmoon' && !n.includes('peter') && !n.includes('ella');
-    })
-    .sort((a, b) => String(a?.name || '').trim().localeCompare(String(b?.name || '').trim()));
+  const guideOptions = getGuideSelectOptions(guides);
 
   const [localGuideModalOpen, setLocalGuideModalOpen] = useState(false);
   const [localGuideDraft, setLocalGuideDraft] = useState('');
@@ -133,8 +125,10 @@ export default function SellPage() {
         localGuideName:
           currentGuideKey === LOCAL_GUIDE_ID
             ? String(currentLocalGuideName || '').trim()
+            : currentGuideKey === KAKAO_FRIEND_ID
+              ? KAKAO_FRIEND_ID
             : currentGuideKey === ONLINE_ID
-              ? '__ONLINE__'
+              ? ONLINE_ID
               : '',
         isMrMoon: isMrMoonSelected,
         isPeter: isPeterSelected,
@@ -495,60 +489,15 @@ export default function SellPage() {
                     }}
                     style={{ borderColor: 'var(--border-soft)' }}
                   >
-                    <option value="">No Guide</option>
-                    {mrMoonGuide ? (
+                    {guideOptions.map((option) => (
                       <option
-                        key={mrMoonGuide.id}
-                        value={mrMoonGuide.id}
-                        style={{ backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' }}
+                        key={option.value || '__NO_GUIDE__'}
+                        value={option.value}
+                        style={option.style || undefined}
                       >
-                        Mr.Moon (10%)
-                      </option>
-                    ) : null}
-                    <option
-                      value={KAKAO_FRIEND_ID}
-                      style={{ backgroundColor: 'rgba(249,115,22,0.2)', color: 'var(--text-main)' }}
-                    >
-                      Kakao (10%)
-                    </option>
-                    <option
-                      value={LOCAL_GUIDE_ID}
-                      style={{ backgroundColor: 'rgba(34,197,94,0.2)', color: 'var(--text-main)' }}
-                    >
-                      Local Guide
-                    </option>
-                    {peterGuide ? (
-                      <option
-                        key={peterGuide.id}
-                        value={peterGuide.id}
-                        style={{ backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' }}
-                      >
-                        Peter (20%)
-                      </option>
-                    ) : null}
-                    {ellaGuide ? (
-                      <option
-                        key={ellaGuide.id}
-                        value={ellaGuide.id}
-                        style={{
-                          backgroundColor: 'rgba(255, 105, 180, 0.1)',
-                          color: 'var(--text-main)',
-                        }}
-                      >
-                        Ella
-                      </option>
-                    ) : null}
-                    {otherGuides.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
+                        {option.label}
                       </option>
                     ))}
-                    <option
-                      value={ONLINE_ID}
-                      style={{ backgroundColor: 'rgba(168,85,247,0.3)', color: 'var(--text-main)' }}
-                    >
-                      Online
-                    </option>
                   </select>
                 </div>
 
