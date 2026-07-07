@@ -539,6 +539,37 @@ export async function processRefund({ saleId, reason, qty: _qty, code: _code, si
   if (!reasonStr) throw new Error('INVALID_REFUND_REASON');
   const refundedAt = nowLocalIsoLikeUtc();
 
+  // #region debug-point refund-stock-double:processRefund
+  const dbgRequestId =
+    typeof arguments?.[0]?.debugRequestId === 'string' ? arguments[0].debugRequestId : '';
+  const dbgRunId =
+    typeof arguments?.[0]?.debugRunId === 'string' ? arguments[0].debugRunId : 'pre';
+  const dbgEnabled =
+    typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV && !!dbgRequestId;
+  const dbgUrl = 'http://127.0.0.1:7777/event';
+  const dbgReport = async (event, data = {}) => {
+    if (!dbgEnabled) return;
+    try {
+      await fetch(dbgUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ts: Date.now(),
+          sessionId: 'refund-stock-double',
+          runId: dbgRunId,
+          hypothesisId: 'H1',
+          event,
+          requestId: dbgRequestId,
+          data,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+  await dbgReport('refund.processRefund.enter', { saleId: sid });
+  // #endregion debug-point refund-stock-double:processRefund
+
   const saleRows = await sbSelect('sales', {
     select: 'id,code,size_std,qty,refunded_at',
     filters: [{ column: 'id', op: 'eq', value: sid }],
@@ -567,21 +598,67 @@ export async function processRefund({ saleId, reason, qty: _qty, code: _code, si
   const currentStock = Number(inv[col] ?? 0) || 0;
   const newStock = currentStock + qty;
 
-  await sbUpdate(
-    'inventories',
-    { [col]: newStock },
-    { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
-  );
+  await dbgReport('refund.processRefund.inventory.before', { code, col, qty, currentStock, newStock });
 
+  await dbgReport('refund.processRefund.refunds.insert', { saleId: sid, refundedAt });
   await sbInsert('refunds', [{ sale_id: sid, refunded_at: refundedAt, reason: reasonStr }], {
     returning: 'minimal',
   });
+  const invAfterRefundInsert = (await sbSelect('inventories', {
+    select: `code,${col}`,
+    filters: [{ column: 'code', op: 'eq', value: code }],
+    limit: 1,
+  }))?.[0];
+  await dbgReport('refund.processRefund.inventory.afterRefundInsert', {
+    code,
+    col,
+    afterStock: Number(invAfterRefundInsert?.[col] ?? 0) || 0,
+  });
 
+  await dbgReport('refund.processRefund.sales.update', { saleId: sid, refundedAt });
   await sbUpdate(
     'sales',
     { refunded_at: refundedAt, refund_reason: reasonStr },
     { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
   );
+
+  const invAfterSalesUpdate = (await sbSelect('inventories', {
+    select: `code,${col}`,
+    filters: [{ column: 'code', op: 'eq', value: code }],
+    limit: 1,
+  }))?.[0];
+  await dbgReport('refund.processRefund.inventory.afterSalesUpdate', {
+    code,
+    col,
+    afterStock: Number(invAfterSalesUpdate?.[col] ?? 0) || 0,
+  });
+
+  const afterStockNumber = Number(invAfterSalesUpdate?.[col] ?? 0) || 0;
+  if (afterStockNumber === currentStock) {
+    await dbgReport('refund.processRefund.inventory.fallbackUpdate', {
+      code,
+      col,
+      qty,
+      currentStock,
+      newStock,
+    });
+    await sbUpdate(
+      'inventories',
+      { [col]: newStock },
+      { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
+    );
+    const invAfterFallback = (await sbSelect('inventories', {
+      select: `code,${col}`,
+      filters: [{ column: 'code', op: 'eq', value: code }],
+      limit: 1,
+    }))?.[0];
+    await dbgReport('refund.processRefund.inventory.afterFallbackUpdate', {
+      code,
+      col,
+      afterStock: Number(invAfterFallback?.[col] ?? 0) || 0,
+    });
+  }
+  await dbgReport('refund.processRefund.exit', { ok: true });
 
   return { ok: true };
 }
