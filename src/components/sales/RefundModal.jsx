@@ -37,31 +37,6 @@ export default function RefundModal({ open, onClose, saleItem }) {
       return;
     }
 
-    // #region debug-point refund-stock-double:ui
-    const debugRequestId =
-      typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-    const debugRunId = 'post';
-    try {
-      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV) {
-        await fetch('http://127.0.0.1:7777/event', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            ts: Date.now(),
-            sessionId: 'refund-stock-double',
-            runId: debugRunId,
-            hypothesisId: 'H1',
-            event: 'refund.ui.submit',
-            requestId: debugRequestId,
-            data: { saleId: saleItem.saleId, code: saleItem.code, qty },
-          }),
-        });
-      }
-    } catch {
-      // ignore
-    }
-    // #endregion debug-point refund-stock-double:ui
-
     try {
       await processRefund({
         saleId: saleItem.saleId,
@@ -69,8 +44,6 @@ export default function RefundModal({ open, onClose, saleItem }) {
         size: saleItem.size ?? saleItem.sizeDisplay,
         qty,
         reason: v,
-        debugRequestId,
-        debugRunId,
       });
       onClose?.();
       showToast('Refund processed.');
