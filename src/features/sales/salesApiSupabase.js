@@ -540,7 +540,7 @@ export async function processRefund({ saleId, reason, qty: _qty, code: _code, si
   const refundedAt = nowLocalIsoLikeUtc();
 
   const saleRows = await sbSelect('sales', {
-    select: 'id,code,size_std,qty,refunded_at',
+    select: 'id,code,size_std,qty,refunded_at,stock_applied_at',
     filters: [{ column: 'id', op: 'eq', value: sid }],
     limit: 1,
   });
@@ -552,20 +552,30 @@ export async function processRefund({ saleId, reason, qty: _qty, code: _code, si
   const qty = Number(sale.qty ?? _qty ?? 0) || 0;
   if (!code || qty <= 0) throw new Error('INVALID_REFUND_PAYLOAD');
 
-  const sizeKey = normalizeSizeKey(sale.size_std);
-  const col = SIZE_TO_COLUMN[sizeKey];
-  if (!col) throw new Error('UNSUPPORTED_SIZE_STD');
+  // If the original sale already applied stock in the DB, refund restock must also be
+  // left to the DB trigger. Doing a client-side fallback here can double-increment stock.
+  let manualRestock = null;
+  if (!sale.stock_applied_at) {
+    const sizeKey = normalizeSizeKey(sale.size_std);
+    const col = SIZE_TO_COLUMN[sizeKey];
+    if (!col) throw new Error('UNSUPPORTED_SIZE_STD');
 
-  const invRows = await sbSelect('inventories', {
-    select: `code,${col}`,
-    filters: [{ column: 'code', op: 'eq', value: code }],
-    limit: 1,
-  });
-  const inv = invRows?.[0];
-  if (!inv) throw new Error('INVENTORY_NOT_FOUND');
+    const invRows = await sbSelect('inventories', {
+      select: `code,${col}`,
+      filters: [{ column: 'code', op: 'eq', value: code }],
+      limit: 1,
+    });
+    const inv = invRows?.[0];
+    if (!inv) throw new Error('INVENTORY_NOT_FOUND');
 
-  const currentStock = Number(inv[col] ?? 0) || 0;
-  const newStock = currentStock + qty;
+    const currentStock = Number(inv[col] ?? 0) || 0;
+    manualRestock = {
+      code,
+      col,
+      newStock: currentStock + qty,
+    };
+  }
+
   await sbInsert('refunds', [{ sale_id: sid, refunded_at: refundedAt, reason: reasonStr }], {
     returning: 'minimal',
   });
@@ -576,18 +586,11 @@ export async function processRefund({ saleId, reason, qty: _qty, code: _code, si
     { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
   );
 
-  const invAfterSalesUpdate = (await sbSelect('inventories', {
-    select: `code,${col}`,
-    filters: [{ column: 'code', op: 'eq', value: code }],
-    limit: 1,
-  }))?.[0];
-
-  const afterStockNumber = Number(invAfterSalesUpdate?.[col] ?? 0) || 0;
-  if (afterStockNumber === currentStock) {
+  if (manualRestock) {
     await sbUpdate(
       'inventories',
-      { [col]: newStock },
-      { filters: [{ column: 'code', op: 'eq', value: code }], returning: 'minimal' }
+      { [manualRestock.col]: manualRestock.newStock },
+      { filters: [{ column: 'code', op: 'eq', value: manualRestock.code }], returning: 'minimal' }
     );
   }
 
