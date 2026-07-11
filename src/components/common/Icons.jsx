@@ -64,6 +64,51 @@ export function DownloadIcon({ className, size = 16, strokeWidth = 1.5, color = 
   );
 }
 
+export function ArrowUpIcon({ className, size = 16, strokeWidth = 1.8, color = 'currentColor' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 19V5" />
+      <path d="m6 11 6-6 6 6" />
+    </svg>
+  );
+}
+
+export function ArrowDownIcon({
+  className,
+  size = 16,
+  strokeWidth = 1.8,
+  color = 'currentColor',
+}) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 5v14" />
+      <path d="m6 13 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function CalendarIcon({ className, size = 16, strokeWidth = 1.5, color = 'currentColor' }) {
   return (
     <svg
@@ -354,6 +399,12 @@ const ICON_MAP = {
   refresh: RefreshIcon,
   reset: RefreshIcon,
   download: DownloadIcon,
+  up: ArrowUpIcon,
+  arrowup: ArrowUpIcon,
+  sortup: ArrowUpIcon,
+  down: ArrowDownIcon,
+  arrowdown: ArrowDownIcon,
+  sortdown: ArrowDownIcon,
   calendar: CalendarIcon,
   today: CalendarIcon,
   upload: CloudUploadIcon,

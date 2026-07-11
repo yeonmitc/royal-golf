@@ -1,6 +1,7 @@
 // src/pages/SalesHistoryPage.jsx
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ellaIcon from '../assets/ella.svg';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -8,7 +9,7 @@ import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
-import { isSpecialLocalGuideName } from '../features/guides/guideSelectOptions';
+import { isSpecialLocalGuideName, KAKAO_FRIEND_ID } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
@@ -31,9 +32,14 @@ export default function SalesHistoryPage() {
   const toInputRef = useRef(null);
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
-  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'ella', 'no-ella'
+  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'kakao', 'ella', 'no-ella'
   const [refundOnly, setRefundOnly] = useState(false);
   const [localGuideInput, setLocalGuideInput] = useState('');
+  const [selectedGuideId, setSelectedGuideId] = useState('');
+  const [guideMenuOpen, setGuideMenuOpen] = useState(false);
+  const [guideMenuPosition, setGuideMenuPosition] = useState({ top: 0, left: 0, width: 160 });
+  const guideMenuRef = useRef(null);
+  const guideButtonRef = useRef(null);
 
   // 실제 적용된 필터(검색 버튼 누른 후 반영)
   const [filters, setFilters] = useState({
@@ -116,6 +122,72 @@ export default function SalesHistoryPage() {
   });
 
   const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
+  const guideFilterOptions = useMemo(
+    () =>
+      (guides || [])
+        .filter((g) => {
+          const name = String(g?.name || '')
+            .toLowerCase()
+            .replace(/[\s.]/g, '');
+          return name && name !== 'mrmoon' && !name.includes('ella');
+        })
+        .sort((a, b) => {
+          const aName = String(a?.name || '').trim();
+          const bName = String(b?.name || '').trim();
+          const aIsPeter = aName.toLowerCase() === 'peter';
+          const bIsPeter = bName.toLowerCase() === 'peter';
+          if (aIsPeter && !bIsPeter) return -1;
+          if (!aIsPeter && bIsPeter) return 1;
+          return aName.localeCompare(bName);
+        })
+        .map((g) => ({
+          value: String(g.id),
+          label: String(g.name || '').trim(),
+        })),
+    [guides]
+  );
+  const selectedGuideLabel =
+    guideFilterOptions.find((option) => option.value === selectedGuideId)?.label || 'guide(All)';
+
+  useEffect(() => {
+    if (!guideMenuOpen) return undefined;
+
+    function updateMenuPosition() {
+      const rect = guideButtonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setGuideMenuPosition({
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+
+    updateMenuPosition();
+
+    function handlePointerDown(event) {
+      if (
+        !guideMenuRef.current?.contains(event.target) &&
+        !guideButtonRef.current?.contains(event.target)
+      ) {
+        setGuideMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === 'Escape') setGuideMenuOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [guideMenuOpen]);
 
   const allRows = salesData?.rows ?? EMPTY_ROWS;
   const visibleRows = useMemo(() => {
@@ -146,6 +218,11 @@ export default function SalesHistoryPage() {
       const localGuideName = String(r?.localGuideName || '').trim();
       const isMrMoon = gid && mrMoonGuideIds.has(String(gid));
       const isElla = gid && ellaGuideIds.has(String(gid));
+      const isKakao = !gid && localGuideName === KAKAO_FRIEND_ID;
+
+      if (selectedGuideId && String(gid || '') !== selectedGuideId) {
+        return false;
+      }
 
       if (filterMode === 'no-guide') {
         return !gid;
@@ -156,6 +233,9 @@ export default function SalesHistoryPage() {
       if (filterMode === 'mr-moon') {
         return isMrMoon;
       }
+      if (filterMode === 'kakao') {
+        return isKakao;
+      }
       if (filterMode === 'ella') {
         return isElla;
       }
@@ -164,7 +244,9 @@ export default function SalesHistoryPage() {
       }
       if (filterMode === 'local-guide') {
         if (!localGuideName || isSpecialLocalGuideName(localGuideName)) return false;
-        const q = String(localGuideInput || '').trim().toLowerCase();
+        const q = String(localGuideInput || '')
+          .trim()
+          .toLowerCase();
         if (!q) return true;
         return localGuideName.toLowerCase().includes(q);
       }
@@ -177,7 +259,15 @@ export default function SalesHistoryPage() {
       const bt = new Date(b.soldAt || 0).getTime();
       return at - bt;
     });
-  }, [allRows, sortAscending, filterMode, guides, refundOnly, localGuideInput]);
+  }, [
+    allRows,
+    sortAscending,
+    filterMode,
+    guides,
+    refundOnly,
+    localGuideInput,
+    selectedGuideId,
+  ]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -258,6 +348,7 @@ export default function SalesHistoryPage() {
         rows={csvRows}
         filename="sales-history.csv"
         gdriveName="sales-history.csv"
+        showDrive={false}
       />
     );
   }, [visibleRows]);
@@ -296,30 +387,63 @@ export default function SalesHistoryPage() {
 
   const cardActions = useMemo(() => {
     const actions = [
-      <Button
-        key="ascending-toggle"
-        type="button"
-        onClick={() => setSortAscending((prev) => !prev)}
-        size="sm"
-        variant={sortAscending ? 'primary' : 'outline'}
-        style={{ minWidth: 90 }}
-      >
-        Ascending
-      </Button>,
-      <Button
-        key="guide-toggle"
-        type="button"
-        onClick={() => setFilterMode((prev) => (prev === 'guide' ? 'all' : 'guide'))}
-        size="sm"
-        variant={filterMode === 'guide' ? 'primary' : 'outline'}
-        style={{ minWidth: 90 }}
-      >
-        Guide
-      </Button>,
+      <div key="guide-filter" ref={guideMenuRef} style={{ position: 'relative', minWidth: 160 }}>
+        <button
+          ref={guideButtonRef}
+          type="button"
+          className="btn outline sm"
+          onClick={() => {
+            const rect = guideButtonRef.current?.getBoundingClientRect();
+            if (rect) {
+              setGuideMenuPosition({
+                top: rect.bottom + 6,
+                left: rect.left,
+                width: rect.width,
+              });
+            }
+            setGuideMenuOpen((prev) => !prev);
+          }}
+          aria-haspopup="listbox"
+          aria-expanded={guideMenuOpen}
+          style={{
+            width: '100%',
+            minWidth: 160,
+            justifyContent: 'space-between',
+            background: '#000',
+            color: 'var(--gold)',
+            borderColor: 'var(--gold)',
+            padding: '0 10px 0 12px',
+            cursor: 'pointer',
+          }}
+        >
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {selectedGuideLabel}
+          </span>
+          <span
+            style={{
+              color: 'var(--gold)',
+              fontSize: 10,
+              transform: guideMenuOpen ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s ease',
+            }}
+          >
+            ▼
+          </span>
+        </button>
+      </div>,
       <Button
         key="mr-moon-toggle"
         type="button"
-        onClick={() => setFilterMode((prev) => (prev === 'mr-moon' ? 'all' : 'mr-moon'))}
+        onClick={() => {
+          setSelectedGuideId('');
+          setFilterMode((prev) => (prev === 'mr-moon' ? 'all' : 'mr-moon'));
+        }}
         size="sm"
         variant={filterMode === 'mr-moon' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
@@ -327,9 +451,25 @@ export default function SalesHistoryPage() {
         Mr.Moon
       </Button>,
       <Button
+        key="kakao-toggle"
+        type="button"
+        onClick={() => {
+          setSelectedGuideId('');
+          setFilterMode((prev) => (prev === 'kakao' ? 'all' : 'kakao'));
+        }}
+        size="sm"
+        variant={filterMode === 'kakao' ? 'primary' : 'outline'}
+        style={{ minWidth: 90 }}
+      >
+        Kakao
+      </Button>,
+      <Button
         key="no-guide-toggle"
         type="button"
-        onClick={() => setFilterMode((prev) => (prev === 'no-guide' ? 'all' : 'no-guide'))}
+        onClick={() => {
+          setSelectedGuideId('');
+          setFilterMode((prev) => (prev === 'no-guide' ? 'all' : 'no-guide'));
+        }}
         size="sm"
         variant={filterMode === 'no-guide' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
@@ -339,7 +479,10 @@ export default function SalesHistoryPage() {
       <Button
         key="local-guide-toggle"
         type="button"
-        onClick={() => setFilterMode((prev) => (prev === 'local-guide' ? 'all' : 'local-guide'))}
+        onClick={() => {
+          setSelectedGuideId('');
+          setFilterMode((prev) => (prev === 'local-guide' ? 'all' : 'local-guide'));
+        }}
         size="sm"
         variant={filterMode === 'local-guide' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
@@ -359,7 +502,10 @@ export default function SalesHistoryPage() {
       <Button
         key="ella-toggle"
         type="button"
-        onClick={() => setFilterMode((prev) => (prev === 'no-ella' ? 'all' : 'no-ella'))}
+        onClick={() => {
+          setSelectedGuideId('');
+          setFilterMode((prev) => (prev === 'no-ella' ? 'all' : 'no-ella'));
+        }}
         size="sm"
         variant="outline"
         title="No Ella Sales"
@@ -404,9 +550,106 @@ export default function SalesHistoryPage() {
     ];
     if (exportActions) {
       actions.push(exportActions);
+      actions.push(
+        <Button
+          key="ascending-toggle"
+          type="button"
+          onClick={() => setSortAscending((prev) => !prev)}
+          size="sm"
+          variant={sortAscending ? 'primary' : 'outline'}
+          icon={sortAscending ? 'arrowup' : 'arrowdown'}
+          title={sortAscending ? 'Ascending' : 'Descending'}
+          aria-label={sortAscending ? 'Ascending' : 'Descending'}
+          style={{
+            width: '32px',
+            height: '32px',
+            minWidth: '32px',
+            flex: '0 0 32px',
+            borderRadius: '50%',
+            padding: 0,
+          }}
+        />
+      );
     }
     return actions;
-  }, [sortAscending, filterMode, refundOnly, exportActions]);
+  }, [
+    sortAscending,
+    filterMode,
+    refundOnly,
+    exportActions,
+    guideFilterOptions,
+    selectedGuideId,
+    guideMenuOpen,
+    selectedGuideLabel,
+  ]);
+
+  const guideMenu =
+    guideMenuOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={guideMenuRef}
+            role="listbox"
+            aria-label="Guide filter"
+            style={{
+              position: 'fixed',
+              top: guideMenuPosition.top,
+              left: guideMenuPosition.left,
+              zIndex: 9999,
+              width: guideMenuPosition.width,
+              maxHeight: 260,
+              overflowY: 'auto',
+              background: '#000',
+              border: '1px solid var(--gold)',
+              borderRadius: 14,
+              boxShadow: '0 10px 24px rgba(0,0,0,0.45)',
+              padding: 6,
+            }}
+          >
+            {[{ value: '', label: 'guide(All)' }, ...guideFilterOptions].map((option) => {
+              const isSelected = option.value === selectedGuideId;
+              return (
+                <button
+                  key={option.value || '__guide_all__'}
+                  type="button"
+                  onClick={() => {
+                    setSelectedGuideId(option.value);
+                    setFilterMode('all');
+                    setLocalGuideInput('');
+                    setGuideMenuOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    border: 'none',
+                    background: isSelected ? 'var(--gold)' : '#000',
+                    color: isSelected ? '#000' : 'var(--gold)',
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'var(--gold)';
+                      e.currentTarget.style.color = '#000';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = '#000';
+                      e.currentTarget.style.color = 'var(--gold)';
+                    }
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div className="page-container">
@@ -631,12 +874,14 @@ export default function SalesHistoryPage() {
             marginBottom: 12,
             flexWrap: 'nowrap',
             overflowX: 'auto',
+            overflowY: 'visible',
           }}
         >
           {cardActions}
         </div>
         <SalesTable rows={visibleRows} isLoading={isLoading} isError={isError} error={error} />
       </Card>
+      {guideMenu}
     </div>
   );
 }

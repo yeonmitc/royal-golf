@@ -1065,7 +1065,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
       const isOnline = !guideId && localGuideName === '__ONLINE__';
-      const isLocalGuide = !guideId && !!localGuideName && !isOnline;
+      const isKakaoGuide = !guideId && localGuideName === KAKAO_FRIEND_ID;
+      const isLocalGuide = !guideId && !!localGuideName && !isOnline && !isKakaoGuide;
 
       return {
         saleId: r.id,
@@ -1095,7 +1096,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         isMrMoon,
         isElla,
         isPeter,
-        // If Mr. Moon or Peter, commission is 0. Otherwise 10%.
+        // Kakao is a discount channel, not a commission-bearing guide.
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
           (guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift) || (isLocalGuide && !isFreeGift)
@@ -1134,7 +1135,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
   const withMeta = withMetaRaw.map((r) => ({
     ...r,
-    commission: r.isMrMoon || r.isPeter || r.isElla ? 0 : r.commission,
+    commission:
+      r.isMrMoon || r.isPeter || r.isElla || String(r?.localGuideName || '').trim() === KAKAO_FRIEND_ID
+        ? 0
+        : r.commission,
   }));
   const q = String(query || '').trim();
   if (!q) return withMeta;
