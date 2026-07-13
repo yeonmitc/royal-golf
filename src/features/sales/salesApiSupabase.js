@@ -195,7 +195,7 @@ async function attachLocalProductMeta(items) {
     const qtyN = Number(i.qty || 0) || 0;
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
     const isExchanged = Boolean(i.isExchanged);
-    const isFreeGift = Boolean(i.freeGift ?? false) || (i.unitPricePhp === 0 && !isExchanged);
+    const isFreeGift = !isExchanged && (Boolean(i.freeGift ?? false) || i.unitPricePhp === 0);
     const localGuideName = String(i.localGuideName || '').trim();
     const isOnline = localGuideName === '__ONLINE__';
     const hasAnyGuide = (Boolean(i.guideId) || Boolean(localGuideName)) && !isOnline;
@@ -915,6 +915,7 @@ export async function updateSalePrice({ saleGroupId, saleId, price, markExchange
   // and are not used in the main checkoutCart flow (which uses 'price').
   const patch = { price: p };
   if (markExchanged === true) patch.is_exchanged = true;
+  if (markExchanged === true || p !== 0) patch.free_gift = false;
 
   try {
     await sbUpdate('sales', patch, { filters, returning: 'minimal' });
@@ -1118,7 +1119,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isElla = nameLower.includes('ella');
       const isPeter = nameLower.includes('peter');
       const isExchanged = Boolean(r.is_exchanged ?? false);
-      const isFreeGift = Boolean(r.free_gift ?? false) || (unit === 0 && !isExchanged);
+      const isFreeGift = !isExchanged && (Boolean(r.free_gift ?? false) || unit === 0);
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
       const isOnline = !guideId && localGuideName === '__ONLINE__';
       const isKakaoGuide = !guideId && localGuideName === KAKAO_FRIEND_ID;
@@ -1309,7 +1310,7 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const isElla = guideNameNorm.includes('ella');
       const isPeter = guideNameNorm.includes('peter');
       const isExchanged = Boolean(row?.is_exchanged ?? false);
-      const freeGift = Boolean(row?.free_gift ?? false) || (unit === 0 && !isExchanged);
+      const freeGift = !isExchanged && (Boolean(row?.free_gift ?? false) || unit === 0);
       const finalUnit = isRefunded || freeGift ? 0 : unit;
 
       return {
@@ -1422,7 +1423,7 @@ export async function getAnalytics({
   const nonRefundedRows = (inRange || []).filter((r) => !toMsFromIso(r?.refunded_at));
   const giftRows = (nonRefundedRows || []).filter((r) => {
     const unit = Number(r?.price ?? 0) || 0;
-    return Boolean(r?.free_gift ?? false) || (unit === 0 && !(r?.is_exchanged ?? false));
+    return !(r?.is_exchanged ?? false) && (Boolean(r?.free_gift ?? false) || unit === 0);
   });
 
   report(45, '상품 메타 결합 중…');
@@ -1436,7 +1437,7 @@ export async function getAnalytics({
         const g = groupMap.get(String(r.sale_group_id));
         const guideId = g?.guideId ?? null;
         const isFreeGift =
-          Boolean(r.free_gift ?? false) || (unit === 0 && !(r.is_exchanged ?? false));
+          !(r.is_exchanged ?? false) && (Boolean(r.free_gift ?? false) || unit === 0);
         const finalUnit = isFreeGift ? 0 : unit;
         return {
           saleId: r.id,

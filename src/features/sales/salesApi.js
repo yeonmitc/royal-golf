@@ -418,6 +418,7 @@ export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   await db.saleItems.update(sid, {
     unitPricePhp: p,
     discountUnitPricePhp: undefined, // Remove discount to apply new price
+    ...(markExchanged === true || p !== 0 ? { freeGift: false } : {}),
     ...(markExchanged === true ? { isExchanged: true } : {}),
   });
   
@@ -559,7 +560,7 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
 
     const finalUnit = i.discountUnitPricePhp ?? i.unitPricePhp;
     const isExchanged = Boolean(i.isExchanged);
-    const freeGift = Boolean(i.freeGift ?? false) || (finalUnit === 0 && !isExchanged);
+    const freeGift = !isExchanged && (Boolean(i.freeGift ?? false) || finalUnit === 0);
 
     return {
       saleId: i.saleId,
