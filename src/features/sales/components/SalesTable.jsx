@@ -55,6 +55,7 @@ export default function SalesTable({
   const [localGuideErr, setLocalGuideErr] = useState('');
   const [priceEditOpen, setPriceEditOpen] = useState(false);
   const [priceEditTarget, setPriceEditTarget] = useState(null);
+  const [priceEditMode, setPriceEditMode] = useState('edit');
   const [timeOpen, setTimeOpen] = useState(false);
   const [timeTarget, setTimeTarget] = useState(null);
   const [timeDate, setTimeDate] = useState('');
@@ -308,7 +309,8 @@ export default function SalesTable({
     const isDiscounted = discounted !== null && discounted !== original;
     const finalUnitRaw = isDiscounted ? discounted : original;
     const finalUnit = isRefunded ? 0 : finalUnitRaw;
-    const giftChecked = Boolean(row.freeGift) || finalUnit === 0;
+    const isExchanged = Boolean(row?.isExchanged);
+    const giftChecked = !isExchanged && (Boolean(row.freeGift) || finalUnit === 0);
     const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
     const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
     const isPeter = row.guideId != null && peterGuideIds.has(String(row.guideId));
@@ -335,7 +337,6 @@ export default function SalesTable({
     const rentalName = rentalMeta ? formatRentalName(rentalMeta) : '';
     const rentalNo = rentalMeta ? String(rentalMeta.rentalNo || '').trim() : '';
     const refundReason = String(row?.refundReason || '').trim();
-    const isManualPriceLike = row.guideId == null && isDiscounted && !giftChecked && !isRefunded;
 
     return {
       id: `${row.saleId}-${row.code}-${row.sizeDisplay}-${row.qty}-${row.unitPricePhp}`,
@@ -418,8 +419,10 @@ export default function SalesTable({
         ),
       commission: isRefunded
         ? 'refund'
-        : giftChecked
-          ? 'gift'
+        : isExchanged
+            ? 'exchanged'
+          : giftChecked
+            ? 'gift'
           : isElla
             ? '-'
             : localGuideLabel || guideName || '-',
@@ -526,6 +529,26 @@ export default function SalesTable({
           />
           <Button
             variant="outline"
+            icon="exchange"
+            title="Exchange"
+            disabled={isRefunded}
+            style={{
+              width: '28px',
+              height: '28px',
+              padding: 0,
+              borderRadius: '50%',
+              minWidth: '28px',
+              flex: '0 0 28px',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPriceEditMode('exchange');
+              setPriceEditTarget(row);
+              setPriceEditOpen(true);
+            }}
+          />
+          <Button
+            variant="outline"
             icon="palette"
             title="Change Color"
             disabled={isRefunded}
@@ -622,10 +645,7 @@ export default function SalesTable({
             }}
             onClick={(e) => {
               e.stopPropagation();
-              if (!isAdmin) {
-                openLoginModal();
-                return;
-              }
+              setPriceEditMode('edit');
               setPriceEditTarget(row);
               setPriceEditOpen(true);
             }}
@@ -634,8 +654,10 @@ export default function SalesTable({
       ),
       style: isRefunded
         ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
-        : giftChecked
-          ? { backgroundColor: 'rgba(239, 68, 68, 0.10)', color: 'var(--text-main)' }
+        : isExchanged
+          ? { backgroundColor: 'rgba(255, 182, 193, 0.10)', color: 'var(--text-main)' }
+          : giftChecked
+            ? { backgroundColor: 'rgba(239, 68, 68, 0.10)', color: 'var(--text-main)' }
           : isMrMoon
             ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
             : isElla
@@ -646,9 +668,7 @@ export default function SalesTable({
                   ? isPeter
                     ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
                     : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
-                  : isManualPriceLike
-                    ? { backgroundColor: 'rgba(139, 92, 246, 0.18)', color: 'var(--text-main)' }
-                    : undefined,
+                  : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
@@ -863,9 +883,11 @@ export default function SalesTable({
       <PriceEditModal
         open={priceEditOpen}
         saleItem={priceEditTarget}
+        mode={priceEditMode}
         onClose={() => {
           setPriceEditOpen(false);
           setPriceEditTarget(null);
+          setPriceEditMode('edit');
         }}
       />
       <Modal

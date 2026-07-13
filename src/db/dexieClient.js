@@ -102,4 +102,18 @@ db.version(4).stores({
   ].join(','),
 });
 
+// v5: 교환 표시 플래그 저장
+db.version(5).stores({
+  saleItems: [
+    '++id',
+    'saleId',
+    'code',
+    'size',
+    'qty',
+    'unitPricePhp',
+    'discountUnitPricePhp',
+    'isExchanged',
+  ].join(','),
+});
+
 export default db;

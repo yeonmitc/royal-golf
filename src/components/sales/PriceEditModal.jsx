@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { useUpdateSalePriceMutation } from '../../features/sales/salesHooks';
-import { useAdminStore } from '../../store/adminStore';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import Modal from '../common/Modal';
 
-export default function PriceEditModal({ open, onClose, saleItem }) {
-  const isAdmin = useAdminStore((s) => s.isAuthorized());
-  const openLoginModal = useAdminStore((s) => s.openLoginModal);
+export default function PriceEditModal({ open, onClose, saleItem, mode = 'edit' }) {
   const [price, setPrice] = useState('');
   const [err, setErr] = useState('');
   const { showToast } = useToast();
@@ -35,14 +32,14 @@ export default function PriceEditModal({ open, onClose, saleItem }) {
 
   async function handleSubmit() {
     setErr('');
-    if (!isAdmin) {
-      openLoginModal();
-      return;
-    }
-
     const p = Number(price);
-    if (!Number.isFinite(p) || p < 0) {
-      setErr('Please enter a valid price.');
+    const allowNegative = mode === 'exchange';
+    if (!Number.isFinite(p) || (!allowNegative && p < 0)) {
+      setErr(
+        allowNegative
+          ? 'Please enter a valid price. Exchange can be negative.'
+          : 'Please enter a valid price.'
+      );
       return;
     }
 
@@ -52,9 +49,10 @@ export default function PriceEditModal({ open, onClose, saleItem }) {
       await updatePrice({
         saleId: sid,
         price: p,
+        markExchanged: mode === 'exchange',
       });
       onClose?.();
-      showToast('Price updated.');
+      showToast(mode === 'exchange' ? 'Exchange saved.' : 'Price updated.');
     } catch (e) {
       console.error('Update failed:', e);
       setErr('Update failed: ' + (e.message || 'Unknown error'));
@@ -80,7 +78,7 @@ export default function PriceEditModal({ open, onClose, saleItem }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Edit Sale Price"
+      title={mode === 'exchange' ? 'Exchange Price' : 'Edit Price'}
       size="content"
       footer={
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
@@ -100,7 +98,9 @@ export default function PriceEditModal({ open, onClose, saleItem }) {
     >
       <div style={{ display: 'grid', gap: 12, minWidth: 300 }}>
         <div style={{ fontSize: 13, color: 'var(--text-sub)' }}>
-          Update the final sale price for this item.
+          {mode === 'exchange'
+            ? "Save the exchanged item's final price for this sale row."
+            : 'Update the final sale price for this sale row.'}
         </div>
         <Input
           label="New Price (PHP)"

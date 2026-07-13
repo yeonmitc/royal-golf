@@ -289,10 +289,12 @@ export async function updateSaleItemColor({ saleId, code, size, color } = {}) {
   return { ok: true };
 }
 
-export async function updateSalePrice({ saleId, price } = {}) {
+export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   const sid = Number(saleId || 0);
   const p = Number(price);
-  if (!sid || !Number.isFinite(p) || p < 0) throw new Error('INVALID_PRICE_UPDATE');
+  if (!sid || !Number.isFinite(p) || (p < 0 && markExchanged !== true)) {
+    throw new Error('INVALID_PRICE_UPDATE');
+  }
 
   // Local DB uses saleItems table for items.
   // We need to find the item. In local DB, saleId in saleItems refers to the parent sale header ID?
@@ -415,7 +417,8 @@ export async function updateSalePrice({ saleId, price } = {}) {
   
   await db.saleItems.update(sid, {
     unitPricePhp: p,
-    discountUnitPricePhp: undefined // Remove discount to apply new price
+    discountUnitPricePhp: undefined, // Remove discount to apply new price
+    ...(markExchanged === true ? { isExchanged: true } : {}),
   });
   
   return { ok: true };
@@ -480,6 +483,7 @@ export async function getSalesHistoryFlat() {
       qty: i.qty,
       unitPricePhp: i.unitPricePhp,
       discountUnitPricePhp: i.discountUnitPricePhp,
+      isExchanged: Boolean(i.isExchanged),
       lineTotalPhp: (i.discountUnitPricePhp ?? i.unitPricePhp) * i.qty,
     };
   });
@@ -554,7 +558,8 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
     const refundInfo = refundInfoMap.get(`${i.saleId}-${i.code}-${i.size}`) || null;
 
     const finalUnit = i.discountUnitPricePhp ?? i.unitPricePhp;
-    const freeGift = Boolean(i.freeGift ?? false) || finalUnit === 0;
+    const isExchanged = Boolean(i.isExchanged);
+    const freeGift = Boolean(i.freeGift ?? false) || (finalUnit === 0 && !isExchanged);
 
     return {
       saleId: i.saleId,
@@ -569,6 +574,7 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
       refundedQty,
       unitPricePhp: isRefunded ? 0 : i.unitPricePhp,
       discountUnitPricePhp: i.discountUnitPricePhp,
+      isExchanged,
       lineTotalPhp: (isRefunded ? 0 : finalUnit) * (isRefunded ? i.qty : remainingQty),
       freeGift,
       refundedAt: refundInfo?.time || null,

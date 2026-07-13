@@ -411,6 +411,7 @@ const ICON_MAP = {
   cloud: CloudUploadIcon,
   receipt: ReceiptIcon,
   refund: RefundIcon,
+  exchange: RefreshIcon,
   person: PersonIcon,
   trash: TrashIcon,
   delete: TrashIcon,

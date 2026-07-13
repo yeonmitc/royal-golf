@@ -1,7 +1,7 @@
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
-import { KAKAO_FRIEND_ID } from '../guides/guideSelectOptions';
 import { requireAdminOrThrow } from '../../utils/admin';
+import { KAKAO_FRIEND_ID } from '../guides/guideSelectOptions';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
 const SIZE_TO_COLUMN = {
@@ -14,16 +14,21 @@ const SIZE_TO_COLUMN = {
   Free: 'free',
 };
 
+function getLocalAsUtcISOString(date) {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  const localDate = new Date(date.getTime() - offsetMs);
+  return localDate.toISOString();
+}
+
+function toLocalDateKey(date) {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function nowLocalIsoLikeUtc() {
-  const d = new Date();
-  const yyyy = String(d.getFullYear());
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  const ms = String(d.getMilliseconds()).padStart(3, '0');
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}.${ms}Z`;
+  return getLocalAsUtcISOString(new Date());
 }
 
 function toMsFromIso(iso) {
@@ -54,6 +59,15 @@ function toMsFromIso(iso) {
 
   t = Date.parse(s.replace(' ', 'T'));
   return Number.isFinite(t) ? t : 0;
+}
+
+function toLocalDateKeyFromIso(iso) {
+  const s = String(iso || '').trim();
+  if (!s) return '';
+  const t = Date.parse(s);
+  if (Number.isFinite(t)) return toLocalDateKey(new Date(t));
+  const dateHit = s.match(/(\d{4}-\d{2}-\d{2})/);
+  return dateHit ? dateHit[1] : '';
 }
 
 function includesIgnoreCase(hay, needle) {
@@ -103,10 +117,23 @@ function nextDayKey(key) {
   const m = parts[1];
   const d = parts[2];
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return '';
-  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dt = new Date(y, m - 1, d);
   if (!Number.isFinite(dt.getTime())) return '';
-  dt.setUTCDate(dt.getUTCDate() + 1);
-  return dt.toISOString().slice(0, 10);
+  dt.setDate(dt.getDate() + 1);
+  return toLocalDateKey(dt);
+}
+
+function localDayStartAsUtcIso(key) {
+  const parts = String(key || '')
+    .split('-')
+    .map((v) => Number(v));
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return '';
+  const dt = new Date(y, m - 1, d, 0, 0, 0, 0);
+  if (!Number.isFinite(dt.getTime())) return '';
+  return getLocalAsUtcISOString(dt);
 }
 
 async function sbSelectAll(table, { select = '*', filters = [], order } = {}) {
@@ -167,7 +194,8 @@ async function attachLocalProductMeta(items) {
     const product = productMap.get(i.code);
     const qtyN = Number(i.qty || 0) || 0;
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
-    const isFreeGift = Boolean(i.freeGift ?? false) || i.unitPricePhp === 0;
+    const isExchanged = Boolean(i.isExchanged);
+    const isFreeGift = Boolean(i.freeGift ?? false) || (i.unitPricePhp === 0 && !isExchanged);
     const localGuideName = String(i.localGuideName || '').trim();
     const isOnline = localGuideName === '__ONLINE__';
     const hasAnyGuide = (Boolean(i.guideId) || Boolean(localGuideName)) && !isOnline;
@@ -311,7 +339,10 @@ export async function checkoutCart(payload) {
       await sbInsert('sale_groups', [withLocal], { returning: 'minimal' });
     } catch (e) {
       const msg = String(e?.message || '').toLowerCase();
-      if ((msg.includes('local_guide_name') || msg.includes('local guide')) && withLocal !== baseRow) {
+      if (
+        (msg.includes('local_guide_name') || msg.includes('local guide')) &&
+        withLocal !== baseRow
+      ) {
         await sbInsert('sale_groups', [baseRow], { returning: 'minimal' });
       } else {
         throw e;
@@ -352,9 +383,9 @@ export async function checkoutCart(payload) {
         ? calculatedPrice
         : isKakaoFriend
           ? calculatedPrice
-        : Number.isFinite(unitPriceChargedCandidate)
-          ? unitPriceChargedCandidate
-          : unitPriceOriginal;
+          : Number.isFinite(unitPriceChargedCandidate)
+            ? unitPriceChargedCandidate
+            : unitPriceOriginal;
 
     const lineTotal = unitPriceCharged * qty;
     const isFreeGift = unitPriceCharged === 0;
@@ -624,7 +655,8 @@ export async function setSaleGroupGuide({
   if (!gid) throw new Error('INVALID_SALE_GROUP_ID');
   const guide = guideId ? Number(guideId) : null;
   const specialLocalGuideName = guide ? '' : String(localGuideName || '').trim();
-  const isKakaoGuide = !guide && (Boolean(isKakaoFriend) || specialLocalGuideName === KAKAO_FRIEND_ID);
+  const isKakaoGuide =
+    !guide && (Boolean(isKakaoFriend) || specialLocalGuideName === KAKAO_FRIEND_ID);
 
   let guideNameNorm = '';
   if (guide) {
@@ -652,7 +684,10 @@ export async function setSaleGroupGuide({
       await sbInsert('sale_groups', [row], { returning: 'minimal' });
     } catch (e) {
       const msg = String(e?.message || '').toLowerCase();
-      if ((msg.includes('local_guide_name') || msg.includes('local guide')) && 'local_guide_name' in row) {
+      if (
+        (msg.includes('local_guide_name') || msg.includes('local guide')) &&
+        'local_guide_name' in row
+      ) {
         const { local_guide_name: _omit, ...fallbackRow } = row;
         await sbInsert('sale_groups', [fallbackRow], { returning: 'minimal' });
       } else {
@@ -669,7 +704,10 @@ export async function setSaleGroupGuide({
       });
     } catch (e) {
       const msg = String(e?.message || '').toLowerCase();
-      if ((msg.includes('local_guide_name') || msg.includes('local guide')) && 'local_guide_name' in patch) {
+      if (
+        (msg.includes('local_guide_name') || msg.includes('local guide')) &&
+        'local_guide_name' in patch
+      ) {
         const { local_guide_name: _omit, ...fallbackPatch } = patch;
         await sbUpdate('sale_groups', fallbackPatch, {
           filters: [{ column: 'id', op: 'eq', value: groupId }],
@@ -856,9 +894,9 @@ export async function updateSaleItemColor({ saleId, color } = {}) {
   return { ok: true };
 }
 
-export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
+export async function updateSalePrice({ saleGroupId, saleId, price, markExchanged } = {}) {
   const p = Number(price);
-  if (!Number.isFinite(p) || p < 0) throw new Error('INVALID_PRICE');
+  if (!Number.isFinite(p) || (p < 0 && markExchanged !== true)) throw new Error('INVALID_PRICE');
 
   const filters = [];
   const gid = String(saleGroupId || '').trim();
@@ -875,7 +913,19 @@ export async function updateSalePrice({ saleGroupId, saleId, price } = {}) {
   // Update price (unit price)
   // We remove unit_price_php and discount_unit_price_php as they seem to cause schema errors
   // and are not used in the main checkoutCart flow (which uses 'price').
-  await sbUpdate('sales', { price: p }, { filters, returning: 'minimal' });
+  const patch = { price: p };
+  if (markExchanged === true) patch.is_exchanged = true;
+
+  try {
+    await sbUpdate('sales', patch, { filters, returning: 'minimal' });
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    if (patch.is_exchanged && (msg.includes('is_exchanged') || msg.includes('is exchanged'))) {
+      await sbUpdate('sales', { price: p }, { filters, returning: 'minimal' });
+    } else {
+      throw e;
+    }
+  }
 
   try {
     let groupId = gid;
@@ -907,12 +957,18 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   try {
     sales = await sbSelectAll('sales', {
       select:
-        'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,refunded_at,refund_reason,sale_group_id',
+        'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,is_exchanged,refunded_at,refund_reason,sale_group_id',
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
     const msg = String(e?.message || '').toLowerCase();
-    if (msg.includes('free_gift') || msg.includes('color') || msg.includes('list_price')) {
+    if (
+      msg.includes('free_gift') ||
+      msg.includes('color') ||
+      msg.includes('list_price') ||
+      msg.includes('is_exchanged') ||
+      msg.includes('is exchanged')
+    ) {
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason,sale_group_id',
         order: { column: 'sold_at', ascending: false },
@@ -925,7 +981,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const filtered =
     hasFrom || hasTo
       ? (sales || []).filter((s) => {
-          const key = String(s?.sold_at || '').slice(0, 10);
+          const key = toLocalDateKeyFromIso(s?.sold_at);
           if (!key) return false;
           if (hasFrom && key < fromKey) return false;
           if (hasTo && key > toKey) return false;
@@ -979,10 +1035,15 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         // If hasFrom/hasTo, we can filter sale_groups by date.
         if (hasFrom || hasTo) {
           const filters = [];
-          // rough filter: string comparison on sold_at
-          if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: fromKey });
-          // Note: fromKey is YYYY-MM-DD, sold_at is ISO. This string compare works for >=.
-          if (hasTo) filters.push({ column: 'sold_at', op: 'lte', value: toKey + 'T23:59:59' });
+          if (hasFrom) {
+            const lower = localDayStartAsUtcIso(fromKey);
+            if (lower) filters.push({ column: 'sold_at', op: 'gte', value: lower });
+          }
+          if (hasTo) {
+            const upperKey = nextDayKey(toKey);
+            const upper = localDayStartAsUtcIso(upperKey);
+            if (upper) filters.push({ column: 'sold_at', op: 'lt', value: upper });
+          }
 
           let groups;
           try {
@@ -1029,13 +1090,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
 
   // Fetch guide names for mapping (to exclude Mr.Moon from commission)
   let guideNameMap = new Map();
-  const allGuideIds = [
-    ...new Set(
-      [...groupMap.values()]
-        .map((v) => v?.guideId)
-        .filter(Boolean)
-    ),
-  ];
+  const allGuideIds = [...new Set([...groupMap.values()].map((v) => v?.guideId).filter(Boolean))];
   if (allGuideIds.length > 0) {
     try {
       // Fetch all guides to map ID -> Name
@@ -1062,7 +1117,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isMrMoon = nameLower.includes('mrmoon');
       const isElla = nameLower.includes('ella');
       const isPeter = nameLower.includes('peter');
-      const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
+      const isExchanged = Boolean(r.is_exchanged ?? false);
+      const isFreeGift = Boolean(r.free_gift ?? false) || (unit === 0 && !isExchanged);
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
       const isOnline = !guideId && localGuideName === '__ONLINE__';
       const isKakaoGuide = !guideId && localGuideName === KAKAO_FRIEND_ID;
@@ -1081,14 +1137,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         listPricePhp: listUnit || undefined,
         unitPricePhp: isRefunded || isFreeGift ? 0 : listUnit || unit,
         discountUnitPricePhp:
-          !isRefunded && !isFreeGift && listUnit > 0 && unit > 0 && unit !== listUnit
-            ? unit
-            : undefined,
+          !isRefunded && !isFreeGift && listUnit > 0 && unit !== listUnit ? unit : undefined,
         lineTotalPhp: finalUnit * qtyN,
         freeGift: isFreeGift,
         refundedAt,
         refundReason: String(r.refund_reason || '').trim(),
         isRefunded,
+        isExchanged,
         nameKo: '',
         guideId: guideId,
         localGuideName,
@@ -1099,7 +1154,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         // Kakao is a discount channel, not a commission-bearing guide.
         // FIX: Explicitly exclude free gifts from commission display for all guides
         commission:
-          (guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift) || (isLocalGuide && !isFreeGift)
+          (guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift) ||
+          (isLocalGuide && !isFreeGift)
             ? finalUnit * qtyN * 0.1
             : 0,
       };
@@ -1136,7 +1192,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const withMeta = withMetaRaw.map((r) => ({
     ...r,
     commission:
-      r.isMrMoon || r.isPeter || r.isElla || String(r?.localGuideName || '').trim() === KAKAO_FRIEND_ID
+      r.isMrMoon ||
+      r.isPeter ||
+      r.isElla ||
+      String(r?.localGuideName || '').trim() === KAKAO_FRIEND_ID
         ? 0
         : r.commission,
   }));
@@ -1177,10 +1236,14 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
   const toKey = String(toDate || '').trim();
   const filters = [];
 
-  if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: `${fromKey}T00:00:00.000Z` });
+  if (hasFrom) {
+    const lower = localDayStartAsUtcIso(fromKey);
+    if (lower) filters.push({ column: 'sold_at', op: 'gte', value: lower });
+  }
   if (hasTo) {
     const upper = nextDayKey(toKey);
-    if (upper) filters.push({ column: 'sold_at', op: 'lt', value: `${upper}T00:00:00.000Z` });
+    const upperIso = localDayStartAsUtcIso(upper);
+    if (upperIso) filters.push({ column: 'sold_at', op: 'lt', value: upperIso });
   }
 
   let sales;
@@ -1245,7 +1308,8 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const isMrMoon = guideNameNorm.includes('mrmoon');
       const isElla = guideNameNorm.includes('ella');
       const isPeter = guideNameNorm.includes('peter');
-      const freeGift = Boolean(row?.free_gift ?? false) || unit === 0;
+      const isExchanged = Boolean(row?.is_exchanged ?? false);
+      const freeGift = Boolean(row?.free_gift ?? false) || (unit === 0 && !isExchanged);
       const finalUnit = isRefunded || freeGift ? 0 : unit;
 
       return {
@@ -1286,25 +1350,15 @@ export async function getAnalytics({
   const fromKey = String(fromDate || '').trim();
   const toKey = String(toDate || '').trim();
 
-  const nextDayKey = (key) => {
-    const parts = String(key || '')
-      .split('-')
-      .map((v) => Number(v));
-    const y = parts[0];
-    const m = parts[1];
-    const d = parts[2];
-    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return '';
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    if (!Number.isFinite(dt.getTime())) return '';
-    dt.setUTCDate(dt.getUTCDate() + 1);
-    return dt.toISOString().slice(0, 10);
-  };
-
   const filters = [];
-  if (hasFrom) filters.push({ column: 'sold_at', op: 'gte', value: `${fromKey}T00:00:00.000Z` });
+  if (hasFrom) {
+    const lower = localDayStartAsUtcIso(fromKey);
+    if (lower) filters.push({ column: 'sold_at', op: 'gte', value: lower });
+  }
   if (hasTo) {
     const upper = nextDayKey(toKey);
-    if (upper) filters.push({ column: 'sold_at', op: 'lt', value: `${upper}T00:00:00.000Z` });
+    const upperIso = localDayStartAsUtcIso(upper);
+    if (upperIso) filters.push({ column: 'sold_at', op: 'lt', value: upperIso });
   }
 
   let sales;
@@ -1368,7 +1422,7 @@ export async function getAnalytics({
   const nonRefundedRows = (inRange || []).filter((r) => !toMsFromIso(r?.refunded_at));
   const giftRows = (nonRefundedRows || []).filter((r) => {
     const unit = Number(r?.price ?? 0) || 0;
-    return Boolean(r?.free_gift ?? false) || unit === 0;
+    return Boolean(r?.free_gift ?? false) || (unit === 0 && !(r?.is_exchanged ?? false));
   });
 
   report(45, '상품 메타 결합 중…');
@@ -1381,7 +1435,8 @@ export async function getAnalytics({
         const sizeKey = normalizeSizeKey(r.size_std);
         const g = groupMap.get(String(r.sale_group_id));
         const guideId = g?.guideId ?? null;
-        const isFreeGift = Boolean(r.free_gift ?? false) || unit === 0;
+        const isFreeGift =
+          Boolean(r.free_gift ?? false) || (unit === 0 && !(r.is_exchanged ?? false));
         const finalUnit = isFreeGift ? 0 : unit;
         return {
           saleId: r.id,
