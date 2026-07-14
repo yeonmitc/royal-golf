@@ -64,10 +64,16 @@ function toMsFromIso(iso) {
 function toLocalDateKeyFromIso(iso) {
   const s = String(iso || '').trim();
   if (!s) return '';
+
+  // Keep filtering aligned with the UI and ledger rule:
+  // use the stored sold_at date prefix as-is instead of reinterpreting it
+  // through the browser timezone.
+  const dateHit = s.match(/(\d{4}-\d{2}-\d{2})/);
+  if (dateHit) return dateHit[1];
+
   const t = Date.parse(s);
   if (Number.isFinite(t)) return toLocalDateKey(new Date(t));
-  const dateHit = s.match(/(\d{4}-\d{2}-\d{2})/);
-  return dateHit ? dateHit[1] : '';
+  return '';
 }
 
 function includesIgnoreCase(hay, needle) {
