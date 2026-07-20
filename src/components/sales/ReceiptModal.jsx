@@ -3,7 +3,7 @@ import logo from '../../assets/logo.png';
 import Button from '../common/Button';
 import './ReceiptModal.css';
 
-export default function ReceiptModal({ open, onClose, receiptData }) {
+export default function ReceiptModal({ open, onClose, receiptData, onSellAnother }) {
   const printRef = useRef(null);
 
   useEffect(() => {
@@ -179,9 +179,14 @@ export default function ReceiptModal({ open, onClose, receiptData }) {
         </div>
 
         <div className="modal-actions">
-          <Button variant="outline" onClick={onClose}>
-            Close
+          <Button variant="outline" onClick={() => onClose?.('go-sales')}>
+            Go to Sales
           </Button>
+          {onSellAnother && (
+            <Button variant="ghost" onClick={() => onSellAnother()}>
+              Sell Another
+            </Button>
+          )}
           <Button variant="primary" onClick={handlePrint}>
             Print Receipt
           </Button>

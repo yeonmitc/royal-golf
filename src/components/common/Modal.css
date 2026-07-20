@@ -12,6 +12,7 @@
     transform: none !important;
     margin: 0 !important;
     border: none !important;
+    z-index: var(--z-modal);
   }
 
   .modal-content {
@@ -19,4 +20,28 @@
     display: flex;
     flex-direction: column;
   }
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  animation: fadeIn 200ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-container {
+  animation: scaleIn 200ms ease;
 }

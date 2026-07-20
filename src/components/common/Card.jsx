@@ -1,6 +1,13 @@
+import { motion } from 'framer-motion';
+
 export default function Card({ title, subtitle, actions, children, className = '' }) {
   return (
-    <section className={`page-card ${className}`}>
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className={`page-card ${className}`}
+    >
       {(title || subtitle || actions) && (
         <div
           style={{
@@ -14,7 +21,7 @@ export default function Card({ title, subtitle, actions, children, className = '
             {title && (
               <div
                 style={{
-                  fontSize: '1.1rem',
+                  fontSize: 'var(--font-xl, 16px)',
                   fontWeight: 700,
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
@@ -25,13 +32,13 @@ export default function Card({ title, subtitle, actions, children, className = '
               </div>
             )}
             {subtitle && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{subtitle}</div>
+              <div style={{ fontSize: 'var(--font-sm, 12px)', color: 'var(--text-muted)', marginTop: 4 }}>{subtitle}</div>
             )}
           </div>
           {actions && <div style={{ display: 'flex', gap: 8 }}>{actions}</div>}
         </div>
       )}
       {children}
-    </section>
+    </motion.section>
   );
 }

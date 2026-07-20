@@ -1,4 +1,5 @@
 // src/components/common/Header.jsx
+import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
@@ -413,85 +414,166 @@ export default function Header() {
         </div>
       </div>
       {menuOpen && (
-        <Modal open={menuOpen} title="Menu" onClose={() => setMenuOpen(false)} size="content">
-          <div
-            style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'min(360px, 90vw)' }}
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 'var(--z-modal, 300)',
+            }}
+            onClick={() => setMenuOpen(false)}
           >
-            {visibleNavItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={() => setMenuOpen(false)}
-                style={({ isActive }) => ({
-                  padding: '10px 14px',
-                  fontSize: 16,
-                  fontWeight: 600,
-                  borderRadius: 12,
-                  color: isActive ? 'var(--gold)' : 'var(--text-main)',
-                  background: isActive ? '#141420' : '#101018',
-                  textDecoration: 'none',
-                  boxShadow: isActive
-                    ? '0 0 0 1px rgba(212,175,55,0.45)'
-                    : '0 0 0 1px var(--border-soft)',
-                })}
-                end
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 'min(320px, 85vw)',
+                background: 'var(--bg-card, #101018)',
+                borderLeft: '1px solid var(--border-soft, #262637)',
+                boxShadow: '-8px 0 24px rgba(0,0,0,0.5)',
+                zIndex: 'var(--z-modal, 300)',
+                overflowY: 'auto',
+                padding: 'var(--sp-lg, 16px)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginBottom: 'var(--sp-lg, 16px)',
+                }}
               >
-                {item.label}
-              </NavLink>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                setChecklistPickerOpen(true);
-              }}
-              style={{
-                padding: '10px 14px',
-                fontSize: 16,
-                fontWeight: 700,
-                borderRadius: 12,
-                color: 'var(--text-main)',
-                background: '#101018',
-                textDecoration: 'none',
-                boxShadow: '0 0 0 1px var(--border-soft)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <span>Checklist</span>
-              <span>✅</span>
-            </button>
-            <NavLink
-              to="/check-stock"
-              onClick={() => {
-                if (!checkStockDone) armStockCheck({ showUnchecked: true });
-                setMenuOpen(false);
-              }}
-              style={{
-                padding: '10px 14px',
-                fontSize: 16,
-                fontWeight: 800,
-                borderRadius: 12,
-                color: checkStockDone ? '#22c55e' : '#ef4444',
-                background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
-                textDecoration: 'none',
-                boxShadow: `0 0 0 1px ${
-                  checkStockDone ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)'
-                }`,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-              end
-            >
-              <span>Check Stock</span>
-              <span>📦</span>
-            </NavLink>
-          </div>
-        </Modal>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 'var(--radius-full, 999px)',
+                    border: '1px solid var(--border-soft)',
+                    background: 'var(--bg-card-soft, #181824)',
+                    color: 'var(--text-main)',
+                    cursor: 'pointer',
+                    fontSize: 18,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {visibleNavItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMenuOpen(false)}
+                    style={({ isActive }) => ({
+                      padding: '12px 14px',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-md, 10px)',
+                      color: isActive ? 'var(--gold)' : 'var(--text-main)',
+                      background: isActive ? 'var(--bg-card-soft, #181824)' : 'transparent',
+                      textDecoration: 'none',
+                      boxShadow: isActive
+                        ? '0 0 0 1px rgba(212,175,55,0.45)'
+                        : '0 0 0 1px transparent',
+                      transition: 'background var(--transition-fast, 120ms)',
+                    })}
+                    end
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+                <div style={{ borderTop: '1px solid var(--border-soft)', margin: '8px 0' }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAttendanceModalOpen(true);
+                  }}
+                  style={{
+                    padding: '12px 14px',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    borderRadius: 'var(--radius-md, 10px)',
+                    color: 'var(--text-main)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>Stamp</span>
+                  <span>⏰</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setChecklistPickerOpen(true);
+                  }}
+                  style={{
+                    padding: '12px 14px',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    borderRadius: 'var(--radius-md, 10px)',
+                    color: 'var(--text-main)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>Checklist</span>
+                  <span>✅</span>
+                </button>
+                <NavLink
+                  to="/check-stock"
+                  onClick={() => {
+                    if (!checkStockDone) armStockCheck({ showUnchecked: true });
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    padding: '12px 14px',
+                    fontSize: 15,
+                    fontWeight: 800,
+                    borderRadius: 'var(--radius-md, 10px)',
+                    color: checkStockDone ? '#22c55e' : '#ef4444',
+                    background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                  end
+                >
+                  <span>Check Stock</span>
+                  <span>📦</span>
+                </NavLink>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
       )}
       <AdminLoginModal open={loginModalOpen} onClose={closeLoginModal} />
       <AttendanceModal open={attendanceModalOpen} onClose={() => setAttendanceModalOpen(false)} />

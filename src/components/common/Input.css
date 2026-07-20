@@ -1,45 +1,43 @@
-/* 컨테이너 */
 .input-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-xs);
   width: 100%;
 }
 
-/* 라벨 */
 .input-label {
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-weight: 500;
   letter-spacing: 0.06em;
   color: var(--text-muted);
   margin: 2px 0;
 }
 
-/* 인풋 본체 – 유리 느낌 */
 .input-field {
   width: 100%;
   padding: 10px 16px;
 
-  border-radius: 999px;
-  border: 1px solid rgba(212, 175, 55, 0.35); /* 골드 라인 */
-  background: rgba(10, 10, 18, 0.75); /* 어두운 유리 */
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: rgba(10, 10, 18, 0.75);
   backdrop-filter: blur(10px);
 
-  font-size: 14px;
+  font-size: var(--font-md);
   color: #ffffff;
 
   outline: none;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.55);
+  transition: background-color var(--transition-base), box-shadow var(--transition-base),
+    border-color var(--transition-base);
+  box-shadow: var(--shadow-sm);
 }
 
 @media (max-width: 640px) {
   .input-field {
     padding: 6px 12px;
-    font-size: 13px;
+    font-size: var(--font-base);
   }
   .input-wrapper {
-    gap: 4px;
+    gap: var(--sp-xs);
   }
 }
 
@@ -70,12 +68,12 @@
 
 /* 힌트 & 에러 텍스트 */
 .input-hint {
-  font-size: 11px;
+  font-size: var(--font-xs);
   color: var(--text-muted);
 }
 
 .input-error {
-  font-size: 11px;
+  font-size: var(--font-xs);
   color: #f97373;
 }
 

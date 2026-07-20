@@ -1,6 +1,7 @@
 // src/components/common/Layout.jsx
 import Header from './Header';
 import TopButton from './TopButton';
+import PageTransition from './PageTransition';
 
 export default function Layout({ children }) {
   return (
@@ -16,7 +17,7 @@ export default function Layout({ children }) {
           overflowX: 'hidden',
         }}
       >
-        {children}
+        <PageTransition>{children}</PageTransition>
       </main>
       <TopButton />
     </div>
