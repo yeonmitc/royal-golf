@@ -201,13 +201,10 @@ export default function SellPage() {
     }
   };
 
-  const handleReceiptClose = (action) => {
+  const handleReceiptClose = () => {
     setReceiptOpen(false);
     setReceiptData(null);
-    if (action === 'go-sales') {
-      navigate('/sales');
-    }
-    // default: stay on Sell page for another sale
+    navigate('/sales');
   };
 
   return (
@@ -553,7 +550,7 @@ export default function SellPage() {
           </Card>
         </div>
       </div>
-      <ReceiptModal open={receiptOpen} receiptData={receiptData} onClose={handleReceiptClose} onSellAnother={handleReceiptClose} />
+      <ReceiptModal open={receiptOpen} receiptData={receiptData} onClose={handleReceiptClose} />
       <Modal
         open={localGuideModalOpen}
         onClose={() => {
