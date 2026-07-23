@@ -151,6 +151,263 @@ export default function SchedulerPage() {
   const [manualScheduleAvailable, setManualScheduleAvailable] = useState(true);
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [dragOverDateKey, setDragOverDateKey] = useState(null);
+  const [payrollStartDate, setPayrollStartDate] = useState('');
+  const [janiceHolidayDays, setJaniceHolidayDays] = useState(0);
+  const [berlynHolidayDays, setBerlynHolidayDays] = useState(0);
+  const [payrollResult, setPayrollResult] = useState(null);
+  const [janiceCopyText, setJaniceCopyText] = useState('');
+  const [berlynCopyText, setBerlynCopyText] = useState('');
+  const [paidPeriods, setPaidPeriods] = useState([]);
+  const [paidPeriodsLoaded, setPaidPeriodsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (paidPeriodsLoaded) return;
+    sbSelect('payroll_paid_periods', {
+      select: 'pay_date,period_start,period_end',
+      limit: 500,
+    })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setPaidPeriods(
+            data.map((r) => ({
+              payDate: r.pay_date,
+              startDate: r.period_start,
+              endDate: r.period_end,
+            }))
+          );
+        }
+        setPaidPeriodsLoaded(true);
+      })
+      .catch(() => setPaidPeriodsLoaded(true));
+  }, [paidPeriodsLoaded]);
+
+  const HOLIDAY_DAY_OPTIONS = [
+    { label: '없음', value: 0 },
+    { label: '1일', value: 1 },
+    { label: '2일', value: 2 },
+    { label: '3일', value: 3 },
+    { label: '4일', value: 4 },
+    { label: '5일', value: 5 },
+    { label: '6일', value: 6 },
+    { label: '7일', value: 7 },
+  ];
+
+  const formatDateLabel = (dateKey) => {
+    const d = parseDateKey(dateKey);
+    if (!d) return dateKey;
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    const day = d.getDate();
+    const suffix =
+      day === 1 || day === 21 || day === 31
+        ? 'st'
+        : day === 2 || day === 22
+          ? 'nd'
+          : day === 3 || day === 23
+            ? 'rd'
+            : 'th';
+    return `${monthNames[d.getMonth()]} ${day}${suffix}`;
+  };
+
+  const calculatePayroll = async (startDateStr) => {
+    if (!startDateStr) return null;
+    const startDate = parseDateKey(startDateStr);
+    if (!startDate) return null;
+
+    let berlynEmp = null;
+    let janiceEmp = null;
+    (employees || []).forEach((e) => {
+      const key = normalizeName(e?.english_name || '');
+      if (key === 'berlyn') berlynEmp = e;
+      if (key === 'janice') janiceEmp = e;
+    });
+
+    if (!berlynEmp || !janiceEmp) return null;
+
+    // Fetch schedule data for the 14-day payroll period
+    const endDateKey = toDateKey(addDays(startDate, 13));
+    let payrollRows = [];
+    try {
+      payrollRows = await sbSelect('employee_schedules', {
+        select: 'id,employee_id,work_date,shift_type,manual_start_time,manual_hours',
+        filters: [
+          { column: 'work_date', op: 'gte', value: startDateStr },
+          { column: 'work_date', op: 'lte', value: endDateKey },
+        ],
+        orders: [{ column: 'work_date', ascending: true }],
+        limit: 500,
+      });
+      if (!Array.isArray(payrollRows)) payrollRows = [];
+    } catch {
+      payrollRows = [];
+    }
+
+    const getEntryHours = (row, date) => {
+      const shiftType = String(row.shift_type || '');
+      if (shiftType === 'manual') {
+        const h = Number(row.manual_hours || 0);
+        return h > 0 ? h : 0;
+      }
+      if (shiftType === 'all_day') return 9;
+      if (shiftType === 'morning') {
+        return isPeakDay(date) ? 6.5 : 6;
+      }
+      if (shiftType === 'evening') {
+        return isPeakDay(date) ? 6.5 : 5.5;
+      }
+      return 0;
+    };
+
+    let berlynSoloUnits = 0;
+    let janiceSoloUnits = 0;
+    let berlynSharedUnits = 0;
+    let janiceSharedUnits = 0;
+
+    for (let i = 0; i < 14; i++) {
+      const d = addDays(startDate, i);
+      const dateKey = toDateKey(d);
+
+      const dayList = payrollRows.filter((r) => r.work_date === dateKey);
+      const berlynEntries = dayList.filter((r) => String(r.employee_id) === String(berlynEmp.id));
+      const janiceEntries = dayList.filter((r) => String(r.employee_id) === String(janiceEmp.id));
+
+      // 8시간 미만 = shared (₱500), 8시간 이상 = solo (₱650)
+      berlynEntries.forEach((r) => {
+        const h = getEntryHours(r, d);
+        if (h >= 8) berlynSoloUnits++;
+        else if (h > 0) berlynSharedUnits++;
+      });
+      janiceEntries.forEach((r) => {
+        const h = getEntryHours(r, d);
+        if (h >= 8) janiceSoloUnits++;
+        else if (h > 0) janiceSharedUnits++;
+      });
+    }
+
+    const SHARED_RATE = 500;
+    const SOLO_RATE = 650;
+    const HOLIDAY_RATE = 150;
+
+    const jHoliday = Number(janiceHolidayDays);
+    const bHoliday = Number(berlynHolidayDays);
+
+    const janiceSharedPay = janiceSharedUnits * SHARED_RATE;
+    const janiceSoloPay = janiceSoloUnits * SOLO_RATE;
+    const janiceHolidayPay = jHoliday * HOLIDAY_RATE;
+    const janiceTotal = janiceSharedPay + janiceSoloPay + janiceHolidayPay;
+
+    const berlynSharedPay = berlynSharedUnits * SHARED_RATE;
+    const berlynSoloPay = berlynSoloUnits * SOLO_RATE;
+    const berlynHolidayPay = bHoliday * HOLIDAY_RATE;
+    const berlynTotal = berlynSharedPay + berlynSoloPay + berlynHolidayPay;
+
+    const endDate = toDateKey(addDays(startDate, 13));
+    const payDate = toDateKey(addDays(startDate, 14));
+
+    const startLabel = formatDateLabel(startDateStr);
+    const endLabel = formatDateLabel(endDate);
+    const startMonth = startLabel.split(' ')[0];
+    const endMonth = endLabel.split(' ')[0];
+    const periodLabel =
+      startMonth === endMonth
+        ? `${startLabel} - ${endLabel.split(' ').slice(1).join(' ')}`
+        : `${startLabel} - ${endLabel}`;
+
+    const buildDetailText = (
+      empName,
+      sharedUnits,
+      soloUnits,
+      hDays,
+      sharedPayAmt,
+      soloPayAmt,
+      holidayPayAmt,
+      totalPayAmt
+    ) => {
+      const lines = [empName, ''];
+      if (sharedUnits > 0 || soloUnits > 0) {
+        if (sharedUnits > 0) {
+          lines.push(`₱500 × ${sharedUnits} = ₱${sharedPayAmt.toLocaleString()}`);
+        }
+        if (soloUnits > 0) {
+          lines.push(`₱650 × ${soloUnits} = ₱${soloPayAmt.toLocaleString()}`);
+        }
+        if (hDays > 0) {
+          lines.push('Holiday extra');
+          lines.push(`₱150 × ${hDays} days = ₱${holidayPayAmt.toLocaleString()}`);
+        }
+        lines.push('');
+        lines.push(`Total = ₱${totalPayAmt.toLocaleString()}`);
+      } else {
+        lines.push('(No schedules found in this period)');
+        lines.push('');
+        lines.push('Total = ₱0');
+      }
+      return lines.join('\n');
+    };
+
+    const janiceDetail = buildDetailText(
+      'Janice',
+      janiceSharedUnits,
+      janiceSoloUnits,
+      jHoliday,
+      janiceSharedPay,
+      janiceSoloPay,
+      janiceHolidayPay,
+      janiceTotal
+    );
+    const berlynDetail = buildDetailText(
+      'Berlyn',
+      berlynSharedUnits,
+      berlynSoloUnits,
+      bHoliday,
+      berlynSharedPay,
+      berlynSoloPay,
+      berlynHolidayPay,
+      berlynTotal
+    );
+
+    return {
+      employees: {
+        Janice: {
+          sharedDays: janiceSharedUnits,
+          soloDays: janiceSoloUnits,
+          holidayDays: jHoliday,
+          sharedPay: janiceSharedPay,
+          soloPay: janiceSoloPay,
+          holidayPay: janiceHolidayPay,
+          totalPay: janiceTotal,
+        },
+        Berlyn: {
+          sharedDays: berlynSharedUnits,
+          soloDays: berlynSoloUnits,
+          holidayDays: bHoliday,
+          sharedPay: berlynSharedPay,
+          soloPay: berlynSoloPay,
+          holidayPay: berlynHolidayPay,
+          totalPay: berlynTotal,
+        },
+      },
+      sharedDays: Math.max(janiceSharedUnits, berlynSharedUnits),
+      startDate: startDateStr,
+      endDate,
+      payDate,
+      periodLabel,
+      janiceDetail,
+      berlynDetail,
+    };
+  };
 
   const normalizeName = (s) =>
     String(s || '')
@@ -429,10 +686,7 @@ export default function SchedulerPage() {
     const janice = byName.get(normalizeName('Janice'));
 
     if (!berlyn || !janice) {
-      const missing = [
-        !berlyn ? 'Berlyn' : null,
-        !janice ? 'Janice' : null,
-      ].filter(Boolean);
+      const missing = [!berlyn ? 'Berlyn' : null, !janice ? 'Janice' : null].filter(Boolean);
       showToast(`employees 테이블에 영어 이름이 없습니다: ${missing.join(', ')}`);
       return;
     }
@@ -488,7 +742,10 @@ export default function SchedulerPage() {
       if (!weekMorningByMondayKey.has(weekMondayKey)) {
         const prevMondayKey = toDateKey(addDays(weekMonday, -7));
         if (weekMorningByMondayKey.has(prevMondayKey)) {
-          weekMorningByMondayKey.set(weekMondayKey, otherEmp(weekMorningByMondayKey.get(prevMondayKey)));
+          weekMorningByMondayKey.set(
+            weekMondayKey,
+            otherEmp(weekMorningByMondayKey.get(prevMondayKey))
+          );
         } else if (weekMondayKey === toDateKey(firstWeekMonday)) {
           weekMorningByMondayKey.set(weekMondayKey, firstWeekMorning);
         } else {
@@ -555,11 +812,7 @@ export default function SchedulerPage() {
             manual_start_time: null,
             manual_hours: null,
           };
-    await sbInsert(
-      'employee_schedules',
-      [payload],
-      { returning: 'minimal' }
-    );
+    await sbInsert('employee_schedules', [payload], { returning: 'minimal' });
   };
 
   const moveSchedule = async ({
@@ -591,7 +844,8 @@ export default function SchedulerPage() {
         return;
       }
     }
-    const existsSameShift = nextShift === 'manual' ? false : getDayHasShift(targetDateKey, nextShift);
+    const existsSameShift =
+      nextShift === 'manual' ? false : getDayHasShift(targetDateKey, nextShift);
     const current = getDayList(targetDateKey).find((r) => String(r.id) === String(scheduleId));
     const isSameDateAndShift =
       fromDateKey === targetDateKey && String(current?.shift_type) === String(nextShift);
@@ -608,11 +862,10 @@ export default function SchedulerPage() {
             manual_start_time: null,
             manual_hours: null,
           };
-    await sbUpdate(
-      'employee_schedules',
-      updateValues,
-      { filters: [{ column: 'id', op: 'eq', value: scheduleId }], returning: 'minimal' }
-    );
+    await sbUpdate('employee_schedules', updateValues, {
+      filters: [{ column: 'id', op: 'eq', value: scheduleId }],
+      returning: 'minimal',
+    });
   };
 
   const deleteSchedule = async (scheduleId) => {
@@ -1099,7 +1352,9 @@ export default function SchedulerPage() {
                       ? '1px solid rgba(250, 204, 21, 0.6)'
                       : '1px solid rgba(255,255,255,0.12)',
                   background:
-                    selectedShift === 'manual' ? 'rgba(250, 204, 21, 0.08)' : 'rgba(255,255,255,0.03)',
+                    selectedShift === 'manual'
+                      ? 'rgba(250, 204, 21, 0.08)'
+                      : 'rgba(255,255,255,0.03)',
                 }}
               >
                 <button
@@ -1253,6 +1508,365 @@ export default function SchedulerPage() {
               <div className="text-xs" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
                 Tip: 배지는 드래그로 날짜 이동 가능 · 우클릭 또는 X로 삭제
               </div>
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '8px 0' }} />
+              <div style={{ fontWeight: 1000, letterSpacing: '0.08em', color: 'var(--gold-soft)' }}>
+                PAYROLL CALCULATOR
+              </div>
+              <div>
+                <label
+                  className="text-sm"
+                  style={{
+                    color: 'var(--text-muted)',
+                    fontWeight: 800,
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  Payroll start date (14-day period)
+                </label>
+                <Input
+                  type="date"
+                  value={payrollStartDate}
+                  onChange={(e) => setPayrollStartDate(e.target.value)}
+                />
+              </div>
+              {payrollStartDate &&
+                (() => {
+                  const sd = parseDateKey(payrollStartDate);
+                  if (!sd) return null;
+                  const endDate = toDateKey(addDays(sd, 13));
+                  const payDate = toDateKey(addDays(sd, 14));
+                  return (
+                    <div
+                      className="text-xs"
+                      style={{
+                        color: 'var(--text-muted)',
+                        fontWeight: 800,
+                        display: 'grid',
+                        gap: 2,
+                      }}
+                    >
+                      <div>
+                        Pay period: {payrollStartDate} ~ {endDate}
+                      </div>
+                      <div>Pay date: {payDate}</div>
+                    </div>
+                  );
+                })()}
+              <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                Holiday days (₱150/day)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label
+                    style={{
+                      color: 'white',
+                      fontWeight: 900,
+                      fontSize: 12,
+                      display: 'block',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Janice
+                  </label>
+                  <select
+                    value={janiceHolidayDays}
+                    onChange={(e) => setJaniceHolidayDays(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      height: 44,
+                      borderRadius: 14,
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'white',
+                      fontWeight: 900,
+                      padding: '0 14px',
+                    }}
+                  >
+                    {HOLIDAY_DAY_OPTIONS.map((opt) => (
+                      <option
+                        key={opt.value}
+                        value={opt.value}
+                        style={{ background: '#1a1a2e', color: 'white' }}
+                      >
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    style={{
+                      color: 'white',
+                      fontWeight: 900,
+                      fontSize: 12,
+                      display: 'block',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Berlyn
+                  </label>
+                  <select
+                    value={berlynHolidayDays}
+                    onChange={(e) => setBerlynHolidayDays(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      height: 44,
+                      borderRadius: 14,
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'white',
+                      fontWeight: 900,
+                      padding: '0 14px',
+                    }}
+                  >
+                    {HOLIDAY_DAY_OPTIONS.map((opt) => (
+                      <option
+                        key={opt.value}
+                        value={opt.value}
+                        style={{ background: '#1a1a2e', color: 'white' }}
+                      >
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  const result = await calculatePayroll(payrollStartDate);
+                  if (result) {
+                    setPayrollResult(result);
+                    setJaniceCopyText(result.janiceDetail);
+                    setBerlynCopyText(result.berlynDetail);
+                  }
+                }}
+                disabled={!payrollStartDate || busy || loading}
+                style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+              >
+                Calculate 14-day Payroll
+              </Button>
+              {payrollResult && (
+                <>
+                  <div
+                    style={{
+                      fontWeight: 1000,
+                      letterSpacing: '0.06em',
+                      color: 'var(--gold-soft)',
+                      fontSize: 14,
+                    }}
+                  >
+                    Payroll Results ({payrollResult.periodLabel})
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        fontSize: 12,
+                        fontWeight: 800,
+                      }}
+                    >
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                          <th
+                            style={{
+                              textAlign: 'left',
+                              padding: '6px 8px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Employee
+                          </th>
+                          <th
+                            style={{
+                              textAlign: 'center',
+                              padding: '6px 8px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Shared
+                          </th>
+                          <th
+                            style={{
+                              textAlign: 'center',
+                              padding: '6px 8px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Solo
+                          </th>
+                          <th
+                            style={{
+                              textAlign: 'center',
+                              padding: '6px 8px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Holiday
+                          </th>
+                          <th
+                            style={{
+                              textAlign: 'right',
+                              padding: '6px 8px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Total
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {['Janice', 'Berlyn'].map((name) => {
+                          const r = payrollResult.employees[name];
+                          return (
+                            <tr
+                              key={name}
+                              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                            >
+                              <td style={{ padding: '6px 8px', color: 'white' }}>{name}</td>
+                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
+                                {r.sharedDays}
+                              </td>
+                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
+                                {r.soloDays}
+                              </td>
+                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
+                                {r.holidayDays}
+                              </td>
+                              <td
+                                style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 1000 }}
+                              >
+                                ₱{r.totalPay.toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div>
+                      <label
+                        style={{
+                          color: 'white',
+                          fontWeight: 900,
+                          fontSize: 12,
+                          display: 'block',
+                          marginBottom: 4,
+                        }}
+                      >
+                        Janice
+                      </label>
+                      <textarea
+                        readOnly
+                        value={janiceCopyText}
+                        onClick={(e) => e.target.select()}
+                        style={{
+                          width: '100%',
+                          height: 160,
+                          borderRadius: 12,
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'rgba(255,255,255,0.04)',
+                          color: 'white',
+                          fontWeight: 800,
+                          padding: 10,
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          resize: 'vertical',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        style={{
+                          color: 'white',
+                          fontWeight: 900,
+                          fontSize: 12,
+                          display: 'block',
+                          marginBottom: 4,
+                        }}
+                      >
+                        Berlyn
+                      </label>
+                      <textarea
+                        readOnly
+                        value={berlynCopyText}
+                        onClick={(e) => e.target.select()}
+                        style={{
+                          width: '100%',
+                          height: 160,
+                          borderRadius: 12,
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'rgba(255,255,255,0.04)',
+                          color: 'white',
+                          fontWeight: 800,
+                          padding: 10,
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          resize: 'vertical',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      const allText = `Payroll: ${payrollResult.periodLabel}\n\n${janiceCopyText}\n\n${berlynCopyText}`;
+                      navigator.clipboard
+                        .writeText(allText)
+                        .then(() => showToast('All text copied!'))
+                        .catch(() => showToast('Failed to copy'));
+                    }}
+                    style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+                  >
+                    Copy All
+                  </Button>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await sbInsert('payroll_paid_periods', [
+                          {
+                            pay_date: payrollResult.payDate,
+                            period_start: payrollResult.startDate,
+                            period_end: payrollResult.endDate,
+                          },
+                        ], { returning: 'minimal' });
+                        setPaidPeriods((prev) => {
+                          const exists = prev.some((p) => p.payDate === payrollResult.payDate);
+                          if (exists) return prev;
+                          return [
+                            ...prev,
+                            {
+                              payDate: payrollResult.payDate,
+                              startDate: payrollResult.startDate,
+                              endDate: payrollResult.endDate,
+                            },
+                          ];
+                        });
+                        showToast(
+                          `Marked paid: ${payrollResult.startDate} ~ ${payrollResult.endDate}`
+                        );
+                      } catch (e) {
+                        showToast('Failed to save: ' + (e.message || ''));
+                      }
+                    }}
+                    disabled={paidPeriods.some((p) => p.payDate === payrollResult.payDate)}
+                    style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+                  >
+                    {paidPeriods.some((p) => p.payDate === payrollResult.payDate)
+                      ? 'Already Paid'
+                      : 'Mark as Paid'}
+                  </Button>
+                </>
+              )}
             </div>
           )}
 
@@ -1419,6 +2033,27 @@ export default function SchedulerPage() {
                         >
                           {cell.dayNum}
                         </div>
+                        {(() => {
+                          const paid = paidPeriods.find((p) => p.payDate === cell.dateKey);
+                          if (!paid) return null;
+                          const shortLabel = `${paid.startDate.slice(5)}~${paid.endDate.slice(5)} paid`;
+                          return (
+                            <div
+                              style={{
+                                fontSize: 9,
+                                fontWeight: 900,
+                                color: '#ef4444',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                lineHeight: 1.2,
+                              }}
+                              title={`${paid.startDate} ~ ${paid.endDate} paid`}
+                            >
+                              {shortLabel}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div
                         style={{
@@ -1540,7 +2175,12 @@ export default function SchedulerPage() {
             <Button variant="outline" size="sm" onClick={() => setResetMonthOpen(false)}>
               Cancel
             </Button>
-            <Button variant="danger" size="sm" onClick={handleResetMonth} disabled={busy || loading}>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleResetMonth}
+              disabled={busy || loading}
+            >
               Reset
             </Button>
           </div>

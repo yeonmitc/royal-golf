@@ -542,6 +542,11 @@ export default function SalesTable({
             }}
             onClick={(e) => {
               e.stopPropagation();
+              if (!isAdmin) {
+                openLoginModal();
+                showToast('Admin required.');
+                return;
+              }
               setPriceEditMode('exchange');
               setPriceEditTarget(row);
               setPriceEditOpen(true);
@@ -645,6 +650,11 @@ export default function SalesTable({
             }}
             onClick={(e) => {
               e.stopPropagation();
+              if (!isAdmin) {
+                openLoginModal();
+                showToast('Admin required.');
+                return;
+              }
               setPriceEditMode('edit');
               setPriceEditTarget(row);
               setPriceEditOpen(true);

@@ -111,7 +111,7 @@ export default function PriceEditModal({ open, onClose, saleItem, mode = 'edit' 
           error={err || undefined}
         />
         <div style={{ display: 'flex', gap: 8 }}>
-          {[5, 10, 15, 20].map((pct) => (
+          {[5, 10, 15, 20, 30].map((pct) => (
             <Button
               key={pct}
               type="button"
