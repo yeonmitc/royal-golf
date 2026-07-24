@@ -28,6 +28,8 @@ export default function SalesHistoryPage() {
   const OPEN_DATE = '2025-12-17';
   const [fromInput, setFromInput] = useState(today);
   const [toInput, setToInput] = useState(today);
+  const [quickDate, setQuickDate] = useState('');
+  const quickDateRef = useRef(null);
   const fromInputRef = useRef(null);
   const toInputRef = useRef(null);
   const [qInput, setQInput] = useState('');
@@ -49,6 +51,7 @@ export default function SalesHistoryPage() {
   });
 
   const applySearch = () => {
+    setQuickDate('');
     setFilters({
       fromDate: fromInput || '',
       toDate: toInput || '',
@@ -58,6 +61,7 @@ export default function SalesHistoryPage() {
 
   const resetSearch = () => {
     setQInput('');
+    setQuickDate('');
     setFromInput('');
     setToInput('');
     setFilters({
@@ -70,11 +74,13 @@ export default function SalesHistoryPage() {
   const setAllRange = () => {
     setFromInput('');
     setToInput('');
+    setQuickDate('');
     setFilters((prev) => ({ ...prev, fromDate: '', toDate: '' }));
   };
 
   const setTodayRange = () => {
     const t = toInputDate(new Date());
+    setQuickDate('');
     setFromInput(t);
     setToInput(t);
     setFilters((prev) => ({ ...prev, fromDate: t, toDate: t, query: qInput.trim() }));
@@ -87,6 +93,7 @@ export default function SalesHistoryPage() {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMon);
     const from = toInputDate(start);
     const to = toInputDate(now);
+    setQuickDate('');
     setFromInput(from);
     setToInput(to);
     setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
@@ -97,6 +104,7 @@ export default function SalesHistoryPage() {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const from = toInputDate(start);
     const to = toInputDate(now);
+    setQuickDate('');
     setFromInput(from);
     setToInput(to);
     setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
@@ -105,6 +113,7 @@ export default function SalesHistoryPage() {
   const setTotalRange = () => {
     const to = toInputDate(new Date());
     const from = OPEN_DATE;
+    setQuickDate('');
     setFromInput(from);
     setToInput(to);
     setFilters((prev) => ({ ...prev, fromDate: from, toDate: to, query: qInput.trim() }));
@@ -259,15 +268,7 @@ export default function SalesHistoryPage() {
       const bt = new Date(b.soldAt || 0).getTime();
       return at - bt;
     });
-  }, [
-    allRows,
-    sortAscending,
-    filterMode,
-    guides,
-    refundOnly,
-    localGuideInput,
-    selectedGuideId,
-  ]);
+  }, [allRows, sortAscending, filterMode, guides, refundOnly, localGuideInput, selectedGuideId]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -665,7 +666,36 @@ export default function SalesHistoryPage() {
             alignItems: 'center',
           }}
         >
-          <div className="date-controls">
+          <div className="date-controls" style={{ flexWrap: 'nowrap' }}>
+            <div className="date-control">
+              <span className="date-control-label" style={{ color: 'var(--gold-soft)' }}>
+                Date
+              </span>
+              <div className="date-control-box">
+                <DateInput
+                  ref={quickDateRef}
+                  className="input-field date-control-input"
+                  value={quickDate}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setQuickDate(v);
+                    if (v) {
+                      setFromInput(v);
+                      setToInput(v);
+                      setSortAscending(true);
+                      setFilters((prev) => ({ ...prev, fromDate: v, toDate: v }));
+                    }
+                  }}
+                  onClick={() => {
+                    try {
+                      quickDateRef.current?.showPicker?.();
+                    } catch {
+                      void 0;
+                    }
+                  }}
+                />
+              </div>
+            </div>
             <div className="date-control">
               <span className="date-control-label">From</span>
               <div className="date-control-box">
@@ -676,6 +706,7 @@ export default function SalesHistoryPage() {
                   onChange={(e) => {
                     const v = e.target.value;
                     setFromInput(v);
+                    setQuickDate('');
                     setFilters((prev) => ({ ...prev, fromDate: v || '' }));
                   }}
                   onClick={() => {
@@ -698,6 +729,7 @@ export default function SalesHistoryPage() {
                   onChange={(e) => {
                     const v = e.target.value;
                     setToInput(v);
+                    setQuickDate('');
                     setFilters((prev) => ({ ...prev, toDate: v || '' }));
                   }}
                   onClick={() => {
