@@ -1,6 +1,7 @@
 // src/components/common/Header.jsx
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
@@ -156,6 +157,22 @@ export default function Header() {
     onScroll();
     return () => target.removeEventListener('scroll', onScroll);
   }, []);
+
+  // 모바일 메뉴 열릴 때 body 스크롤 잠금
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [menuOpen]);
+
+  // ESC 키로 닫기
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
 
   return (
     <header
@@ -394,7 +411,9 @@ export default function Header() {
           <button
             type="button"
             className="hamburger-btn"
-            aria-label="Open Menu"
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
             onClick={() => setMenuOpen(true)}
             style={{
               width: 'var(--tap-size, 44px)',
@@ -403,7 +422,6 @@ export default function Header() {
               border: '1px solid var(--border-soft)',
               background: '#141420',
               color: 'var(--text-main)',
-              display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
@@ -413,167 +431,177 @@ export default function Header() {
           </button>
         </div>
       </div>
-      {menuOpen && (
-        <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+      {menuOpen && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile navigation"
+          onClick={() => setMenuOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.55)',
+          }}
+        >
+          <motion.aside
+            id="mobile-navigation"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            onClick={(e) => e.stopPropagation()}
             style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(4px)',
-              zIndex: 'var(--z-modal, 300)',
+              position: 'relative',
+              width: 'min(88vw, 360px)',
+              height: '100dvh',
+              maxHeight: '100dvh',
+              background: '#05050a',
+              color: '#ffffff',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              padding: 'max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom))',
+              boxSizing: 'border-box',
+              boxShadow: '12px 0 30px rgba(0,0,0,0.45)',
             }}
-            onClick={() => setMenuOpen(false)}
           >
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
+            <div
               style={{
-                position: 'fixed',
+                position: 'sticky',
                 top: 0,
-                right: 0,
-                bottom: 0,
-                width: 'min(320px, 85vw)',
-                background: 'var(--bg-card, #101018)',
-                borderLeft: '1px solid var(--border-soft, #262637)',
-                boxShadow: '-8px 0 24px rgba(0,0,0,0.5)',
-                zIndex: 'var(--z-modal, 300)',
-                overflowY: 'auto',
-                padding: 'var(--sp-lg, 16px)',
+                zIndex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                minHeight: 56,
+                padding: '8px 0',
+                background: '#05050a',
               }}
             >
-              <div
+              <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, fontWeight: 600, letterSpacing: '0.04em' }}>
+                Product List
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Close menu"
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  marginBottom: 'var(--sp-lg, 16px)',
+                  flex: '0 0 auto',
+                  width: 44,
+                  height: 44,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  borderRadius: 999,
+                  background: '#18182b',
+                  color: '#ffffff',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 30,
+                  lineHeight: 1,
+                  cursor: 'pointer',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen(false)}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 'var(--radius-full, 999px)',
-                    border: '1px solid var(--border-soft)',
-                    background: 'var(--bg-card-soft, #181824)',
-                    color: 'var(--text-main)',
-                    cursor: 'pointer',
-                    fontSize: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {visibleNavItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setMenuOpen(false)}
-                    style={({ isActive }) => ({
-                      padding: '12px 14px',
-                      fontSize: 15,
-                      fontWeight: 600,
-                      borderRadius: 'var(--radius-md, 10px)',
-                      color: isActive ? 'var(--gold)' : 'var(--text-main)',
-                      background: isActive ? 'var(--bg-card-soft, #181824)' : 'transparent',
-                      textDecoration: 'none',
-                      boxShadow: isActive
-                        ? '0 0 0 1px rgba(212,175,55,0.45)'
-                        : '0 0 0 1px transparent',
-                      transition: 'background var(--transition-fast, 120ms)',
-                    })}
-                    end
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-                <div style={{ borderTop: '1px solid var(--border-soft)', margin: '8px 0' }} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setAttendanceModalOpen(true);
-                  }}
-                  style={{
-                    padding: '12px 14px',
-                    fontSize: 15,
-                    fontWeight: 600,
-                    borderRadius: 'var(--radius-md, 10px)',
-                    color: 'var(--text-main)',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <span>Stamp</span>
-                  <span>⏰</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setChecklistPickerOpen(true);
-                  }}
-                  style={{
-                    padding: '12px 14px',
-                    fontSize: 15,
-                    fontWeight: 600,
-                    borderRadius: 'var(--radius-md, 10px)',
-                    color: 'var(--text-main)',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <span>Checklist</span>
-                  <span>✅</span>
-                </button>
+                ×
+              </button>
+            </div>
+
+            <nav style={{ width: '100%', paddingTop: 12 }}>
+              {visibleNavItems.map((item) => (
                 <NavLink
-                  to="/check-stock"
-                  onClick={() => {
-                    if (!checkStockDone) armStockCheck({ showUnchecked: true });
-                    setMenuOpen(false);
-                  }}
-                  style={{
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMenuOpen(false)}
+                  style={({ isActive }) => ({
+                    display: 'block',
                     padding: '12px 14px',
-                    fontSize: 15,
-                    fontWeight: 800,
-                    borderRadius: 'var(--radius-md, 10px)',
-                    color: checkStockDone ? '#22c55e' : '#ef4444',
-                    background: checkStockDone ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.18)',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    borderRadius: 10,
+                    color: isActive ? 'var(--gold)' : 'var(--text-main)',
+                    background: isActive ? 'rgba(212,175,55,0.10)' : 'transparent',
                     textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
+                    letterSpacing: '0.04em',
+                    transition: 'all 0.15s ease',
+                  })}
                   end
                 >
-                  <span>Check Stock</span>
-                  <span>📦</span>
+                  {item.label}
                 </NavLink>
-              </div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>
+              ))}
+              <div style={{ borderTop: '1px solid var(--border-soft)', margin: '12px 0 4px' }} />
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setAttendanceModalOpen(true);
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '12px 14px',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  borderRadius: 10,
+                  color: 'var(--text-main)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                ⏰ Stamp
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setChecklistPickerOpen(true);
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '12px 14px',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  borderRadius: 10,
+                  color: 'var(--text-main)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                ✅ Checklist
+              </button>
+              <NavLink
+                to="/check-stock"
+                onClick={() => {
+                  if (!checkStockDone) armStockCheck({ showUnchecked: true });
+                  setMenuOpen(false);
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '12px 14px',
+                  fontSize: 16,
+                  fontWeight: 800,
+                  borderRadius: 10,
+                  color: checkStockDone ? '#22c55e' : '#ef4444',
+                  background: checkStockDone ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)',
+                  textDecoration: 'none',
+                  textAlign: 'left',
+                  letterSpacing: '0.04em',
+                }}
+                end
+              >
+                📦 Check Stock
+              </NavLink>
+            </nav>
+          </motion.aside>
+        </div>,
+        document.body
       )}
       <AdminLoginModal open={loginModalOpen} onClose={closeLoginModal} />
       <AttendanceModal open={attendanceModalOpen} onClose={() => setAttendanceModalOpen(false)} />

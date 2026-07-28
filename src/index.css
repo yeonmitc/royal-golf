@@ -198,6 +198,18 @@ small { font-size: var(--font-sm); }
   box-shadow: var(--shadow-lg);
 }
 
+/* 햄버거 버튼 기본: 항상 보임 (모바일) */
+.hamburger-btn {
+  display: inline-flex;
+}
+
+/* 데스크톱에서는 숨김 */
+@media (min-width: 641px) {
+  .hamburger-btn {
+    display: none;
+  }
+}
+
 /* 모바일 반응형: 전역 레이아웃 재배치 및 폭 90% */
 @media (max-width: 640px) {
   :root {
@@ -234,12 +246,9 @@ small { font-size: var(--font-sm); }
     border-spacing: 0;
   }
 
-  /* 헤더: 모바일에서 햄버거 사용, 기존 네비 숨김 */
+  /* 모바일에서는 네비 숨기고 햄버거 버튼으로 접근 */
   .header-nav {
     display: none !important;
-  }
-  .hamburger-btn {
-    display: inline-flex !important;
   }
   /* 두 컬럼 레이아웃을 모바일에서 세로 스택 */
   .stack-mobile {
@@ -262,11 +271,7 @@ small { font-size: var(--font-sm); }
   }
 }
 
-@media (min-width: 641px) {
-  .hamburger-btn {
-    display: none !important;
-  }
-
+  @media (min-width: 641px) {
   .btn {
     width: 30%;
     justify-content: center;

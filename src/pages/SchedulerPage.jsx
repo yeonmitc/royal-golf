@@ -1509,6 +1509,17 @@ export default function SchedulerPage() {
                 Tip: 배지는 드래그로 날짜 이동 가능 · 우클릭 또는 X로 삭제
               </div>
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '8px 0' }} />
+            </div>
+          )}
+          {isAdmin && (
+            <div
+              style={{
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
               <div style={{ fontWeight: 1000, letterSpacing: '0.08em', color: 'var(--gold-soft)' }}>
                 PAYROLL CALCULATOR
               </div>
