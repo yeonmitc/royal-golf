@@ -1243,6 +1243,366 @@ export default function SchedulerPage() {
     () => filterVisibleSchedules(scheduleByDate.get(todayKey) || []),
     [filterVisibleSchedules, scheduleByDate, todayKey]
   );
+  const payrollCalculator = isAdmin ? (
+    <div
+      style={{
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}
+    >
+      <div style={{ fontWeight: 1000, letterSpacing: '0.08em', color: 'var(--gold-soft)' }}>
+        PAYROLL CALCULATOR
+      </div>
+      <div>
+        <label
+          className="text-sm"
+          style={{
+            color: 'var(--text-muted)',
+            fontWeight: 800,
+            display: 'block',
+            marginBottom: 4,
+          }}
+        >
+          Payroll start date (14-day period)
+        </label>
+        <Input
+          type="date"
+          value={payrollStartDate}
+          onChange={(e) => setPayrollStartDate(e.target.value)}
+        />
+      </div>
+      {payrollStartDate &&
+        (() => {
+          const sd = parseDateKey(payrollStartDate);
+          if (!sd) return null;
+          const endDate = toDateKey(addDays(sd, 13));
+          const payDate = toDateKey(addDays(sd, 14));
+          return (
+            <div
+              className="text-xs"
+              style={{
+                color: 'var(--text-muted)',
+                fontWeight: 800,
+                display: 'grid',
+                gap: 2,
+              }}
+            >
+              <div>
+                Pay period: {payrollStartDate} ~ {endDate}
+              </div>
+              <div>Pay date: {payDate}</div>
+            </div>
+          );
+        })()}
+      <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+        Holiday days (₱150/day)
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label
+            style={{
+              color: 'white',
+              fontWeight: 900,
+              fontSize: 12,
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
+            Janice
+          </label>
+          <select
+            value={janiceHolidayDays}
+            onChange={(e) => setJaniceHolidayDays(Number(e.target.value))}
+            style={{
+              width: '100%',
+              height: 44,
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.16)',
+              background: 'rgba(255,255,255,0.06)',
+              color: 'white',
+              fontWeight: 900,
+              padding: '0 14px',
+            }}
+          >
+            {HOLIDAY_DAY_OPTIONS.map((opt) => (
+              <option
+                key={opt.value}
+                value={opt.value}
+                style={{ background: '#1a1a2e', color: 'white' }}
+              >
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label
+            style={{
+              color: 'white',
+              fontWeight: 900,
+              fontSize: 12,
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
+            Berlyn
+          </label>
+          <select
+            value={berlynHolidayDays}
+            onChange={(e) => setBerlynHolidayDays(Number(e.target.value))}
+            style={{
+              width: '100%',
+              height: 44,
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.16)',
+              background: 'rgba(255,255,255,0.06)',
+              color: 'white',
+              fontWeight: 900,
+              padding: '0 14px',
+            }}
+          >
+            {HOLIDAY_DAY_OPTIONS.map((opt) => (
+              <option
+                key={opt.value}
+                value={opt.value}
+                style={{ background: '#1a1a2e', color: 'white' }}
+              >
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={async () => {
+          const result = await calculatePayroll(payrollStartDate);
+          if (result) {
+            setPayrollResult(result);
+            setJaniceCopyText(result.janiceDetail);
+            setBerlynCopyText(result.berlynDetail);
+          }
+        }}
+        disabled={!payrollStartDate || busy || loading}
+        style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+      >
+        Calculate 14-day Payroll
+      </Button>
+      {payrollResult && (
+        <>
+          <div
+            style={{
+              fontWeight: 1000,
+              letterSpacing: '0.06em',
+              color: 'var(--gold-soft)',
+              fontSize: 14,
+            }}
+          >
+            Payroll Results ({payrollResult.periodLabel})
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: 12,
+                fontWeight: 800,
+              }}
+            >
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                  <th
+                    style={{
+                      textAlign: 'left',
+                      padding: '6px 8px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Employee
+                  </th>
+                  <th
+                    style={{
+                      textAlign: 'center',
+                      padding: '6px 8px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Shared
+                  </th>
+                  <th
+                    style={{
+                      textAlign: 'center',
+                      padding: '6px 8px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Solo
+                  </th>
+                  <th
+                    style={{
+                      textAlign: 'center',
+                      padding: '6px 8px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Holiday
+                  </th>
+                  <th
+                    style={{
+                      textAlign: 'right',
+                      padding: '6px 8px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {['Janice', 'Berlyn'].map((name) => {
+                  const r = payrollResult.employees[name];
+                  return (
+                    <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <td style={{ padding: '6px 8px', color: 'white' }}>{name}</td>
+                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.sharedDays}</td>
+                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.soloDays}</td>
+                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.holidayDays}</td>
+                      <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 1000 }}>
+                        ₱{r.totalPay.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div>
+              <label
+                style={{
+                  color: 'white',
+                  fontWeight: 900,
+                  fontSize: 12,
+                  display: 'block',
+                  marginBottom: 4,
+                }}
+              >
+                Janice
+              </label>
+              <textarea
+                readOnly
+                value={janiceCopyText}
+                onClick={(e) => e.target.select()}
+                style={{
+                  width: '100%',
+                  height: 160,
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'white',
+                  fontWeight: 800,
+                  padding: 10,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div>
+              <label
+                style={{
+                  color: 'white',
+                  fontWeight: 900,
+                  fontSize: 12,
+                  display: 'block',
+                  marginBottom: 4,
+                }}
+              >
+                Berlyn
+              </label>
+              <textarea
+                readOnly
+                value={berlynCopyText}
+                onClick={(e) => e.target.select()}
+                style={{
+                  width: '100%',
+                  height: 160,
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'white',
+                  fontWeight: 800,
+                  padding: 10,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              const allText = `Payroll: ${payrollResult.periodLabel}\n\n${janiceCopyText}\n\n${berlynCopyText}`;
+              navigator.clipboard
+                .writeText(allText)
+                .then(() => showToast('All text copied!'))
+                .catch(() => showToast('Failed to copy'));
+            }}
+            style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+          >
+            Copy All
+          </Button>
+          <Button
+            variant="success"
+            size="sm"
+            onClick={async () => {
+              try {
+                await sbInsert(
+                  'payroll_paid_periods',
+                  [
+                    {
+                      pay_date: payrollResult.payDate,
+                      period_start: payrollResult.startDate,
+                      period_end: payrollResult.endDate,
+                    },
+                  ],
+                  { returning: 'minimal' }
+                );
+                setPaidPeriods((prev) => {
+                  const exists = prev.some((p) => p.payDate === payrollResult.payDate);
+                  if (exists) return prev;
+                  return [
+                    ...prev,
+                    {
+                      payDate: payrollResult.payDate,
+                      startDate: payrollResult.startDate,
+                      endDate: payrollResult.endDate,
+                    },
+                  ];
+                });
+                showToast(`Marked paid: ${payrollResult.startDate} ~ ${payrollResult.endDate}`);
+              } catch (e) {
+                showToast('Failed to save: ' + (e.message || ''));
+              }
+            }}
+            disabled={paidPeriods.some((p) => p.payDate === payrollResult.payDate)}
+            style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
+          >
+            {paidPeriods.some((p) => p.payDate === payrollResult.payDate)
+              ? 'Already Paid'
+              : 'Mark as Paid'}
+          </Button>
+        </>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="page-root">
@@ -1509,378 +1869,9 @@ export default function SchedulerPage() {
                 Tip: 배지는 드래그로 날짜 이동 가능 · 우클릭 또는 X로 삭제
               </div>
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '8px 0' }} />
+              {payrollCalculator}
             </div>
           )}
-          {isAdmin && (
-            <div
-              style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-              }}
-            >
-              <div style={{ fontWeight: 1000, letterSpacing: '0.08em', color: 'var(--gold-soft)' }}>
-                PAYROLL CALCULATOR
-              </div>
-              <div>
-                <label
-                  className="text-sm"
-                  style={{
-                    color: 'var(--text-muted)',
-                    fontWeight: 800,
-                    display: 'block',
-                    marginBottom: 4,
-                  }}
-                >
-                  Payroll start date (14-day period)
-                </label>
-                <Input
-                  type="date"
-                  value={payrollStartDate}
-                  onChange={(e) => setPayrollStartDate(e.target.value)}
-                />
-              </div>
-              {payrollStartDate &&
-                (() => {
-                  const sd = parseDateKey(payrollStartDate);
-                  if (!sd) return null;
-                  const endDate = toDateKey(addDays(sd, 13));
-                  const payDate = toDateKey(addDays(sd, 14));
-                  return (
-                    <div
-                      className="text-xs"
-                      style={{
-                        color: 'var(--text-muted)',
-                        fontWeight: 800,
-                        display: 'grid',
-                        gap: 2,
-                      }}
-                    >
-                      <div>
-                        Pay period: {payrollStartDate} ~ {endDate}
-                      </div>
-                      <div>Pay date: {payDate}</div>
-                    </div>
-                  );
-                })()}
-              <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
-                Holiday days (₱150/day)
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label
-                    style={{
-                      color: 'white',
-                      fontWeight: 900,
-                      fontSize: 12,
-                      display: 'block',
-                      marginBottom: 4,
-                    }}
-                  >
-                    Janice
-                  </label>
-                  <select
-                    value={janiceHolidayDays}
-                    onChange={(e) => setJaniceHolidayDays(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      height: 44,
-                      borderRadius: 14,
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      background: 'rgba(255,255,255,0.06)',
-                      color: 'white',
-                      fontWeight: 900,
-                      padding: '0 14px',
-                    }}
-                  >
-                    {HOLIDAY_DAY_OPTIONS.map((opt) => (
-                      <option
-                        key={opt.value}
-                        value={opt.value}
-                        style={{ background: '#1a1a2e', color: 'white' }}
-                      >
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    style={{
-                      color: 'white',
-                      fontWeight: 900,
-                      fontSize: 12,
-                      display: 'block',
-                      marginBottom: 4,
-                    }}
-                  >
-                    Berlyn
-                  </label>
-                  <select
-                    value={berlynHolidayDays}
-                    onChange={(e) => setBerlynHolidayDays(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      height: 44,
-                      borderRadius: 14,
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      background: 'rgba(255,255,255,0.06)',
-                      color: 'white',
-                      fontWeight: 900,
-                      padding: '0 14px',
-                    }}
-                  >
-                    {HOLIDAY_DAY_OPTIONS.map((opt) => (
-                      <option
-                        key={opt.value}
-                        value={opt.value}
-                        style={{ background: '#1a1a2e', color: 'white' }}
-                      >
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={async () => {
-                  const result = await calculatePayroll(payrollStartDate);
-                  if (result) {
-                    setPayrollResult(result);
-                    setJaniceCopyText(result.janiceDetail);
-                    setBerlynCopyText(result.berlynDetail);
-                  }
-                }}
-                disabled={!payrollStartDate || busy || loading}
-                style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
-              >
-                Calculate 14-day Payroll
-              </Button>
-              {payrollResult && (
-                <>
-                  <div
-                    style={{
-                      fontWeight: 1000,
-                      letterSpacing: '0.06em',
-                      color: 'var(--gold-soft)',
-                      fontSize: 14,
-                    }}
-                  >
-                    Payroll Results ({payrollResult.periodLabel})
-                  </div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table
-                      style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        fontSize: 12,
-                        fontWeight: 800,
-                      }}
-                    >
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-                          <th
-                            style={{
-                              textAlign: 'left',
-                              padding: '6px 8px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            Employee
-                          </th>
-                          <th
-                            style={{
-                              textAlign: 'center',
-                              padding: '6px 8px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            Shared
-                          </th>
-                          <th
-                            style={{
-                              textAlign: 'center',
-                              padding: '6px 8px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            Solo
-                          </th>
-                          <th
-                            style={{
-                              textAlign: 'center',
-                              padding: '6px 8px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            Holiday
-                          </th>
-                          <th
-                            style={{
-                              textAlign: 'right',
-                              padding: '6px 8px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            Total
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {['Janice', 'Berlyn'].map((name) => {
-                          const r = payrollResult.employees[name];
-                          return (
-                            <tr
-                              key={name}
-                              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-                            >
-                              <td style={{ padding: '6px 8px', color: 'white' }}>{name}</td>
-                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
-                                {r.sharedDays}
-                              </td>
-                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
-                                {r.soloDays}
-                              </td>
-                              <td style={{ textAlign: 'center', padding: '6px 8px' }}>
-                                {r.holidayDays}
-                              </td>
-                              <td
-                                style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 1000 }}
-                              >
-                                ₱{r.totalPay.toLocaleString()}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <div>
-                      <label
-                        style={{
-                          color: 'white',
-                          fontWeight: 900,
-                          fontSize: 12,
-                          display: 'block',
-                          marginBottom: 4,
-                        }}
-                      >
-                        Janice
-                      </label>
-                      <textarea
-                        readOnly
-                        value={janiceCopyText}
-                        onClick={(e) => e.target.select()}
-                        style={{
-                          width: '100%',
-                          height: 160,
-                          borderRadius: 12,
-                          border: '1px solid rgba(255,255,255,0.12)',
-                          background: 'rgba(255,255,255,0.04)',
-                          color: 'white',
-                          fontWeight: 800,
-                          padding: 10,
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          resize: 'vertical',
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        style={{
-                          color: 'white',
-                          fontWeight: 900,
-                          fontSize: 12,
-                          display: 'block',
-                          marginBottom: 4,
-                        }}
-                      >
-                        Berlyn
-                      </label>
-                      <textarea
-                        readOnly
-                        value={berlynCopyText}
-                        onClick={(e) => e.target.select()}
-                        style={{
-                          width: '100%',
-                          height: 160,
-                          borderRadius: 12,
-                          border: '1px solid rgba(255,255,255,0.12)',
-                          background: 'rgba(255,255,255,0.04)',
-                          color: 'white',
-                          fontWeight: 800,
-                          padding: 10,
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          resize: 'vertical',
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      const allText = `Payroll: ${payrollResult.periodLabel}\n\n${janiceCopyText}\n\n${berlynCopyText}`;
-                      navigator.clipboard
-                        .writeText(allText)
-                        .then(() => showToast('All text copied!'))
-                        .catch(() => showToast('Failed to copy'));
-                    }}
-                    style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
-                  >
-                    Copy All
-                  </Button>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await sbInsert('payroll_paid_periods', [
-                          {
-                            pay_date: payrollResult.payDate,
-                            period_start: payrollResult.startDate,
-                            period_end: payrollResult.endDate,
-                          },
-                        ], { returning: 'minimal' });
-                        setPaidPeriods((prev) => {
-                          const exists = prev.some((p) => p.payDate === payrollResult.payDate);
-                          if (exists) return prev;
-                          return [
-                            ...prev,
-                            {
-                              payDate: payrollResult.payDate,
-                              startDate: payrollResult.startDate,
-                              endDate: payrollResult.endDate,
-                            },
-                          ];
-                        });
-                        showToast(
-                          `Marked paid: ${payrollResult.startDate} ~ ${payrollResult.endDate}`
-                        );
-                      } catch (e) {
-                        showToast('Failed to save: ' + (e.message || ''));
-                      }
-                    }}
-                    disabled={paidPeriods.some((p) => p.payDate === payrollResult.payDate)}
-                    style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
-                  >
-                    {paidPeriods.some((p) => p.payDate === payrollResult.payDate)
-                      ? 'Already Paid'
-                      : 'Mark as Paid'}
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-
           <div style={{ flex: 1, minWidth: 0 }}>
             {isMobile && (
               <div
@@ -2098,6 +2089,21 @@ export default function SchedulerPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {isMobile && payrollCalculator && (
+              <div
+                style={{
+                  marginTop: 12,
+                  display: 'grid',
+                  gap: 12,
+                  padding: '10px 12px',
+                  borderRadius: 16,
+                  border: '1px solid var(--border-soft)',
+                  background: 'rgba(255,255,255,0.03)',
+                }}
+              >
+                {payrollCalculator}
               </div>
             )}
           </div>
