@@ -19,11 +19,41 @@ import { generateProductCode } from '../utils/codeGenerator';
 import { useToast } from '../context/ToastContext';
 import { useAdminStore } from '../store/adminStore';
 
+const EMPTY_SIZE_INPUTS = {
+  S: '',
+  M: '',
+  L: '',
+  XL: '',
+  '2XL': '',
+  '3XL': '',
+  Free: '',
+};
+
 function toInputDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+async function copyTextToClipboard(text) {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  }
 }
 
 export default function AddProductPage() {
@@ -74,15 +104,7 @@ export default function AddProductPage() {
     .filter((p) => p.group === 'color')
     .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
 
-  const [sizeInputs, setSizeInputs] = useState({
-    S: '',
-    M: '',
-    L: '',
-    XL: '',
-    '2XL': '',
-    '3XL': '',
-    Free: '',
-  });
+  const [sizeInputs, setSizeInputs] = useState(EMPTY_SIZE_INPUTS);
 
   async function refreshProductNo() {
     try {
@@ -257,8 +279,17 @@ export default function AddProductPage() {
       }));
 
       await updateInv({ code: savedCode, changes });
-      showToast(`Product added: ${savedCode}`);
-      navigate('/inventory');
+      const copied = await copyTextToClipboard(savedCode);
+
+      setPriceCny('');
+      setSalePricePhp('');
+      setSalePriceManual(false);
+      setSizeInputs({ ...EMPTY_SIZE_INPUTS });
+
+      await refreshProductNo();
+      await recomputeCode({});
+
+      showToast(copied ? `Saved and copied: ${savedCode}` : `Saved: ${savedCode}`);
     } catch (err) {
       const msg = String(err?.message || err);
       if (msg === 'ADMIN_REQUIRED') openLoginModal();

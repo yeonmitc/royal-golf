@@ -461,13 +461,16 @@ async function buildMonthlyReport(year, onProgress) {
 
 export default function ReportPage() {
   const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
   const [selectedYear, setSelectedYear] = useState(today.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingPercent, setLoadingPercent] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('리포트 준비 중...');
   const [error, setError] = useState('');
+  const isCurrentMonthSelected = selectedYear === currentYear && selectedMonth === currentMonth;
 
   useEffect(() => {
     let cancelled = false;
@@ -707,8 +710,34 @@ export default function ReportPage() {
             title="월별 상세"
             subtitle="월별 매출과 지출(통합), 순수익을 한 번에 확인"
             actions={
-              <Button variant="outline" size="sm" onClick={() => setSelectedMonth(new Date().getMonth() + 1)}>
-                This Month
+              <Button
+                variant={isCurrentMonthSelected ? 'primary' : 'outline'}
+                size="sm"
+                icon={isCurrentMonthSelected ? 'check' : 'calendar'}
+                iconSize={14}
+                onClick={() => {
+                  setSelectedYear(currentYear);
+                  setSelectedMonth(currentMonth);
+                }}
+                aria-label="이번 달로 이동"
+                style={{
+                  minWidth: 108,
+                  paddingInline: 16,
+                  fontWeight: 700,
+                  letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap',
+                  background: isCurrentMonthSelected
+                    ? 'linear-gradient(135deg, #f3d47a 0%, #d4af37 100%)'
+                    : 'linear-gradient(135deg, rgba(212,175,55,0.16) 0%, rgba(212,175,55,0.06) 100%)',
+                  borderColor: isCurrentMonthSelected ? 'rgba(243,212,122,0.8)' : 'rgba(212,175,55,0.34)',
+                  color: isCurrentMonthSelected ? '#111111' : 'var(--gold-soft)',
+                  boxShadow: isCurrentMonthSelected
+                    ? '0 10px 24px rgba(212,175,55,0.26)'
+                    : '0 8px 20px rgba(0,0,0,0.22)',
+                }}
+                title={isCurrentMonthSelected ? '현재 이번 달이 선택되어 있습니다.' : '이번 달 리포트로 빠르게 이동합니다.'}
+              >
+                이번 달
               </Button>
             }
           >
