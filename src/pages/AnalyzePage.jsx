@@ -279,29 +279,27 @@ export default function AnalyzePage() {
               </div>
             </div>
             <div className="page-card">
-              <div>Mr. Moon Discount</div>
+              <div>Mr. Moon Discount (10%)</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.discountAmount).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.mrMoonDiscountAmount || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>Mr. Moon Sales</div>
+              <div>Peter Discount (20%)</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.mrMoonRevenue || 0).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.peterDiscountAmount || 0).toLocaleString('en-PH')} PHP
+              </div>
+            </div>
+            <div className="page-card">
+              <div>Kakao Discount (10%)</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.kakaoDiscountAmount || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
               <div>Total Commission</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.totalCommission || 0).toLocaleString('en-PH')} PHP
-              </div>
-            </div>
-            <div className="page-card">
-              <div>Rows</div>
-              <div style={{ fontWeight: 700 }}>
-                {Number(data.summary.sourceRowCount ?? data.summary.rowCount ?? 0).toLocaleString(
-                  'en-PH'
-                )}
+                {Math.round(data.summary.displayedGuideCommission || data.summary.totalCommission || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">

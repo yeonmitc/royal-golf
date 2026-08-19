@@ -1,6 +1,6 @@
 // src/pages/SellPage.jsx
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BarcodeListener from '../components/common/BarcodeListener';
 import Button from '../components/common/Button';
@@ -63,23 +63,29 @@ export default function SellPage() {
 
   const guideOptions = getGuideSelectOptions(guides);
 
+  // Local guides list for the modal Select
+  const localGuides = useMemo(() => {
+    return (guides || [])
+      .filter((g) => g.guide_type === 'local')
+      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
+  }, [guides]);
+
   const [localGuideModalOpen, setLocalGuideModalOpen] = useState(false);
   const [localGuideDraft, setLocalGuideDraft] = useState('');
   const [localGuideErr, setLocalGuideErr] = useState('');
+  const [selectedLocalGuideId, setSelectedLocalGuideId] = useState(''); // existing local guide ID
 
-  // Calculate item price with Mr. Moon (10%) or Peter (20%) discount logic
+  // Calculate item price with cash discount logic
+  // Mr.Moon: 10%, Sir Peter: 20%, Kakao: 10%
+  // 정상가 1,000 PHP 이하: 할인 없음
+  // 정상가 1,000 PHP 초과: 할인 적용 후 100 PHP 단위 올림
   const calculateItemPrice = (price) => {
     const p = Number(price || 0);
-    if (isPeterSelected && p > 1000) {
-      // 20% discount, rounded up to nearest 100
+    if (p <= 1000) return p;
+    if (isPeterSelected) {
       return Math.ceil((p * 0.8) / 100) * 100;
     }
-    if (isMrMoonSelected && p > 1000) {
-      // 10% discount, rounded up to nearest 100 (Ceiling)
-      return Math.ceil((p * 0.9) / 100) * 100;
-    }
-    if (isKakaoFriendSelected && p > 1000) {
-      // 10% discount, rounded up to nearest 100 (Ceiling)
+    if (isMrMoonSelected || isKakaoFriendSelected) {
       return Math.ceil((p * 0.9) / 100) * 100;
     }
     return p;
@@ -96,7 +102,6 @@ export default function SellPage() {
   const [receiptData, setReceiptData] = useState(null);
 
   const handleCheckout = async () => {
-    // Get latest items from store directly
     const currentItems = useCartStore.getState().items;
     const currentGuideId = useCartStore.getState().guideId;
     const currentLocalGuideName = useCartStore.getState().localGuideName;
@@ -114,8 +119,6 @@ export default function SellPage() {
     }
 
     try {
-      // We send original items; DB trigger handles the actual price modification.
-      // UPDATE: We now calculate price explicitly to enforce Ceiling rounding for Mr. Moon.
       const result = await checkoutCart({
         items: currentItems,
         guideId:
@@ -135,19 +138,8 @@ export default function SellPage() {
         isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
       });
 
-      // Prepare receipt data with LOCAL calculation to match DB trigger
       const receiptItems = currentItems.map((item) => {
-        const original = Number(item.unitPricePhp || item.price || 0);
-        let finalPrice = original;
-        if (isPeterSelected && original > 1000) {
-          finalPrice = Math.ceil((original * 0.8) / 100) * 100;
-        } else
-        if (isMrMoonSelected && original > 1000) {
-          finalPrice = Math.ceil((original * 0.9) / 100) * 100;
-        } else
-        if (isKakaoFriendSelected && original > 1000) {
-          finalPrice = Math.ceil((original * 0.9) / 100) * 100;
-        }
+        const finalPrice = calculateItemPrice(item.unitPricePhp);
         return {
           code: item.code,
           name: item.name || item.nameKo,
@@ -205,6 +197,37 @@ export default function SellPage() {
     setReceiptOpen(false);
     setReceiptData(null);
     navigate('/sales');
+  };
+
+  const openLocalGuideModal = () => {
+    setLocalGuideDraft(String(localGuideName || ''));
+    setSelectedLocalGuideId('');
+    setLocalGuideErr('');
+    setLocalGuideModalOpen(true);
+  };
+
+  const handleLocalGuideSave = () => {
+    // If an existing local guide was selected from the dropdown
+    if (selectedLocalGuideId) {
+      const existing = localGuides.find((g) => String(g.id) === selectedLocalGuideId);
+      if (existing) {
+        setLocalGuideName(existing.name);
+        setGuideId(LOCAL_GUIDE_ID);
+        setLocalGuideModalOpen(false);
+        setLocalGuideErr('');
+        return;
+      }
+    }
+    // Otherwise use the typed name
+    const name = String(localGuideDraft || '').trim();
+    if (!name) {
+      setLocalGuideErr('Please enter Local Guide name.');
+      return;
+    }
+    setLocalGuideName(name);
+    setGuideId(LOCAL_GUIDE_ID);
+    setLocalGuideModalOpen(false);
+    setLocalGuideErr('');
   };
 
   return (
@@ -455,7 +478,7 @@ export default function SellPage() {
               <div className="mt-4 px-1">
                 <div className="mb-2">
                   <label className="text-xs font-semibold text-gray-500 mb-1 block">
-                    Guide (Commission 10%)
+                    Guide
                   </label>
                   <select
                     className="w-full border rounded px-2 py-1.5 text-sm"
@@ -478,10 +501,7 @@ export default function SellPage() {
                         return;
                       }
                       if (v === LOCAL_GUIDE_ID) {
-                        setGuideId(LOCAL_GUIDE_ID);
-                        setLocalGuideDraft(String(localGuideName || ''));
-                        setLocalGuideErr('');
-                        setLocalGuideModalOpen(true);
+                        openLocalGuideModal();
                         return;
                       }
                       setGuideId(v);
@@ -573,17 +593,7 @@ export default function SellPage() {
             </Button>
             <Button
               variant="primary"
-              onClick={() => {
-                const name = String(localGuideDraft || '').trim();
-                if (!name) {
-                  setLocalGuideErr('Please enter Local Guide name.');
-                  return;
-                }
-                setLocalGuideName(name);
-                setGuideId(LOCAL_GUIDE_ID);
-                setLocalGuideModalOpen(false);
-                setLocalGuideErr('');
-              }}
+              onClick={handleLocalGuideSave}
               style={{ width: 120 }}
             >
               Save
@@ -592,10 +602,45 @@ export default function SellPage() {
         }
       >
         <div style={{ display: 'grid', gap: 12 }}>
+          {/* Existing local guide Select */}
+          {localGuides.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Existing Local Guide
+              </label>
+              <select
+                className="w-full border rounded px-2 py-1.5 text-sm"
+                value={selectedLocalGuideId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSelectedLocalGuideId(v);
+                  if (v) {
+                    // Auto-fill the name field
+                    const existing = localGuides.find((g) => String(g.id) === v);
+                    if (existing) setLocalGuideDraft(existing.name);
+                  }
+                }}
+                style={{ borderColor: 'var(--border-soft)' }}
+              >
+                <option value="">Select Existing Local Guide</option>
+                {localGuides.map((g) => (
+                  <option key={g.id} value={String(g.id)}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Manual name input */}
           <Input
             label="Local Guide Name"
             value={localGuideDraft}
-            onChange={(e) => setLocalGuideDraft(e.target.value)}
+            onChange={(e) => {
+              setLocalGuideDraft(e.target.value);
+              // Clear selection if user types manually
+              if (selectedLocalGuideId) setSelectedLocalGuideId('');
+            }}
             placeholder="Enter name"
             maxLength={50}
             error={localGuideErr || undefined}

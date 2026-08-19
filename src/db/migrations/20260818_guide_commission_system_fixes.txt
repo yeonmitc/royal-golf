@@ -1,0 +1,38 @@
+-- ============================================================
+-- 20260818_guide_commission_system.sql 수정분 3곳
+-- 이미 실행하셨으므로 이 파일은 참고용입니다.
+-- ============================================================
+
+
+-- 수정 1: 컬럼 설명 (STEP 1)
+-- 변경 전: -- fixed_commission_rate (Mr.Moon=0.05, 로컬=0.10, 일반=null)
+-- 변경 후:
+-- fixed_commission_rate (특수 고정 커미션율, 기본 null)
+
+
+-- 수정 2: Mr.Moon 설정 (STEP 8)
+-- 변경 전:
+-- -- Mr.Moon: 고정 5%
+-- UPDATE public.guides
+-- SET fixed_commission_rate = 0.05
+-- WHERE lower(regexp_replace(trim(name), '\s+', '', 'g')) LIKE '%mrmoon%'
+--   AND guide_type = 'regular';
+
+-- 변경 후:
+-- Mr.Moon: 현금 할인 10%, 커미션 0%
+UPDATE public.guides
+SET commission_enabled = false,
+    fixed_commission_rate = NULL
+WHERE lower(regexp_replace(trim(name), '\s+', '', 'g')) LIKE '%mrmoon%';
+
+
+-- 수정 3: recalculate_guide_commission 함수 내 커미션 계산 (STEP 9)
+-- 변경 전:
+-- IF v_guide.commission_enabled = false THEN
+--   v_guide_rate := 0;
+--   v_commission := 0;
+
+-- 변경 후:
+IF NOT COALESCE(v_guide.commission_enabled, true) THEN
+  v_guide_rate := 0;
+  v_commission := 0;

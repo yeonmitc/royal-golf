@@ -186,15 +186,15 @@ export default function Modal({
           {children}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
-          {footer ? (
-            footer
-          ) : (
-            <Button variant="outline" size="sm" onClick={onClose}>
-              Close
-            </Button>
-          )}
-        </div>
+        {footer !== null && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+            {footer ?? (
+              <Button variant="outline" size="sm" onClick={onClose}>
+                Close
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>,
     document.body

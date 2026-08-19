@@ -399,7 +399,7 @@ async function buildMonthlyReport(year, onProgress) {
   for (const row of salesRows) {
     const soldKey = String(row?.soldAt || '').slice(0, 7);
     if (!monthMap.has(soldKey)) continue;
-    if (row?.isElla) continue;
+    // Ella, SU-OT, EA exclusions already applied by getSalesSummaryRows via isExcludedRevenueSale
 
     const bucket = monthMap.get(soldKey);
     const qty = Number(row?.qty || 0) || 0;

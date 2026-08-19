@@ -16,7 +16,7 @@ export function isSpecialLocalGuideName(name) {
 export function formatLocalGuideLabel(name) {
   const value = String(name || '').trim();
   if (value === ONLINE_ID) return 'Online';
-  if (value === KAKAO_FRIEND_ID) return 'Kakao (10%)';
+  if (value === KAKAO_FRIEND_ID) return 'Kakao (10% Cash Discount)';
   return value;
 }
 
@@ -24,10 +24,11 @@ export function getGuideSelectOptions(guides = []) {
   const guideList = Array.isArray(guides) ? guides.slice() : [];
   const mrMoonGuide = guideList.find((g) => normalizeGuideName(g?.name) === 'mrmoon') || null;
   const peterGuide = guideList.find((g) => normalizeGuideName(g?.name).includes('peter')) || null;
-  const ellaGuide = guideList.find((g) => normalizeGuideName(g?.name).includes('ella')) || null;
   const otherGuides = guideList
     .filter((g) => {
       const name = normalizeGuideName(g?.name);
+      // 직원은 일반 가이드 목록에서 제외
+      if (g.guide_type === 'employee') return false;
       return name && name !== 'mrmoon' && !name.includes('peter') && !name.includes('ella');
     })
     .sort((a, b) => String(a?.name || '').trim().localeCompare(String(b?.name || '').trim()));
@@ -37,13 +38,13 @@ export function getGuideSelectOptions(guides = []) {
     mrMoonGuide
       ? {
           value: String(mrMoonGuide.id),
-          label: 'Mr.Moon (10%)',
+          label: 'Mr.Moon (10% Cash Discount)',
           style: { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' },
         }
       : null,
     {
       value: KAKAO_FRIEND_ID,
-      label: 'Kakao (10%)',
+      label: 'Kakao (10% Cash Discount)',
       style: { backgroundColor: 'rgba(249,115,22,0.2)', color: 'var(--text-main)' },
     },
     {
@@ -54,15 +55,8 @@ export function getGuideSelectOptions(guides = []) {
     peterGuide
       ? {
           value: String(peterGuide.id),
-          label: 'Peter (20%)',
+          label: 'Sir Peter (20% Cash Discount)',
           style: { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' },
-        }
-      : null,
-    ellaGuide
-      ? {
-          value: String(ellaGuide.id),
-          label: 'Ella',
-          style: { backgroundColor: 'rgba(255, 105, 180, 0.1)', color: 'var(--text-main)' },
         }
       : null,
     ...otherGuides.map((guide) => ({

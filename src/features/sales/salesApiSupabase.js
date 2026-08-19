@@ -82,6 +82,17 @@ function includesIgnoreCase(hay, needle) {
     .includes(String(needle || '').toLowerCase());
 }
 
+/**
+ * Common revenue exclusion filter used by /analyze, /profit, /report.
+ * Excludes: Ella sales, SU-OT codes, EA code parts.
+ */
+export function isExcludedRevenueSale(row) {
+  const code = String(row?.code || '').trim().toUpperCase();
+  const codeParts = code.split('-').filter(Boolean);
+
+  return Boolean(row?.isElla) || code.startsWith('SU-OT') || codeParts.includes('EA');
+}
+
 function findLabel(group, c) {
   const arr = codePartsSeed[group] || [];
   const hit = arr.find((i) => i.code === (c || ''));
@@ -205,7 +216,7 @@ async function attachLocalProductMeta(items) {
     const localGuideName = String(i.localGuideName || '').trim();
     const isOnline = localGuideName === '__ONLINE__';
     const hasAnyGuide = (Boolean(i.guideId) || Boolean(localGuideName)) && !isOnline;
-    const commission = hasAnyGuide && !isFreeGift ? listUnit * qtyN * 0.1 : 0;
+    const commission = 0; // commission comes from sale_groups.guide_commission via DB
     const unitForTotal = Number(i.discountUnitPricePhp ?? i.unitPricePhp ?? 0) || 0;
     return {
       ...i,
@@ -320,7 +331,7 @@ export async function checkoutCart(payload) {
 
   // 1. Create a sale group for this transaction
   const saleGroupId = crypto.randomUUID();
-  const guideRate = guideId ? (isPeter || isMrMoon ? 0 : 0.1) : 0; // Mr.Moon/Peter have 0% commission
+  const guideRate = 0; // DB will calculate via recalculate_guide_commission
 
   // Create the group first (parent record)
   // We initialize totals to 0; finalize_sale_group will calculate them
@@ -683,7 +694,7 @@ export async function setSaleGroupGuide({
 
   const isPeter = guideNameNorm.includes('peter');
   const isMrMoon = guideNameNorm.includes('mrmoon');
-  const finalGuideRate = guide ? (isPeter || isMrMoon ? 0 : Number(guideRate || 0.1)) : 0;
+  const finalGuideRate = 0; // DB will calculate via recalculate_guide_commission
 
   async function insertSaleGroupRecord(row) {
     try {
@@ -1016,14 +1027,14 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         let groups;
         try {
           groups = await sbSelectAll('sale_groups', {
-            select: 'id,guide_id,local_guide_name',
+            select: 'id,guide_id,local_guide_name,guide_commission',
             filters: [{ column: 'id', op: 'in', value: inList }],
           });
         } catch (e) {
           const msg = String(e?.message || '').toLowerCase();
           if (msg.includes('local_guide_name') || msg.includes('local guide')) {
             groups = await sbSelectAll('sale_groups', {
-              select: 'id,guide_id',
+              select: 'id,guide_id,guide_commission',
               filters: [{ column: 'id', op: 'in', value: inList }],
             });
           } else {
@@ -1034,6 +1045,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
           groupMap.set(g.id, {
             guideId: g.guide_id ?? null,
             localGuideName: String(g.local_guide_name || '').trim(),
+            guideCommission: Number(g.guide_commission ?? 0) || 0,
           })
         );
       } catch {
@@ -1055,13 +1067,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
           let groups;
           try {
             groups = await sbSelectAll('sale_groups', {
-              select: 'id,guide_id,local_guide_name',
+              select: 'id,guide_id,local_guide_name,guide_commission',
               filters,
             });
           } catch (e) {
             const msg = String(e?.message || '').toLowerCase();
             if (msg.includes('local_guide_name') || msg.includes('local guide')) {
-              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id', filters });
+              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,guide_commission', filters });
             } else {
               throw e;
             }
@@ -1070,16 +1082,17 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
             groupMap.set(g.id, {
               guideId: g.guide_id ?? null,
               localGuideName: String(g.local_guide_name || '').trim(),
+              guideCommission: Number(g.guide_commission ?? 0) || 0,
             })
           );
         } else {
           let groups;
           try {
-            groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,local_guide_name' });
+            groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,local_guide_name,guide_commission' });
           } catch (e) {
             const msg = String(e?.message || '').toLowerCase();
             if (msg.includes('local_guide_name') || msg.includes('local guide')) {
-              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id' });
+              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,guide_commission' });
             } else {
               throw e;
             }
@@ -1088,6 +1101,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
             groupMap.set(g.id, {
               guideId: g.guide_id ?? null,
               localGuideName: String(g.local_guide_name || '').trim(),
+              guideCommission: Number(g.guide_commission ?? 0) || 0,
             })
           );
         }
@@ -1158,13 +1172,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         isMrMoon,
         isElla,
         isPeter,
+        isKakaoFriend: isKakaoGuide,
         // Kakao is a discount channel, not a commission-bearing guide.
         // FIX: Explicitly exclude free gifts from commission display for all guides
-        commission:
-          (guideId && !isMrMoon && !isElla && !isPeter && !isFreeGift) ||
-          (isLocalGuide && !isFreeGift)
-            ? finalUnit * qtyN * 0.1
-            : 0,
+        commission: 0, // commission will be calculated from sale_groups.guide_commission
       };
     })
     .filter((r) => r.qty > 0);
@@ -1284,18 +1295,18 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const inList = buildInList(chunk);
       if (inList === '()') continue;
       const page = await sbSelect('sale_groups', {
-        select: 'id,guide_id',
+        select: 'id,guide_id,guide_commission',
         filters: [{ column: 'id', op: 'in', value: inList }],
       });
       (page || []).forEach((row) => {
         const key = String(row?.id || '').trim();
-        if (key) groupMap.set(key, row?.guide_id ?? null);
+        if (key) groupMap.set(key, { guideId: row?.guide_id ?? null, guideCommission: Number(row?.guide_commission ?? 0) || 0 });
       });
     }
   }
 
   let guideNameMap = new Map();
-  const guideIds = [...new Set([...groupMap.values()].filter(Boolean).map((id) => String(id)))];
+  const guideIds = [...new Set([...groupMap.values()].map((v) => v?.guideId).filter(Boolean).map((id) => String(id)))];
   if (guideIds.length) {
     const guides = await sbSelect('guides', { select: 'id,name' });
     guideNameMap = new Map((guides || []).map((row) => [String(row?.id), String(row?.name || '')]));
@@ -1309,7 +1320,8 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const refundedAt = row?.refunded_at || null;
       const isRefunded = Boolean(toMsFromIso(refundedAt));
       const groupId = String(row?.sale_group_id || '').trim();
-      const guideId = groupId ? groupMap.get(groupId) || null : null;
+      const ginfo = groupId ? groupMap.get(groupId) || null : null;
+      const guideId = ginfo?.guideId ?? null;
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const guideNameNorm = guideName.toLowerCase().replace(/[\s.]/g, '');
       const isMrMoon = guideNameNorm.includes('mrmoon');
@@ -1334,13 +1346,10 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
         isMrMoon,
         isElla,
         isPeter,
-        commission:
-          guideId && !isMrMoon && !isElla && !isPeter && !freeGift && !isRefunded
-            ? finalUnit * qty * 0.1
-            : 0,
+        commission: 0, // commission will be calculated from sale_groups.guide_commission
       };
     })
-    .filter((row) => row.qty > 0);
+    .filter((row) => row.qty > 0 && !isExcludedRevenueSale(row));
 }
 
 export async function getAnalytics({
@@ -1519,16 +1528,17 @@ export async function getAnalytics({
     }
   }
 
-  // Annotate rows and EXCLUDE Ella from all profit/revenue metrics
+  // Annotate rows and EXCLUDE Ella, SU-OT, EA from all profit/revenue metrics
   const withGuideFlags = analyzedRows.map((r) => {
     const raw = r.guideId ? String(guideMap.get(String(r.guideId)) || '') : '';
     const norm = raw.toLowerCase().replace(/[\s.]/g, '');
     const isMrMoon = norm.includes('mrmoon');
     const isElla = norm.includes('ella');
     const isPeter = norm.includes('peter');
-    return { ...r, isMrMoon, isElla, isPeter };
+    const isKakaoFriend = !r.guideId && String(r.localGuideName || '') === KAKAO_FRIEND_ID;
+    return { ...r, isMrMoon, isElla, isPeter, isKakaoFriend };
   });
-  let rows = withGuideFlags.filter((r) => !r.isElla);
+  let rows = withGuideFlags.filter((r) => !isExcludedRevenueSale(r));
   const rowSoldAts = (rows || []).map((r) => String(r?.soldAt || '').trim()).filter(Boolean);
   let soldAtMin = '';
   let soldAtMax = '';
@@ -1579,24 +1589,42 @@ export async function getAnalytics({
     .reduce((sum, gid) => sum + (Number(groupCommissionMap.get(gid) || 0) || 0), 0);
   let mrMoonCommission = 0;
   let mrMoonRevenue = 0;
-  let mrMoonListRevenue = 0;
+  let mrMoonDiscountAmount = 0;
   let ellaCommission = 0;
-  // let ellaRevenue = 0;
+  let kakaoRevenue = 0;
+  let kakaoDiscountAmount = 0;
+  let peterRevenue = 0;
+  let peterDiscountAmount = 0;
   try {
     rows.forEach((r) => {
+      const listP = Number(r.listPrice || 0) || 0;
+      const priceP = Number(r.unitPricePhp || 0) || 0;
+      const qtyN = Number(r.qty || 0) || 0;
+      const discountRow = listP > 0 && priceP > 0 ? Math.max(listP - priceP, 0) * qtyN : 0;
+
       if (r.isMrMoon) {
         mrMoonCommission += Number(r.commission || 0) || 0;
         mrMoonRevenue += Number(r.lineTotalPhp || 0) || 0;
-        mrMoonListRevenue += (Number(r.listPrice || 0) || 0) * (Number(r.qty || 0) || 0);
+        mrMoonDiscountAmount += discountRow;
       }
-      // rows excludes Ella entries by design
+      if (r.isKakaoFriend) {
+        kakaoRevenue += Number(r.lineTotalPhp || 0) || 0;
+        kakaoDiscountAmount += discountRow;
+      }
+      if (r.isPeter) {
+        peterRevenue += Number(r.lineTotalPhp || 0) || 0;
+        peterDiscountAmount += discountRow;
+      }
     });
   } catch {
     mrMoonCommission = 0;
     mrMoonRevenue = 0;
-    mrMoonListRevenue = 0;
+    mrMoonDiscountAmount = 0;
     ellaCommission = 0;
-    // ellaRevenue = 0;
+    kakaoRevenue = 0;
+    kakaoDiscountAmount = 0;
+    peterRevenue = 0;
+    peterDiscountAmount = 0;
   }
 
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
@@ -1618,14 +1646,35 @@ export async function getAnalytics({
     0
   );
 
-  const realTotalSales = totalRevenue - ellaCommission;
+  const realTotalSales = totalRevenue;
 
   const grossAmount = realTotalSales;
 
-  // Mr. Moon commission is actually the discount amount (already deducted from price),
-  // so we should NOT deduct it again from Net Sales.
-  const realTotalCommission = totalCommission - mrMoonCommission - ellaCommission;
-  const netAmount = realTotalSales - realTotalCommission;
+  // Commission: only regular + local guides
+  // Subtract Mr.Moon, employee, Peter commissions from total
+  // Use guide_type from groupMap if available, fallback to name matching
+  let displayedGuideCommission = 0;
+  let mrMoonCommissionTotal = 0;
+  let employeeCommissionTotal = 0;
+  const commissionGroupIds = [...new Set(rows.map((r) => String(r.saleGroupId || '').trim()))].filter(Boolean);
+  for (const gid of commissionGroupIds) {
+    const gcomm = Number(groupCommissionMap.get(gid) || 0) || 0;
+    if (gcomm <= 0) continue;
+    const info = groupMap.get(gid);
+    const guideId = info?.guideId ?? null;
+    if (!guideId) continue;
+    const raw = String(guideMap.get(String(guideId)) || '');
+    const norm = raw.toLowerCase().replace(/[\s.]/g, '');
+    if (norm.includes('mrmoon')) {
+      mrMoonCommissionTotal += gcomm;
+    } else if (norm.includes('ella') || norm.includes('peter')) {
+      employeeCommissionTotal += gcomm;
+    } else {
+      displayedGuideCommission += gcomm;
+    }
+  }
+  const profitCommissionExpense = displayedGuideCommission;
+  const netAmount = realTotalSales - profitCommissionExpense;
 
   const aov = transactionCount ? realTotalSales / transactionCount : 0;
 
@@ -1673,7 +1722,6 @@ export async function getAnalytics({
   // Gross Profit is now based on Real Total Sales
   const grossProfit = realTotalSales - costAmount;
 
-  const netTotalSales = realTotalSales - realTotalCommission;
   report(70, '지출 합산 중…');
   let expenseAmount = 0;
   try {
@@ -1696,9 +1744,11 @@ export async function getAnalytics({
     expenseAmount = 0;
   }
 
-  const mrMoonDiscount = mrMoonListRevenue * 0.1;
+  const mrMoonDiscount = mrMoonDiscountAmount;
+  const kakaoDiscount = kakaoDiscountAmount;
+  const peterDiscount = peterDiscountAmount;
 
-  const ownerProfit = netTotalSales - expenseAmount - costAmount;
+  const ownerProfit = realTotalSales - profitCommissionExpense - expenseAmount - costAmount;
 
   const giftQty = giftRows.reduce((sum, r) => sum + (Number(r?.qty ?? 0) || 0), 0);
   const giftListAmount = giftRows.reduce((sum, r) => {
@@ -1715,12 +1765,17 @@ export async function getAnalytics({
     grossProfit,
     expenseAmount,
     ownerProfit,
-    totalCommission: realTotalCommission,
+    displayedGuideCommission,
+    profitCommissionExpense,
+    totalCommission: displayedGuideCommission,
     transactionCount,
     aov,
-    discountAmount: mrMoonDiscount,
+    mrMoonDiscountAmount: mrMoonDiscount,
     mrMoonRevenue,
-    discountRate,
+    peterDiscountAmount: peterDiscount,
+    peterRevenue,
+    kakaoDiscountAmount: kakaoDiscount,
+    kakaoRevenue,
     refundCount: refundedNonElla.length,
     refundAmount,
     giftQty,
