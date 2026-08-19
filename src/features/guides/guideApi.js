@@ -13,7 +13,7 @@ export async function getGuides() {
 
 /**
  * Get guide stats (includes balance, guide_type, etc.)
- * Returns array of { guide_id, name, is_active, guide_type, fixed_commission_rate, employee_id, balance, last_tx_at }
+ * Balance = unsettled commission from sale_groups (not ledger)
  */
 export async function getGuideStats() {
   const guides = await sbSelect('guides', {
@@ -22,19 +22,11 @@ export async function getGuideStats() {
     order: { column: 'name', ascending: true },
   });
 
-  const ledger = await sbSelect('guide_point_ledger', { select: 'guide_id, delta, created_at, reason' });
-
+  // 가이드별 미정산 커미션 합계 (RPC)
+  const balances = await sbRpc('get_guide_unsettled_balances');
   const balanceMap = {};
-  const lastTxMap = {};
-
-  (ledger || []).forEach((l) => {
-    if (!l.guide_id) return;
-    const val = Number(l.delta) || 0;
-    balanceMap[l.guide_id] = (balanceMap[l.guide_id] || 0) + val;
-
-    if (!lastTxMap[l.guide_id] || new Date(l.created_at) > new Date(lastTxMap[l.guide_id])) {
-      lastTxMap[l.guide_id] = l.created_at;
-    }
+  (balances || []).forEach((b) => {
+    balanceMap[b.guide_id] = Number(b.unsettled_amount) || 0;
   });
 
   return (guides || []).map((g) => ({
@@ -46,7 +38,6 @@ export async function getGuideStats() {
     fixed_commission_rate: g.fixed_commission_rate,
     employee_id: g.employee_id,
     balance: balanceMap[g.id] || 0,
-    last_tx_at: lastTxMap[g.id] || null,
   }));
 }
 
@@ -64,34 +55,6 @@ export async function adjustGuidePoints(guideId, amount, note) {
 }
 
 /**
- * Settle all commission for a guide (full settlement)
- * Calls settle_all_guide_commission RPC
- */
-export async function settleAllGuideCommission(guideId, { paymentMethod, note, paidAt } = {}) {
-  return sbRpc('settle_all_guide_commission', {
-    p_guide_id: Number(guideId),
-    p_payment_method: paymentMethod || null,
-    p_note: note || null,
-    p_paid_at: paidAt || new Date().toISOString(),
-  });
-}
-
-/**
- * Settle commission to target balance (partial settlement)
- * Calls settle_guide_commission_to_balance RPC
- */
-export async function settleGuideCommissionToBalance(guideId, targetBalance, expectedCurrentBalance, { paymentMethod, note, paidAt } = {}) {
-  return sbRpc('settle_guide_commission_to_balance', {
-    p_guide_id: Number(guideId),
-    p_target_balance: Number(targetBalance),
-    p_expected_current_balance: Number(expectedCurrentBalance),
-    p_payment_method: paymentMethod || null,
-    p_note: note || null,
-    p_paid_at: paidAt || new Date().toISOString(),
-  });
-}
-
-/**
  * Get settlement history for a guide (or all guides)
  */
 export async function getSettlementHistory({ guideId } = {}) {
@@ -100,10 +63,33 @@ export async function getSettlementHistory({ guideId } = {}) {
     filters.push({ column: 'guide_id', op: 'eq', value: Number(guideId) });
   }
   return sbSelect('guide_commission_settlements', {
-    select: 'id, guide_id, amount, settlement_type, balance_before, balance_after, payment_method, paid_at, note, created_by, created_at',
+    select: 'id, guide_id, amount, paid_at, note, created_at',
     filters,
     order: { column: 'created_at', ascending: false },
     limit: 200,
+  });
+}
+
+/**
+ * Get unsettled sale groups for a guide
+ * Calls get_guide_unsettled_sales RPC
+ */
+export async function getGuideUnsettledSales(guideId) {
+  return sbRpc('get_guide_unsettled_sales', {
+    p_guide_id: Number(guideId),
+  });
+}
+
+/**
+ * Settle selected sale groups for a guide
+ * Calls settle_guide_sales RPC
+ */
+export async function settleGuideSales(guideId, saleGroupIds, { note, paidAt } = {}) {
+  return sbRpc('settle_guide_sales', {
+    p_guide_id: Number(guideId),
+    p_sale_group_ids: saleGroupIds,
+    p_note: note || null,
+    p_paid_at: paidAt || new Date().toISOString(),
   });
 }
 
