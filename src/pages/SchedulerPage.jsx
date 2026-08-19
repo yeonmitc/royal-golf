@@ -763,6 +763,15 @@ export default function SchedulerPage() {
         continue;
       }
 
+      // Monday = stock checking day: both 9h, manual times, rotate morning/evening weekly
+      if (dow === 1) {
+        const mondayMorning = weekMorning;
+        const mondayEvening = weekEvening;
+        rowsToInsert.push({ employee_id: mondayMorning.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '06:00', manual_hours: 9 });
+        rowsToInsert.push({ employee_id: mondayEvening.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '08:00', manual_hours: 9 });
+        continue;
+      }
+
       rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning' });
       rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'evening' });
     }
