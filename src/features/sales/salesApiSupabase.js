@@ -87,7 +87,9 @@ function includesIgnoreCase(hay, needle) {
  * Excludes: Ella sales, SU-OT codes, EA code parts.
  */
 export function isExcludedRevenueSale(row) {
-  const code = String(row?.code || '').trim().toUpperCase();
+  const code = String(row?.code || '')
+    .trim()
+    .toUpperCase();
   const codeParts = code.split('-').filter(Boolean);
 
   return Boolean(row?.isElla) || code.startsWith('SU-OT') || codeParts.includes('EA');
@@ -649,12 +651,60 @@ export async function setSaleFreeGift({ saleId, freeGift, code, size } = {}) {
   requireAdminOrThrow();
   const sid = Number(saleId);
   if (!sid) throw new Error('INVALID_SALE_ID');
-  await sbUpdate(
-    'sales',
-    { free_gift: Boolean(freeGift) },
-    { filters: [{ column: 'id', op: 'eq', value: sid }], returning: 'minimal' }
-  );
-  return { ok: true, saleId: sid, freeGift: Boolean(freeGift), code, size };
+
+  const isGift = Boolean(freeGift);
+  const patch = { free_gift: isGift };
+
+  if (isGift) {
+    patch.price = 0;
+  } else {
+    const rows = await sbSelect('sales', {
+      select: 'id,list_price,price,code,is_exchanged',
+      filters: [{ column: 'id', op: 'eq', value: sid }],
+      limit: 1,
+    });
+    const row = rows?.[0];
+    if (row && !row.is_exchanged) {
+      const listPrice = Number(row.list_price ?? 0) || 0;
+      if (listPrice > 0) {
+        patch.price = listPrice;
+      } else {
+        try {
+          const prodRows = await sbSelect('products', {
+            select: 'sale_price',
+            filters: [{ column: 'code', op: 'eq', value: row.code }],
+            limit: 1,
+          });
+          const prod = prodRows?.[0];
+          const prodPrice = Number(prod?.sale_price ?? 0) || 0;
+          if (prodPrice > 0) patch.price = prodPrice;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  await sbUpdate('sales', patch, {
+    filters: [{ column: 'id', op: 'eq', value: sid }],
+    returning: 'minimal',
+  });
+
+  try {
+    const sgRows = await sbSelect('sales', {
+      select: 'sale_group_id',
+      filters: [{ column: 'id', op: 'eq', value: sid }],
+      limit: 1,
+    });
+    const groupId = String(sgRows?.[0]?.sale_group_id || '').trim();
+    if (groupId) {
+      await sbRpc('finalize_sale_group', { p_group_id: groupId }).catch(() => null);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return { ok: true, saleId: sid, freeGift: isGift, code, size };
 }
 
 export async function setSaleGroupGuide({
@@ -931,8 +981,16 @@ export async function updateSalePrice({ saleGroupId, saleId, price, markExchange
   // We remove unit_price_php and discount_unit_price_php as they seem to cause schema errors
   // and are not used in the main checkoutCart flow (which uses 'price').
   const patch = { price: p };
-  if (markExchanged === true) patch.is_exchanged = true;
-  if (markExchanged === true || p !== 0) patch.free_gift = false;
+  if (markExchanged === true) {
+    patch.is_exchanged = true;
+    patch.free_gift = false;
+  } else if (p === 0) {
+    // 가격 0 = gift로 강제 sync
+    patch.free_gift = true;
+  } else {
+    // 가격 > 0 = gift 해제
+    patch.free_gift = false;
+  }
 
   try {
     await sbUpdate('sales', patch, { filters, returning: 'minimal' });
@@ -1073,7 +1131,10 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
           } catch (e) {
             const msg = String(e?.message || '').toLowerCase();
             if (msg.includes('local_guide_name') || msg.includes('local guide')) {
-              groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,guide_commission', filters });
+              groups = await sbSelectAll('sale_groups', {
+                select: 'id,guide_id,guide_commission',
+                filters,
+              });
             } else {
               throw e;
             }
@@ -1088,7 +1149,9 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
         } else {
           let groups;
           try {
-            groups = await sbSelectAll('sale_groups', { select: 'id,guide_id,local_guide_name,guide_commission' });
+            groups = await sbSelectAll('sale_groups', {
+              select: 'id,guide_id,local_guide_name,guide_commission',
+            });
           } catch (e) {
             const msg = String(e?.message || '').toLowerCase();
             if (msg.includes('local_guide_name') || msg.includes('local guide')) {
@@ -1300,13 +1363,24 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       });
       (page || []).forEach((row) => {
         const key = String(row?.id || '').trim();
-        if (key) groupMap.set(key, { guideId: row?.guide_id ?? null, guideCommission: Number(row?.guide_commission ?? 0) || 0 });
+        if (key)
+          groupMap.set(key, {
+            guideId: row?.guide_id ?? null,
+            guideCommission: Number(row?.guide_commission ?? 0) || 0,
+          });
       });
     }
   }
 
   let guideNameMap = new Map();
-  const guideIds = [...new Set([...groupMap.values()].map((v) => v?.guideId).filter(Boolean).map((id) => String(id)))];
+  const guideIds = [
+    ...new Set(
+      [...groupMap.values()]
+        .map((v) => v?.guideId)
+        .filter(Boolean)
+        .map((id) => String(id))
+    ),
+  ];
   if (guideIds.length) {
     const guides = await sbSelect('guides', { select: 'id,name' });
     guideNameMap = new Map((guides || []).map((row) => [String(row?.id), String(row?.name || '')]));
@@ -1656,7 +1730,9 @@ export async function getAnalytics({
   let displayedGuideCommission = 0;
   let mrMoonCommissionTotal = 0;
   let employeeCommissionTotal = 0;
-  const commissionGroupIds = [...new Set(rows.map((r) => String(r.saleGroupId || '').trim()))].filter(Boolean);
+  const commissionGroupIds = [
+    ...new Set(rows.map((r) => String(r.saleGroupId || '').trim())),
+  ].filter(Boolean);
   for (const gid of commissionGroupIds) {
     const gcomm = Number(groupCommissionMap.get(gid) || 0) || 0;
     if (gcomm <= 0) continue;

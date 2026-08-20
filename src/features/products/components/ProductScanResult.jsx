@@ -5,6 +5,7 @@ import DataTable from '../../../components/common/DataTable';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useCartStore } from '../../../store/cartStore';
 import { useProductWithInventory } from '../productHooks';
+import { getSizeOptionsByCode, formatSizeDisplay } from '../../../utils/sizeMapper';
 
 /**
  * 바코드 스캔 결과 영역
@@ -40,10 +41,7 @@ export default function ProductScanResult({ code }) {
     return sum;
   }, [reservedBySize]);
 
-  const remainingTotalStock = Math.max(
-    0,
-    (Number(data?.totalStock ?? 0) || 0) - reservedTotal
-  );
+  const remainingTotalStock = Math.max(0, (Number(data?.totalStock ?? 0) || 0) - reservedTotal);
 
   const getRemainingSizeStock = (sizeRow) => {
     const sizeKey = String(sizeRow?.size || 'Free').trim() || 'Free';
@@ -97,7 +95,7 @@ export default function ProductScanResult({ code }) {
     addItem({
       code: data.code,
       size: sizeRow.size,
-      sizeDisplay: sizeRow.sizeDisplay,
+      sizeDisplay: formatSizeDisplay(data.code, sizeRow.size),
       nameKo: data.nameKo || derivedName,
       color: defaultColor,
       unitPricePhp: data.salePricePhp,
@@ -150,11 +148,25 @@ export default function ProductScanResult({ code }) {
           Size Inventory
         </div>
         {(() => {
-          const standard = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
-          const bySize = new Map((data.inventory || []).map((r) => [r.size || 'Free', r]));
-          const rowsAll = standard.map((sz) => {
-            const r = bySize.get(sz);
-            return r ? r : { code: data.code, size: sz, sizeDisplay: sz, stockQty: 0 };
+          const sizeOpts = getSizeOptionsByCode(data.code);
+          const bySize = new Map(
+            (data.inventory || []).map((r) => [String(r.size || 'Free').trim(), r])
+          );
+          const rowsAll = sizeOpts.map((opt) => {
+            const r = bySize.get(opt.key);
+            return r
+              ? {
+                  code: data.code,
+                  size: r.size || opt.key,
+                  sizeDisplay: opt.label,
+                  stockQty: Number(r.stockQty ?? 0) || 0,
+                }
+              : {
+                  code: data.code,
+                  size: opt.key,
+                  sizeDisplay: opt.label,
+                  stockQty: 0,
+                };
           });
           const rows = rowsAll.filter((r) => (r.stockQty ?? 0) > 0);
           return (

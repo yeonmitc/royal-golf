@@ -27,6 +27,7 @@ import {
   RENTAL_CODE,
   saveRentalMetaForSoldAt,
 } from '../utils/rentalMeta';
+import { formatSizeDisplay } from '../utils/sizeMapper';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -51,11 +52,14 @@ export default function SellPage() {
   const isKakaoFriendSelected = guideKey === KAKAO_FRIEND_ID;
   const isOnlineSelected = guideKey === ONLINE_ID;
   const isLocalGuideSelected = guideKey === LOCAL_GUIDE_ID;
-  const selectedGuide = isLocalGuideSelected || isKakaoFriendSelected || isOnlineSelected
-    ? null
-    : (guides || []).find((g) => String(g.id) === String(guideId));
+  const selectedGuide =
+    isLocalGuideSelected || isKakaoFriendSelected || isOnlineSelected
+      ? null
+      : (guides || []).find((g) => String(g.id) === String(guideId));
   const selectedGuideNameNorm = selectedGuide
-    ? String(selectedGuide.name || '').toLowerCase().replace(/[\s.]/g, '')
+    ? String(selectedGuide.name || '')
+        .toLowerCase()
+        .replace(/[\s.]/g, '')
     : '';
 
   const isMrMoonSelected = selectedGuideNameNorm.includes('mrmoon');
@@ -122,7 +126,9 @@ export default function SellPage() {
       const result = await checkoutCart({
         items: currentItems,
         guideId:
-          currentGuideKey === LOCAL_GUIDE_ID || currentGuideKey === KAKAO_FRIEND_ID || currentGuideKey === ONLINE_ID
+          currentGuideKey === LOCAL_GUIDE_ID ||
+          currentGuideKey === KAKAO_FRIEND_ID ||
+          currentGuideKey === ONLINE_ID
             ? null
             : currentGuideId,
         localGuideName:
@@ -130,9 +136,9 @@ export default function SellPage() {
             ? String(currentLocalGuideName || '').trim()
             : currentGuideKey === KAKAO_FRIEND_ID
               ? KAKAO_FRIEND_ID
-            : currentGuideKey === ONLINE_ID
-              ? ONLINE_ID
-              : '',
+              : currentGuideKey === ONLINE_ID
+                ? ONLINE_ID
+                : '',
         isMrMoon: isMrMoonSelected,
         isPeter: isPeterSelected,
         isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
@@ -144,7 +150,7 @@ export default function SellPage() {
           code: item.code,
           name: item.name || item.nameKo,
           color: item.color,
-          size: item.sizeDisplay || item.size,
+          size: item.sizeDisplay || formatSizeDisplay(item.code, item.size),
           qty: item.qty,
           price: finalPrice,
         };
@@ -342,7 +348,9 @@ export default function SellPage() {
                           </div>
 
                           {isRental ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: '88px 1fr', gap: 8 }}>
+                            <div
+                              style={{ display: 'grid', gridTemplateColumns: '88px 1fr', gap: 8 }}
+                            >
                               <select
                                 className="select-gold"
                                 value={item.rentalNo || ''}
@@ -412,7 +420,7 @@ export default function SellPage() {
                           ) : null}
                         </div>
                       ),
-                      size: item.sizeDisplay || item.size,
+                      size: item.sizeDisplay || formatSizeDisplay(item.code, item.size),
                       color: (
                         <select
                           className="select-gold"
@@ -477,9 +485,7 @@ export default function SellPage() {
             {cartItems.length > 0 && (
               <div className="mt-4 px-1">
                 <div className="mb-2">
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">
-                    Guide
-                  </label>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Guide</label>
                   <select
                     className="w-full border rounded px-2 py-1.5 text-sm"
                     value={guideId || ''}
@@ -591,11 +597,7 @@ export default function SellPage() {
             >
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleLocalGuideSave}
-              style={{ width: 120 }}
-            >
+            <Button variant="primary" onClick={handleLocalGuideSave} style={{ width: 120 }}>
               Save
             </Button>
           </div>

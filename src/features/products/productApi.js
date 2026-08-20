@@ -1,9 +1,68 @@
 // src/features/products/productApi.js
 import db from '../../db/dexieClient';
-import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
+import { sbDelete, sbInsert, sbSelect, sbUpdate, sbRpc } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
+import codePartsSeed from '../../db/seed/seed-code-parts.json';
 
-const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
+const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
+
+/**
+ * 🧪 상품 코드 Part 검증 (5개 파트)
+ * 코드 형식: {CK}-{TP}-{BR}-{CL}-{NN} (대시 4개 = 5파트)
+ *   Part0 (2글자): 첫글자=category, 두번째=kind
+ *   Part1 (2글자): type (TP, BT, GG, DR, ...)
+ *   Part2 (2글자): brand (AC, VS, AD, ...)
+ *   Part3 (2글자): color (WH, BK, SB, ...)
+ *   Part4 (2자리): serial 번호 (01~99)
+ *
+ * 유효하지 않을 경우 에러 메시지 throw, 아니면 true 반환
+ */
+export function validateProductCode(rawCode) {
+  const code = String(rawCode || '')
+    .trim()
+    .toUpperCase();
+  if (!code) throw new Error('코드를 입력해주세요.');
+
+  const parts = code.split('-');
+  if (parts.length !== 5) {
+    throw new Error(`코드 형식 오류: 5개 파트(대시 4개)로 구성되어야 합니다. (예: GM-TP-AC-WH-06)`);
+  }
+
+  const [pCk, pType, pBrand, pColor, pSerial] = parts;
+
+  if (pCk.length !== 2) throw new Error(`Part0 (카테고리+성별)은 2글자여야 합니다. (현재: ${pCk})`);
+  const catList = (codePartsSeed.category || []).map((i) => String(i.code || '').toUpperCase());
+  const kindList = (codePartsSeed.kind || []).map((i) => String(i.code || '').toUpperCase());
+  if (!catList.includes(pCk[0])) {
+    throw new Error(`Part0 첫글자(카테고리) 오류. 허용: [${catList.join(', ')}] (현재: ${pCk[0]})`);
+  }
+  if (!kindList.includes(pCk[1])) {
+    throw new Error(
+      `Part0 두번째글자(종류) 오류. 허용: [${kindList.join(', ')}] (현재: ${pCk[1]})`
+    );
+  }
+
+  const typeList = (codePartsSeed.type || []).map((i) => String(i.code || '').toUpperCase());
+  if (!typeList.includes(pType)) {
+    throw new Error(`Part1 (타입) 오류. 허용: [${typeList.join(', ')}] (현재: ${pType})`);
+  }
+
+  const brandList = (codePartsSeed.brand || []).map((i) => String(i.code || '').toUpperCase());
+  if (!brandList.includes(pBrand)) {
+    throw new Error(`Part2 (브랜드) 오류. 허용: [${brandList.join(', ')}] (현재: ${pBrand})`);
+  }
+
+  const colorList = (codePartsSeed.color || []).map((i) => String(i.code || '').toUpperCase());
+  if (!colorList.includes(pColor)) {
+    throw new Error(`Part3 (색상) 오류. 허용: [${colorList.join(', ')}] (현재: ${pColor})`);
+  }
+
+  if (!/^\d{2}$/.test(pSerial)) {
+    throw new Error(`Part4 (일련번호) 오류. 2자리 숫자여야 합니다. (현재: ${pSerial})`);
+  }
+
+  return true;
+}
 const SIZE_TO_COLUMN = {
   S: 's',
   M: 'm',
@@ -11,6 +70,11 @@ const SIZE_TO_COLUMN = {
   XL: 'xl',
   '2XL': '2xl',
   '3XL': '3xl',
+  '4XL': '4xl',
+  '5XL': '5xl',
+  '6XL': '6xl',
+  '7XL': '7xl',
+  '8XL': '8xl',
   Free: 'free',
 };
 
@@ -31,9 +95,9 @@ function normalizeSizeKey(size) {
   if (!s) return 'Free';
   const upper = s.toUpperCase();
   if (upper === 'FREE') return 'Free';
-  if (upper === '2XL' || upper === '3XL') return upper;
-  if (upper === 'XL') return 'XL';
-  if (upper === 'S' || upper === 'M' || upper === 'L') return upper;
+  if (['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'].includes(upper)) {
+    return upper;
+  }
   return 'Free';
 }
 
@@ -359,9 +423,9 @@ export async function getProductInventoryList() {
     return (products || []).map((p) => {
       const entry = map.get(p.code) || { totalStock: 0, sizes: [] };
       const totalStock = entry.sizes.length > 0 ? entry.totalStock : p.totalStock || 0;
-      return { 
-        ...p, 
-        totalStock, 
+      return {
+        ...p,
+        totalStock,
         sizes: entry.sizes,
         check_status: p.check_status || 'unchecked',
         check_updated_at: p.check_updated_at || null,
@@ -378,9 +442,9 @@ export async function updateInventoryStatus(code, status) {
 
   // 1. Optimistically update Dexie (Local First)
   try {
-    await db.products.update(c, { 
+    await db.products.update(c, {
       check_status: status,
-      check_updated_at: now
+      check_updated_at: now,
     });
   } catch (dexieErr) {
     console.warn('Failed to update Dexie:', dexieErr);
@@ -431,12 +495,12 @@ export async function batchUpdateInventoryStatus(changes) {
   // changes: { [code]: status }
   if (!changes || Object.keys(changes).length === 0) return;
   const now = new Date().toISOString();
-  
+
   const entries = Object.entries(changes);
-  
+
   // 1. Update Dexie in bulk (parallel is fine for local IDB)
   try {
-    const promises = entries.map(([code, status]) => 
+    const promises = entries.map(([code, status]) =>
       db.products.update(code, { check_status: status, check_updated_at: now })
     );
     await Promise.all(promises);
@@ -446,21 +510,23 @@ export async function batchUpdateInventoryStatus(changes) {
 
   // 2. Update Supabase with concurrency control
   // Since we don't have a bulk update RPC, we run updates in chunks.
-  const CHUNK_SIZE = 5; 
+  const CHUNK_SIZE = 5;
   for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
     const chunk = entries.slice(i, i + CHUNK_SIZE);
-    await Promise.all(chunk.map(([code, status]) => 
-      sbUpdate(
-        'inventories',
-        { check_status: status, check_updated_at: now },
-        {
-          filters: [{ column: 'code', op: 'eq', value: code }],
-          returning: 'minimal',
-        }
-      ).catch(e => {
-        if (!isNetworkFailure(e)) console.error(`Failed to update ${code}:`, e);
-      })
-    ));
+    await Promise.all(
+      chunk.map(([code, status]) =>
+        sbUpdate(
+          'inventories',
+          { check_status: status, check_updated_at: now },
+          {
+            filters: [{ column: 'code', op: 'eq', value: code }],
+            returning: 'minimal',
+          }
+        ).catch((e) => {
+          if (!isNetworkFailure(e)) console.error(`Failed to update ${code}:`, e);
+        })
+      )
+    );
   }
 
   // Resolve unresolved erro_stock rows when a code is saved as checked.
@@ -503,11 +569,13 @@ export async function upsertErroStock({ code, memo }) {
   // checked_at = NULL means unresolved error.
   await Promise.all([
     // 1. Update Dexie (Local First) - Critical for offline support
-    db.products.update(c, { 
-      error_memo: m,
-      check_status: 'error',
-      check_updated_at: now
-    }).catch(dexieErr => console.warn('Failed to update Dexie error_memo:', dexieErr)),
+    db.products
+      .update(c, {
+        error_memo: m,
+        check_status: 'error',
+        check_updated_at: now,
+      })
+      .catch((dexieErr) => console.warn('Failed to update Dexie error_memo:', dexieErr)),
 
     // 2. erro_stock upsert (Supabase)
     (async () => {
@@ -518,7 +586,7 @@ export async function upsertErroStock({ code, memo }) {
           filters: [{ column: 'code', op: 'eq', value: c }],
           limit: 1,
         });
-        
+
         if (Array.isArray(existing) && existing.length > 0) {
           await sbUpdate(
             'erro_stock',
@@ -540,13 +608,17 @@ export async function upsertErroStock({ code, memo }) {
     })(),
 
     // 3. Explicitly update inventories (Supabase)
-    sbUpdate('inventories', {
-      check_status: 'error',
-      check_updated_at: now
-    }, {
-      filters: [{ column: 'code', op: 'eq', value: c }],
-      returning: 'minimal',
-    }).catch(e => console.warn('Failed to explicit update inventories (upsert error):', e))
+    sbUpdate(
+      'inventories',
+      {
+        check_status: 'error',
+        check_updated_at: now,
+      },
+      {
+        filters: [{ column: 'code', op: 'eq', value: c }],
+        returning: 'minimal',
+      }
+    ).catch((e) => console.warn('Failed to explicit update inventories (upsert error):', e)),
   ]);
 }
 
@@ -559,11 +631,13 @@ export async function deleteErroStock(code) {
   // checked_at = NOW() means resolved; row is purged 7 days later by cron.
   await Promise.all([
     // 1. Update Dexie (Local First)
-    db.products.update(c, { 
-      error_memo: '',
-      check_status: 'unchecked',
-      check_updated_at: now
-    }).catch(dexieErr => console.warn('Failed to update Dexie error_memo:', dexieErr)),
+    db.products
+      .update(c, {
+        error_memo: '',
+        check_status: 'unchecked',
+        check_updated_at: now,
+      })
+      .catch((dexieErr) => console.warn('Failed to update Dexie error_memo:', dexieErr)),
 
     // 2. Resolve erro_stock by stamping checked_at.
     (async () => {
@@ -575,13 +649,17 @@ export async function deleteErroStock(code) {
     })(),
 
     // 3. Explicitly update inventories (Supabase)
-    sbUpdate('inventories', {
-      check_status: 'unchecked',
-      check_updated_at: now
-    }, {
-      filters: [{ column: 'code', op: 'eq', value: c }],
-      returning: 'minimal',
-    }).catch(e => console.warn('Failed to explicit update inventories (delete error):', e))
+    sbUpdate(
+      'inventories',
+      {
+        check_status: 'unchecked',
+        check_updated_at: now,
+      },
+      {
+        filters: [{ column: 'code', op: 'eq', value: c }],
+        returning: 'minimal',
+      }
+    ).catch((e) => console.warn('Failed to explicit update inventories (delete error):', e)),
   ]);
 }
 
@@ -607,9 +685,9 @@ export async function resetAllInventoryStatus() {
 
   // 1. Dexie (Local)
   try {
-    await db.products.toCollection().modify({ 
+    await db.products.toCollection().modify({
       check_status: 'unchecked',
-      check_updated_at: now
+      check_updated_at: now,
     });
   } catch (dexieErr) {
     console.warn('Failed to reset Dexie:', dexieErr);
@@ -848,4 +926,81 @@ export async function getNextSerialForPrefix(prefix) {
     }
     return String(maxN + 1).padStart(2, '0');
   }
+}
+
+/**
+ * 🔄 상품 코드 일괄 변경 (oldCode → newCode)
+ *
+ * 🚀 Supabase 모드 (심플 버전!):
+ *   - FK 제약조건에 미리 ON UPDATE CASCADE를 달아놨으므로,
+ *     그냥 products.code 만 한 번 UPDATE 하면 PostgreSQL DB가
+ *     자동으로 sales / inventories / erro_stock 의 code 를 다 같이 바꿔줌!
+ *   - 더 이상 RPC 함수 필요 없음, 여러 테이블 개별 PATCH도 필요 없음.
+ *
+ * 💾 Dexie Local 모드: 기존대로 products/inventory/saleItems/refunds 테이블 code UPDATE
+ */
+export async function renameProductCode(oldCodeRaw, newCodeRaw) {
+  requireAdminOrThrow();
+  const oldCode = String(oldCodeRaw || '')
+    .trim()
+    .toUpperCase();
+  const newCode = String(newCodeRaw || '')
+    .trim()
+    .toUpperCase();
+  if (!oldCode) throw new Error('기존 코드를 입력해주세요.');
+  if (oldCode === newCode) return true;
+
+  validateProductCode(newCode);
+
+  const existsNew = await isProductCodeExists(newCode);
+  if (existsNew) throw new Error(`이미 존재하는 상품 코드입니다: ${newCode}`);
+  const existsOld = await isProductCodeExists(oldCode);
+  if (!existsOld) throw new Error(`존재하지 않는 기존 코드입니다: ${oldCode}`);
+
+  // ---------------------------------------------------------------------------
+  // ✨ Supabase: SECURITY DEFINER RPC 로 실행 (sbUpdate PATCH 400 Bad Request 방지!)
+  //   - sbUpdate 는 REST API anon 권한으로 실행되어 RLS/PK UPDATE 제약으로 400 실패함
+  //   - rename_product_code_simple() 은 DB postgres 권한(SECURITY DEFINER)으로 실행되어
+  //     RLS 없이 무조건 성공!
+  //   - FK ON UPDATE CASCADE 로 인해 sales / inventories / erro_stock 전부 자동 반영
+  // ---------------------------------------------------------------------------
+  try {
+    await sbRpc('rename_product_code_simple', {
+      old_code: oldCode,
+      new_code: newCode,
+    });
+  } catch (sbErr) {
+    if (isNetworkFailure(sbErr)) {
+      // 네트워크 오류면 Dexie 라도 시도 후 종료
+    } else {
+      throw sbErr;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 💾 Dexie Local DB: 그대로 code rename
+  // ---------------------------------------------------------------------------
+  const RELATED_DEXIE_STORES = ['inventory', 'saleItems', 'refunds'];
+  try {
+    await db.transaction('rw', db.products, db.inventory, db.saleItems, db.refunds, async () => {
+      const prodRow = await db.products.get(oldCode);
+      if (prodRow) {
+        await db.products.delete(oldCode);
+        await db.products.add({ ...prodRow, code: newCode });
+      }
+      for (const storeName of RELATED_DEXIE_STORES) {
+        const store = db[storeName];
+        if (!store) continue;
+        const rows = await store.where('code').equals(oldCode).toArray();
+        if (rows.length > 0) {
+          await store.where('code').equals(oldCode).delete();
+          await store.bulkAdd(rows.map((r) => ({ ...r, code: newCode })));
+        }
+      }
+    });
+  } catch (dexieErr) {
+    console.warn('Dexie renameProductCode 로컬 저장 실패 (영향 없음):', dexieErr);
+  }
+
+  return true;
 }

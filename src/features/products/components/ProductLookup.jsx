@@ -3,9 +3,16 @@ import BarcodeListener from '../../../components/common/BarcodeListener';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
-import { useProductWithInventory, useUpdateInventoryMutation, useUpsertProductMutation } from '../productHooks';
+import {
+  useProductWithInventory,
+  useUpdateInventoryMutation,
+  useUpsertProductMutation,
+  useRenameProductCodeMutation,
+} from '../productHooks';
 import { useToast } from '../../../context/ToastContext';
 import { useAdminStore } from '../../../store/adminStore';
+import { validateProductCode, isProductCodeExists } from '../productApi';
+import { getSizeOptionsByCode } from '../../../utils/sizeMapper';
 
 export default function ProductLookup({
   code,
@@ -13,7 +20,7 @@ export default function ProductLookup({
   autoEdit = false,
   showEditToggle = true,
   onSaved,
-  codeInputReadOnly = false,
+  codeInputReadOnly = true,
   editMode,
 }) {
   const { data: prod, refetch } = useProductWithInventory(code);
@@ -21,8 +28,15 @@ export default function ProductLookup({
   const edit = editMode !== undefined ? Boolean(editMode) : editLocal;
   const { showToast } = useToast();
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
-  
-  // Local state for product details
+  const isAdmin = useAdminStore((s) => s.isAuthorized());
+
+  const [originalCode, setOriginalCode] = useState('');
+  const [editCodeOpen, setEditCodeOpen] = useState(false);
+  const [editCodeValue, setEditCodeValue] = useState('');
+  const [editCodeError, setEditCodeError] = useState('');
+  const [editCodeValid, setEditCodeValid] = useState(false);
+  const [editCodeChecking, setEditCodeChecking] = useState(false);
+
   const [localName, setLocalName] = useState('');
   const [localPrice, setLocalPrice] = useState('');
   const [localCprice, setLocalCprice] = useState('');
@@ -32,11 +46,21 @@ export default function ProductLookup({
   const [localP3price, setLocalP3price] = useState('');
 
   const [sizeChanges, setSizeChanges] = useState({});
-  
+
   const { mutateAsync: updateInv, isPending: isInvPending } = useUpdateInventoryMutation();
   const { mutateAsync: upsertProd, isPending: isProdPending } = useUpsertProductMutation();
-  
-  const isPending = isInvPending || isProdPending;
+  const { mutateAsync: renameCode, isPending: isRenamePending } = useRenameProductCodeMutation();
+
+  const isPending = isInvPending || isProdPending || isRenamePending || editCodeChecking;
+
+  useEffect(() => {
+    const c = String(code || '')
+      .trim()
+      .toUpperCase();
+    if (c && prod && String(prod.code || '').toUpperCase() === c && !originalCode) {
+      setOriginalCode(c);
+    }
+  }, [code, prod, originalCode]);
 
   useEffect(() => {
     if (prod) {
@@ -63,8 +87,8 @@ export default function ProductLookup({
     const cnyValue = Number(val || 0);
     const kp = Math.round(cnyValue * 220);
     const p1 = Math.round(kp / 25);
-    const p2 = Math.ceil((kp / 25 * 2) / 100) * 100;
-    const p3 = Math.ceil((kp / 25 * 3) / 100) * 100;
+    const p2 = Math.ceil(((kp / 25) * 2) / 100) * 100;
+    const p3 = Math.ceil(((kp / 25) * 3) / 100) * 100;
     setLocalKprice(kp);
     setLocalP1price(p1);
     setLocalP2price(p2);
@@ -72,50 +96,136 @@ export default function ProductLookup({
   }
 
   const sizes = useMemo(() => {
-    const standard = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
-    const bySize = new Map((prod?.inventory || []).map((r) => [r.size || 'Free', r]));
-    return standard.map((sz) => {
-      const r = bySize.get(sz);
+    const codeForSize = String(prod?.code || code || '').trim();
+    const sizeOpts = getSizeOptionsByCode(codeForSize);
+    const bySize = new Map(
+      (prod?.inventory || []).map((r) => [String(r.size || 'Free').trim(), r])
+    );
+    return sizeOpts.map((opt) => {
+      const r = bySize.get(opt.key);
       return r
-        ? { size: r.size ?? sz, display: r.sizeDisplay || r.size || sz, qty: r.stockQty ?? 0 }
-        : { size: sz, display: sz, qty: 0 };
+        ? {
+            size: r.size ?? opt.key,
+            display: opt.label,
+            qty: typeof r.stockQty === 'number' ? r.stockQty : Number(r.stockQty ?? 0) || 0,
+          }
+        : { size: opt.key, display: opt.label, qty: 0 };
     });
-  }, [prod]);
+  }, [prod, code]);
 
   function setQty(size, val) {
     setSizeChanges((prev) => ({ ...prev, [size]: String(val).trim() === '' ? 0 : Number(val) }));
+  }
+
+  function handleMainCodeChange(val) {
+    const upper = String(val || '')
+      .trim()
+      .toUpperCase();
+    onCodeChange?.(upper);
+  }
+
+  function openEditCode() {
+    if (!isAdmin) {
+      openLoginModal();
+      return;
+    }
+    const c = String(prod?.code || originalCode || code || '')
+      .trim()
+      .toUpperCase();
+    setEditCodeValue(c);
+    setEditCodeError('');
+    setEditCodeValid(false);
+    setEditCodeOpen(true);
+  }
+
+  function closeEditCode() {
+    setEditCodeOpen(false);
+    setEditCodeValue('');
+    setEditCodeError('');
+    setEditCodeValid(false);
+  }
+
+  async function checkEditCodeValid() {
+    const val = String(editCodeValue || '')
+      .trim()
+      .toUpperCase();
+    setEditCodeChecking(true);
+    setEditCodeError('');
+    setEditCodeValid(false);
+    try {
+      validateProductCode(val);
+      const orig = String(prod?.code || originalCode || code || '').toUpperCase();
+      if (val === orig) {
+        setEditCodeError('기존 코드와 동일합니다.');
+        setEditCodeChecking(false);
+        return;
+      }
+      const dup = await isProductCodeExists(val);
+      if (dup) {
+        setEditCodeError(`이미 존재하는 상품 코드입니다: ${val}`);
+        setEditCodeChecking(false);
+        return;
+      }
+      setEditCodeValid(true);
+      showToast('Code format valid.');
+    } catch (ve) {
+      setEditCodeError(String(ve.message || ve));
+    } finally {
+      setEditCodeChecking(false);
+    }
+  }
+
+  async function applyEditCode() {
+    const val = String(editCodeValue || '')
+      .trim()
+      .toUpperCase();
+    const orig = String(prod?.code || originalCode || code || '').toUpperCase();
+    if (val === orig) return;
+    try {
+      setEditCodeChecking(true);
+      await renameCode({ oldCode: orig, newCode: val });
+      setOriginalCode(val);
+      onCodeChange?.(val);
+      showToast('Update code.');
+      closeEditCode();
+      await refetch();
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (msg === 'ADMIN_REQUIRED') openLoginModal();
+      showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Update code failed: ${msg}`);
+    } finally {
+      setEditCodeChecking(false);
+    }
   }
 
   async function saveChanges() {
     if (!code) return;
 
     try {
+      const trimmedCode = String(code).trim().toUpperCase();
+
       if (Object.keys(sizeChanges).length > 0) {
-        await updateInv({ code, changes: sizeChanges });
+        await updateInv({ code: trimmedCode, changes: sizeChanges });
       }
 
-      if (prod) {
-        const newName = localName.trim();
-        const newPrice = Number(localPrice) || 0;
+      const newName = localName.trim();
+      const newPrice = Number(localPrice) || 0;
 
-        // Check if anything changed
-        // We always include prices in payload to ensure they are synced if user edited Cprice
-        await upsertProd({
-          code,
-          nameKo: newName,
-          salePricePhp: newPrice,
-          cprice: Number(localCprice || 0),
-          kprice: Number(localKprice || 0),
-          p1price: Number(localP1price || 0),
-          p2price: Number(localP2price || 0),
-          p3price: Number(localP3price || 0),
-        });
-      }
+      await upsertProd({
+        code: trimmedCode,
+        nameKo: newName,
+        salePricePhp: newPrice,
+        cprice: Number(localCprice || 0),
+        kprice: Number(localKprice || 0),
+        p1price: Number(localP1price || 0),
+        p2price: Number(localP2price || 0),
+        p3price: Number(localP3price || 0),
+      });
 
       setEditLocal(false);
       setSizeChanges({});
-      onSaved?.(code);
-      sessionStorage.setItem('lastLookupCode', code);
+      onSaved?.(trimmedCode);
+      sessionStorage.setItem('lastLookupCode', trimmedCode);
       await refetch();
     } catch (e) {
       const msg = String(e?.message || e);
@@ -126,7 +236,7 @@ export default function ProductLookup({
 
   return (
     <div>
-      <BarcodeListener onCode={onCodeChange} enabled={!codeInputReadOnly} />
+      <BarcodeListener onCode={handleMainCodeChange} enabled={!codeInputReadOnly} />
       <div
         className="stack-mobile"
         style={{
@@ -139,50 +249,207 @@ export default function ProductLookup({
         }}
       >
         {/* Left card: lookup + metadata */}
-        <section className="page-card" style={{ flex: 1, minWidth: 0 }}>
-          <div className="flex justify-between items-center mb-4">
+        <section
+          className="page-card"
+          style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
+        >
+          <div className="mb-4">
             <div
               style={{
-                fontSize: 15,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--text-main)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
               }}
             >
-              Product Lookup
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-main)',
+                }}
+              >
+                Product Lookup
+              </div>
             </div>
-            <div className="flex gap-2" style={{ marginBottom: 12 }}>
-              <Input
-                label={null}
-                value={code}
-                onChange={(e) => {
-                  if (codeInputReadOnly) return;
-                  onCodeChange?.(e.target.value);
-                }}
-                placeholder="Scan barcode or enter code"
-                readOnly={codeInputReadOnly}
-                onClick={async () => {
-                  const v = String(code || '').trim();
-                  if (!v) return;
-                  try {
-                    await navigator.clipboard.writeText(v);
-                  } catch {
-                    const ta = document.createElement('textarea');
-                    ta.value = v;
-                    ta.setAttribute('readonly', '');
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(ta);
-                  }
-                  showToast('Code copied.');
-                }}
-              />
+            <div className="flex gap-2" style={{ marginTop: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  onClick={async () => {
+                    const v = String(code || '').trim();
+                    if (!v) return;
+                    try {
+                      await navigator.clipboard.writeText(v);
+                    } catch {
+                      const ta = document.createElement('textarea');
+                      ta.value = v;
+                      ta.setAttribute('readonly', '');
+                      ta.style.position = 'fixed';
+                      ta.style.left = '-9999px';
+                      document.body.appendChild(ta);
+                      ta.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(ta);
+                    }
+                    showToast('Code copied.');
+                  }}
+                  style={{
+                    width: '100%',
+                    minHeight: 56,
+                    padding: '12px 16px',
+                    border: '1.5px solid var(--gold-soft)',
+                    borderRadius: 10,
+                    backgroundColor: 'rgba(var(--gold-rgb, 212, 175, 55), 0.05)',
+                    color: 'var(--gold-soft)',
+                    fontSize: 18,
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textAlign: 'center',
+                    fontFamily: 'monospace',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'anywhere',
+                    lineHeight: 1.4,
+                    userSelect: 'all',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title="Click to copy code"
+                >
+                  {String(code || '').trim() || '—'}
+                </div>
+                {!codeInputReadOnly && (
+                  <div style={{ marginTop: 8 }}>
+                    <Input
+                      label={null}
+                      value={code}
+                      onChange={(e) => handleMainCodeChange(e.target.value)}
+                      placeholder="Scan barcode or enter code"
+                      readOnly={codeInputReadOnly}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {prod && isAdmin && !editCodeOpen && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openEditCode}
+                disabled={isRenamePending}
+                style={{
+                  borderColor: 'var(--gold-soft)',
+                  color: 'var(--gold-soft)',
+                  minWidth: 100,
+                }}
+              >
+                ✏️ Edit
+              </Button>
+            </div>
+          )}
+
+          {editCodeOpen && (
+            <div
+              style={{
+                margin: '4px 0 14px 0',
+                padding: 14,
+                border: '1.5px dashed var(--gold-soft)',
+                borderRadius: 10,
+                backgroundColor: 'rgba(var(--gold-rgb, 212, 175, 55), 0.04)',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--gold-soft)',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                🔄 Change Product Code
+              </div>
+              <Input
+                label={null}
+                value={editCodeValue}
+                onChange={(e) => {
+                  const v = String(e.target.value || '')
+                    .trim()
+                    .toUpperCase();
+                  setEditCodeValue(v);
+                  setEditCodeValid(false);
+                  setEditCodeError('');
+                }}
+                placeholder="Enter new code (CK-TY-BR-CL-NN)"
+                style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}
+              />
+              {editCodeError && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#ef4444',
+                    marginTop: 6,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {editCodeError}
+                </div>
+              )}
+              {editCodeValid && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#10b981',
+                    marginTop: 6,
+                  }}
+                >
+                  ✅ Valid code format & not duplicated.
+                </div>
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  marginTop: 10,
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={closeEditCode}
+                  disabled={editCodeChecking}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={checkEditCodeValid}
+                  disabled={editCodeChecking || !editCodeValue}
+                >
+                  {editCodeChecking ? 'Checking...' : 'Check Valid'}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={applyEditCode}
+                  disabled={!editCodeValid || editCodeChecking}
+                >
+                  {editCodeChecking ? 'Updating...' : 'Update Code'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {(() => {
             const last = sessionStorage.getItem('lastLookupCode') || '';
             if (!last) return null;

@@ -131,7 +131,6 @@ export async function checkoutCart(cartItems) {
         });
       }
 
-
       totalAmount += lineTotal;
       totalQty += qty;
 
@@ -209,51 +208,59 @@ export async function processRefund({ saleId, code, size, qty, reason }) {
   const reasonStr = String(reason || '').trim();
   if (!reasonStr || reasonStr.length > 50) throw new Error('INVALID_REFUND_REASON');
 
-  return db.transaction('rw', db.products, db.saleItems, db.inventory, db.refunds, db.logs, async () => {
-    const item = await db.saleItems
-      .where({ saleId: sid, code, size: size ?? '' })
-      .first();
-    if (!item) throw new Error('SALE_ITEM_NOT_FOUND');
-    const chargedUnit = Number((item.discountUnitPricePhp ?? item.unitPricePhp) || 0) || 0;
-    const amount = chargedUnit * q;
+  return db.transaction(
+    'rw',
+    db.products,
+    db.saleItems,
+    db.inventory,
+    db.refunds,
+    db.logs,
+    async () => {
+      const item = await db.saleItems.where({ saleId: sid, code, size: size ?? '' }).first();
+      if (!item) throw new Error('SALE_ITEM_NOT_FOUND');
+      const chargedUnit = Number((item.discountUnitPricePhp ?? item.unitPricePhp) || 0) || 0;
+      const amount = chargedUnit * q;
 
-    const invRow = await db.inventory.where('[code+size]').equals([code, size ?? '']).first();
-    if (invRow) {
-      await db.inventory.update(invRow.id, {
-        stockQty: Number(invRow.stockQty || 0) + q,
-      });
-    }
+      const invRow = await db.inventory
+        .where('[code+size]')
+        .equals([code, size ?? ''])
+        .first();
+      if (invRow) {
+        await db.inventory.update(invRow.id, {
+          stockQty: Number(invRow.stockQty || 0) + q,
+        });
+      }
 
-    // Update product master totalStock
-    const product = await db.products.get(code);
-    if (product && product.totalStock != null) {
-      await db.products.update(code, {
-        totalStock: (product.totalStock ?? 0) + q,
-      });
-    }
+      // Update product master totalStock
+      const product = await db.products.get(code);
+      if (product && product.totalStock != null) {
+        await db.products.update(code, {
+          totalStock: (product.totalStock ?? 0) + q,
+        });
+      }
 
-
-    const time = new Date().toISOString();
-    await db.refunds.add({
-      saleId: sid,
-      code,
-      size: size ?? '',
-      qty: q,
-      amountPhp: amount,
-      reason: reasonStr,
-      time,
-    });
-
-    await db.logs
-      .add({
-        type: 'REFUND',
-        time,
+      const time = new Date().toISOString();
+      await db.refunds.add({
+        saleId: sid,
         code,
         size: size ?? '',
-        data: JSON.stringify({ saleId: sid, qty: q, amountPhp: amount, reason: reasonStr }),
-      })
-      .catch(() => null);
-  });
+        qty: q,
+        amountPhp: amount,
+        reason: reasonStr,
+        time,
+      });
+
+      await db.logs
+        .add({
+          type: 'REFUND',
+          time,
+          code,
+          size: size ?? '',
+          data: JSON.stringify({ saleId: sid, qty: q, amountPhp: amount, reason: reasonStr }),
+        })
+        .catch(() => null);
+    }
+  );
 }
 
 export async function setSaleFreeGift({ saleId, code, size, freeGift } = {}) {
@@ -263,8 +270,28 @@ export async function setSaleFreeGift({ saleId, code, size, freeGift } = {}) {
   const sizeKey = String(size ?? '').trim();
   const item = await db.saleItems.where({ saleId: sid, code, size: sizeKey }).first();
   if (!item) throw new Error('SALE_ITEM_NOT_FOUND');
-  await db.saleItems.update(item.id, { freeGift: Boolean(freeGift) });
-  return { ok: true, saleId: sid, code, size: sizeKey, freeGift: Boolean(freeGift) };
+
+  const isGift = Boolean(freeGift);
+  const patch = { freeGift: isGift };
+
+  const qtyN = Number(item.qty ?? 0) || 0;
+  const originalUnit = Number(item.unitPricePhp ?? 0) || 0;
+
+  if (isGift) {
+    patch.discountUnitPricePhp = 0;
+    if (db.saleItems.schema?.indexes?.some((i) => i.name === 'lineTotal')) {
+      patch.lineTotal = 0;
+    }
+  } else {
+    // gift 해제 시 원래 정상가로 복원 (할인율 초기화)
+    patch.discountUnitPricePhp = undefined;
+    if (db.saleItems.schema?.indexes?.some((i) => i.name === 'lineTotal')) {
+      patch.lineTotal = originalUnit * qtyN;
+    }
+  }
+
+  await db.saleItems.update(item.id, patch);
+  return { ok: true, saleId: sid, code, size: sizeKey, freeGift: isGift };
 }
 
 export async function setSaleTime({ saleId, soldAt } = {}) {
@@ -278,7 +305,7 @@ export async function setSaleTime({ saleId, soldAt } = {}) {
 export async function updateSaleItemColor({ saleId, code, size, color } = {}) {
   const sid = Number(saleId || 0);
   if (!sid || !code) throw new Error('INVALID_ITEM_UPDATE');
-  
+
   const sizeKey = String(size ?? '').trim();
   const colorVal = String(color || '').trim();
 
@@ -301,7 +328,7 @@ export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   // No, looking at checkoutCart in salesApi.js:
   // saleId is returned from db.sales.add
   // saleItems have saleId pointing to that.
-  
+
   // Wait, `saleId` passed here might be the item's ID or the parent ID?
   // In `SalesTable.jsx`:
   // row.saleGroupId is the group ID (Supabase).
@@ -312,32 +339,32 @@ export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   // The items themselves have an `id` in `saleItems` table?
   // `saleItems.bulkAdd` -> IDs are auto-generated?
   // Dexie `saleItems` table probably has an `id`.
-  
+
   // In `getSalesHistoryFlat` (local):
   // It returns items.
   // `const allItems = await db.saleItems...`
   // The mapped object doesn't explicitly include `id` of the item, but `...i` spreads it.
   // So `row.id` (or similar) should be available.
-  
+
   // However, SalesTable.jsx uses `row.saleId` as the unique identifier for the row in some places?
   // Actually `SalesTable.jsx`:
   // `id: row.saleId-row.code...` for key.
   // `saleGroupId: row.saleGroupId`
   // `guideId: row.guideId`
-  
+
   // If I use `saleId` to identify the row, in Supabase it's the unique ID of the row.
   // In Local, `saleItems` has an `id`.
   // If `row.saleId` corresponds to `saleItems.id`, then I can use it.
-  
+
   // Let's assume `saleId` passed to this function is the ID of the `saleItems` record (local) or `sales` record (Supabase).
   // I will check if `saleItems` has `id`.
-  
+
   // update local item
   // Note: local DB structure might be different from Supabase.
   // Supabase: `sales` table has `id`.
   // Local: `saleItems` table has `id`.
   // If `saleId` is passed, I'll assume it targets the item.
-  
+
   // But wait, `SalesTable.jsx` might be passing `saleId` which is the HEADER id in local mode?
   // In `SalesTable.jsx`:
   // `row.saleId` comes from `sales` table `id` in Supabase (which is the ITEM id? No, Supabase `sales` table is the item table).
@@ -350,14 +377,14 @@ export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   // `...i` spreads item properties. `i.id` is the item ID.
   // But `i.saleId` is the parent ID.
   // If `SalesTable` uses `saleId` as the primary key for updates, it might be ambiguous.
-  
+
   // Let's check `SalesTable.jsx` again.
   // `id: ${row.saleId}-${row.code}...`
   // It seems `row.saleId` is used.
   // In Supabase `sales` table (items), `id` is the PK.
   // In Local `saleItems` table, `id` is the PK.
   // So `saleId` should be the item ID.
-  
+
   // However, in `getSalesHistoryFlat` (local):
   // `const sale = saleMap.get(i.saleId);`
   // `...i` includes `saleId` (parent ID).
@@ -368,11 +395,11 @@ export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   // `return allItems.map((i) => { ... saleId: i.saleId ... })`
   // `i.saleId` is the parent ID.
   // `i.id` is the item ID.
-  
+
   // If `SalesTable` uses `row.saleId` for `updateSalePrice`, it might be targeting the WRONG thing in local mode if it expects Item ID.
   // In Supabase mode, `row.saleId` is the Item ID (since `sales` table is items).
   // In Local mode, `row.saleId` is the Parent ID.
-  
+
   // This is a discrepancy.
   // If I want to update a specific item, I need the Item ID.
   // In `SalesTable.jsx`, `row` has `saleId` (Parent ID in local, Item ID in Supabase?).
@@ -385,43 +412,58 @@ export async function updateSalePrice({ saleId, price, markExchanged } = {}) {
   // `salesApiSupabase.js` `getSalesHistoryFlat` maps `id` to `saleId`?
   // Let's check `getSalesHistoryFlat` in `salesApiSupabase.js`.
   // (I haven't read that part yet, I only read up to `checkoutCart` in `salesApiSupabase.js`).
-  
+
   // I need to read `getSalesHistoryFlat` in `salesApiSupabase.js` to confirm.
   // But assuming I need to pass the Item ID.
   // I will make sure `SalesTable` passes the correct ID.
-  
+
   // For now, I'll implement `updateSalePrice` in `salesApi.js` assuming `saleId` passed is the Item ID (if I can distinguish).
   // Or maybe I should accept `itemId` separately?
   // But `SalesTable` rows might not have `itemId` property normalized.
-  
+
   // Let's assume for Local mode, we might need to find the item by other means or ensure we have the item ID.
   // Actually, looking at `salesApi.js` `getSalesHistoryFlat`:
   // `...i` -> `i` has `id`.
   // So `row.id` (if not overwritten) is Item ID.
   // But `SalesTable` constructs a custom `id` for the grid: `id: row.saleId...`.
-  
+
   // I will just implement `updateSalePrice` in `salesApi.js` to update `saleItems` by `id`.
   // I will call it `updateSaleItemPrice` to be clear, or just `updateSalePrice` and treat the ID as Item ID.
   // NOTE: If `saleId` passed is the parent ID, this will fail.
   // I should probably ensure `SalesTable` passes the Item ID.
-  
+
   // Let's look at `SalesTable` again.
   // `row` object comes from `useSalesHistoryFiltered`.
-  
+
   // If I look at `salesApiSupabase.js`, I'll check how it returns data.
-  
+
   // I'll proceed with adding the function to `salesApi.js` assuming `saleId` is the primary key of the item record.
-  
+
   const item = await db.saleItems.get(sid);
   if (!item) throw new Error('ITEM_NOT_FOUND');
-  
-  await db.saleItems.update(sid, {
-    unitPricePhp: p,
-    discountUnitPricePhp: undefined, // Remove discount to apply new price
-    ...(markExchanged === true || p !== 0 ? { freeGift: false } : {}),
-    ...(markExchanged === true ? { isExchanged: true } : {}),
-  });
-  
+
+  const originalUnit = Number(item.unitPricePhp ?? 0) || 0;
+  const unitToKeep = originalUnit > 0 ? originalUnit : p > 0 ? p : 0;
+
+  const patch = {
+    unitPricePhp: unitToKeep,
+    discountUnitPricePhp: p !== unitToKeep ? p : undefined,
+  };
+
+  if (markExchanged === true) {
+    // ⚠️ isExchanged 는 단순 표시용 플래그.
+    //    교환 = 환불(refund 처리로 재고 +qty 복구) + 새 상품은 별도 INSERT 로 재고 -qty 차감
+    //    여기서 재고 +1 절대 하지 않음 → 중복 방지!
+    patch.isExchanged = true;
+    patch.freeGift = false;
+  } else if (p === 0) {
+    patch.freeGift = true;
+  } else {
+    patch.freeGift = false;
+  }
+
+  await db.saleItems.update(sid, patch);
+
   return { ok: true };
 }
 
@@ -438,7 +480,8 @@ export async function getSaleItemsBySaleId(saleId) {
   return items.map((i) => {
     const product = productMap.get(i.code);
     const inv = inventoryMap.get(`${i.code}|${i.size ?? ''}`);
-    const color = String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
+    const color =
+      String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
 
     return {
       ...i,
@@ -471,7 +514,8 @@ export async function getSalesHistoryFlat() {
     const product = productMap.get(i.code);
     const inv = inventoryMap.get(`${i.code}|${i.size ?? ''}`);
     const sale = saleMap.get(i.saleId);
-    const color = String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
+    const color =
+      String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
 
     return {
       saleId: i.saleId,
@@ -546,7 +590,8 @@ export async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', 
     const product = productMap.get(i.code);
     const inv = inventoryMap.get(`${i.code}|${i.size ?? ''}`);
     const sale = saleMap.get(i.saleId);
-    const color = String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
+    const color =
+      String(i.color || '').trim() || findLabel('color', String(i.code || '').split('-')[3] || '');
 
     const nameKo =
       (product?.nameKo && String(product.nameKo).trim()) || deriveNameFromCode(i.code) || i.code;
@@ -633,11 +678,15 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
   }));
 }
 
-export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onSummary, mode = 'full' } = {}) {
+export async function getAnalytics({
+  fromDate = '',
+  toDate = '',
+  onProgress,
+  onSummary,
+  mode = 'full',
+} = {}) {
   const report =
-    typeof onProgress === 'function'
-      ? (pct, label) => onProgress({ pct, label })
-      : () => {};
+    typeof onProgress === 'function' ? (pct, label) => onProgress({ pct, label }) : () => {};
   report(10, '판매 데이터 조회 중…');
   const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' });
   const soldAts = (rows || []).map((r) => String(r?.soldAt || '').trim()).filter(Boolean);
@@ -850,7 +899,12 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
       String(r.color || '').trim() || findLabel('color', String(r.code || '').split('-')[3] || '');
     if (!colorLabel) continue;
     const typeMap = colorByTypeAgg.get(typeLabel) || new Map();
-    const prev = typeMap.get(colorLabel) || { type: typeLabel, color: colorLabel, qty: 0, revenue: 0 };
+    const prev = typeMap.get(colorLabel) || {
+      type: typeLabel,
+      color: colorLabel,
+      qty: 0,
+      revenue: 0,
+    };
     prev.qty += Number(r.qty || 0) || 0;
     prev.revenue += Number(r.lineTotalPhp || 0) || 0;
     typeMap.set(colorLabel, prev);
@@ -865,7 +919,11 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
   colorByType.sort((a, b) => b.revenue - a.revenue);
 
   // Pivot (Qty) for Color x Type
-  const typeAllow = new Set(['top','bottom','bag','hat','golfbag','golfBag','pouch','belt'].map((s) => s.toLowerCase()));
+  const typeAllow = new Set(
+    ['top', 'bottom', 'bag', 'hat', 'golfbag', 'golfBag', 'pouch', 'belt'].map((s) =>
+      s.toLowerCase()
+    )
+  );
   const pivotTypes = [...new Set(colorByType.map((v) => v.type))].filter((t) =>
     typeAllow.has(String(t || '').toLowerCase())
   );
@@ -874,7 +932,7 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     const row = { color: c };
     for (const t of pivotTypes) {
       const hit = colorByType.find((v) => v.type === t && v.color === c);
-      row[t] = hit ? (Number(hit.qty || 0) || 0) : 0;
+      row[t] = hit ? Number(hit.qty || 0) || 0 : 0;
     }
     return row;
   });
@@ -894,22 +952,32 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
       .filter((x) => x.qty > 0 || x.revenue > 0);
   }
 
-  const revenueRows = rows.filter((r) => !r.freeGift && (Number(r.lineTotalPhp || 0) > 0));
-  const byCategory = accumulate(revenueRows, (r) => String(r.code || '').split('-')[0]?.[0] || '', (k) =>
-    findLabel('category', k)
+  const revenueRows = rows.filter((r) => !r.freeGift && Number(r.lineTotalPhp || 0) > 0);
+  const byCategory = accumulate(
+    revenueRows,
+    (r) => String(r.code || '').split('-')[0]?.[0] || '',
+    (k) => findLabel('category', k)
   );
-  const byBrand = accumulate(revenueRows, (r) => String(r.code || '').split('-')[2] || '', (k) =>
-    findLabel('brand', k)
+  const byBrand = accumulate(
+    revenueRows,
+    (r) => String(r.code || '').split('-')[2] || '',
+    (k) => findLabel('brand', k)
   );
-  const byType = accumulate(revenueRows, (r) => String(r.code || '').split('-')[1] || '', (k) =>
-    findLabel('type', k)
+  const byType = accumulate(
+    revenueRows,
+    (r) => String(r.code || '').split('-')[1] || '',
+    (k) => findLabel('type', k)
   );
   const byColor = accumulate(
     rows,
     (r) => String(r.color || '').trim() || String(r.code || '').split('-')[3] || '',
     (k) => (String(k || '').trim().length > 2 ? k : findLabel('color', k))
   );
-  const bySize = accumulate(revenueRows, (r) => r.sizeDisplay || r.size || '', (k) => k);
+  const bySize = accumulate(
+    revenueRows,
+    (r) => r.sizeDisplay || r.size || '',
+    (k) => k
+  );
   const byGender = accumulate(
     revenueRows,
     (r) => String(r.code || '').split('-')[0]?.[1] || '',
@@ -946,9 +1014,11 @@ export async function getAnalytics({ fromDate = '', toDate = '', onProgress, onS
     .map(([key, amount]) => ({ key, amount }))
     .sort((a, b) => (a.key < b.key ? -1 : 1));
 
-  const weekdayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const byWeekdayQtyMap = new Map(weekdayNames.map((n, i) => [i, { key: n, qty: 0 }]));
-  const byHourQtyMap = new Map(Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }]));
+  const byHourQtyMap = new Map(
+    Array.from({ length: 12 }, (_, k) => [k + 6, { hour: k + 6, qty: 0 }])
+  );
   for (const r of rows) {
     if (!r.soldAt) continue;
     const dt = new Date(r.soldAt);

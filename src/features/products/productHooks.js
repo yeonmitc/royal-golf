@@ -6,6 +6,7 @@ import {
   getProductInventoryList,
   getProductWithInventory,
   isProductCodeExists,
+  renameProductCode,
   searchProducts,
   upsertProduct,
   updateInventoryQuantities,
@@ -226,6 +227,21 @@ export function useUpdateInventoryMutation() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['products', 'withInventory', vars.code] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useRenameProductCodeMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: ['products', 'renameCode'],
+    mutationFn: ({ oldCode, newCode }) => renameProductCode(oldCode, newCode),
+    onSuccess: (_, vars) => {
+      queryClient.removeQueries({ queryKey: ['products', 'detail', vars.oldCode] });
+      queryClient.removeQueries({ queryKey: ['products', 'withInventory', vars.oldCode] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
     },
   });
 }
