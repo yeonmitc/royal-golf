@@ -3,7 +3,7 @@
  * 제품 코드 Prefix별 동적 사이즈 옵션 & UI 표시 라벨 매핑
  *
  * Prefix 규칙:
- *  - GM-TP        : 남성 빅사이즈 X (M ~ 2XL + Free)
+ *  - GM-TP        : 남성 빅사이즈 X (M ~ 4XL + Free)
  *  - LM-TP        : 남성 빅사이즈 O (M ~ 8XL + Free)
  *  - GW-TP / LW-TP : 여성 상의 (S ~ 2XL + Free)
  *  - GM-BT / LM-BT : 남성/여성 하의/바지 (S ~ 4XL + Free)
@@ -18,6 +18,8 @@ const SIZE_MAPS = Object.freeze({
     { key: 'L', label: 'L (100)' },
     { key: 'XL', label: 'XL (105)' },
     { key: '2XL', label: '2XL (110)' },
+    { key: '3XL', label: '3XL (115)' },
+    { key: '4XL', label: '4XL (120)' },
     { key: 'Free', label: 'Free' },
   ],
 
