@@ -28,7 +28,6 @@ export function getGuideSelectOptions(guides = []) {
   const otherGuides = guideList
     .filter((g) => {
       const name = normalizeGuideName(g?.name);
-      // 직원과 로컬 가이드는 일반 가이드 목록에서 제외
       if (g.guide_type === 'employee') return false;
       if (g.guide_type === 'local') return false;
       return name && name !== 'mrmoon' && !name.includes('peter') && !name.includes('ella');
