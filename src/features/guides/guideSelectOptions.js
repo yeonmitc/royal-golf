@@ -24,14 +24,20 @@ export function getGuideSelectOptions(guides = []) {
   const guideList = Array.isArray(guides) ? guides.slice() : [];
   const mrMoonGuide = guideList.find((g) => normalizeGuideName(g?.name) === 'mrmoon') || null;
   const peterGuide = guideList.find((g) => normalizeGuideName(g?.name).includes('peter')) || null;
+  const ellaGuide = guideList.find((g) => normalizeGuideName(g?.name).includes('ella')) || null;
   const otherGuides = guideList
     .filter((g) => {
       const name = normalizeGuideName(g?.name);
-      // 직원은 일반 가이드 목록에서 제외
+      // 직원과 로컬 가이드는 일반 가이드 목록에서 제외
       if (g.guide_type === 'employee') return false;
+      if (g.guide_type === 'local') return false;
       return name && name !== 'mrmoon' && !name.includes('peter') && !name.includes('ella');
     })
-    .sort((a, b) => String(a?.name || '').trim().localeCompare(String(b?.name || '').trim()));
+    .sort((a, b) =>
+      String(a?.name || '')
+        .trim()
+        .localeCompare(String(b?.name || '').trim())
+    );
 
   return [
     { value: '', label: 'No Guide' },
@@ -57,6 +63,13 @@ export function getGuideSelectOptions(guides = []) {
           value: String(peterGuide.id),
           label: 'Sir Peter (20% Cash Discount)',
           style: { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' },
+        }
+      : null,
+    ellaGuide
+      ? {
+          value: String(ellaGuide.id),
+          label: 'Ella',
+          style: { backgroundColor: 'rgba(255,182,193,0.3)', color: 'var(--text-main)' },
         }
       : null,
     ...otherGuides.map((guide) => ({

@@ -78,6 +78,8 @@ export default function SalesTable({
       .toUpperCase();
     if (!normalized) return false;
     if (normalized.startsWith('SU-KR')) return true;
+    if (normalized.startsWith('SU-OT')) return true;
+    if (normalized.startsWith('SA')) return true;
     return normalized.split('-').includes('EA');
   }
 
