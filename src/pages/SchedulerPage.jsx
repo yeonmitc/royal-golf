@@ -731,6 +731,22 @@ export default function SchedulerPage() {
     }
     if (!firstWeekMorning) firstWeekMorning = defaultMorningForWeek(firstWeekMonday);
 
+    const existingRows = await sbSelect('employee_schedules', {
+      select: 'employee_id,work_date',
+      filters: [
+        { column: 'work_date', op: 'gte', value: startKey },
+        { column: 'work_date', op: 'lte', value: endKey },
+      ],
+      limit: 3000,
+    });
+    const existingSet = new Set(
+      (Array.isArray(existingRows) ? existingRows : []).map(
+        (r) => `${String(r.work_date)}__${String(r.employee_id)}`
+      )
+    );
+    const isExisting = (dateKey, empId) =>
+      existingSet.has(`${String(dateKey)}__${String(empId)}`);
+
     const weekMorningByMondayKey = new Map();
 
     const rowsToInsert = [];
@@ -764,23 +780,27 @@ export default function SchedulerPage() {
       }
 
       if (dow === 1) {
-        rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '06:00', manual_hours: 9 });
-        rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '08:00', manual_hours: 9 });
+        if (!isExisting(dateKey, weekMorning.id)) {
+          rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '06:00', manual_hours: 9 });
+        }
+        if (!isExisting(dateKey, weekEvening.id)) {
+          rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '08:00', manual_hours: 9 });
+        }
         continue;
       }
 
-      rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning', manual_start_time: null, manual_hours: null });
-      rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'evening', manual_start_time: null, manual_hours: null });
+      if (!isExisting(dateKey, weekMorning.id)) {
+        rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning', manual_start_time: null, manual_hours: null });
+      }
+      if (!isExisting(dateKey, weekEvening.id)) {
+        rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'evening', manual_start_time: null, manual_hours: null });
+      }
     }
 
-    await sbDelete('employee_schedules', {
-      filters: [
-        { column: 'work_date', op: 'gte', value: startKey },
-        { column: 'work_date', op: 'lte', value: endKey },
-      ],
-    });
-    await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
-    showToast(`Auto 생성 완료 (Month): ${startKey} ~ ${endKey}`);
+    if (rowsToInsert.length > 0) {
+      await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
+    }
+    showToast(`Auto 생성 완료 (빈칸만 채움): ${startKey} ~ ${endKey} (${rowsToInsert.length}건 추가)`);
   };
 
   const upsertSchedule = async ({ dateKey, shiftType, employeeId, manualValues }) => {
