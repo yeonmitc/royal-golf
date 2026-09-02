@@ -3,6 +3,7 @@ import db from '../../db/dexieClient';
 import { sbDelete, sbInsert, sbSelect, sbUpdate, sbRpc } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
+import { getSizeOptionsByCode } from '../../utils/sizeMapper';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
 
@@ -101,9 +102,16 @@ function normalizeSizeKey(size) {
   return 'Free';
 }
 
-function sumInventoriesRow(row) {
+function sumInventoriesRow(row, code) {
   if (!row) return 0;
+  const baseCode = String(code ?? row?.code ?? '').trim();
+  const allowedKeys = baseCode
+    ? new Set(getSizeOptionsByCode(baseCode).map((opt) => String(opt.key || '').toUpperCase()))
+    : null;
   return SIZE_ORDER.reduce((sum, sizeKey) => {
+    if (allowedKeys && !allowedKeys.has(String(sizeKey || '').toUpperCase())) {
+      return sum;
+    }
     const col = SIZE_TO_COLUMN[sizeKey];
     return sum + (Number(row?.[col] ?? 0) || 0);
   }, 0);
@@ -112,17 +120,22 @@ function sumInventoriesRow(row) {
 function inventoriesRowToInventoryList(code, row) {
   const c = String(code ?? row?.code ?? '').trim();
   if (!c) return [];
-  return SIZE_ORDER.map((sizeKey) => {
-    const col = SIZE_TO_COLUMN[sizeKey];
-    return {
-      id: `${c}|${sizeKey}`,
-      code: c,
-      size: sizeKey,
-      stockQty: Number(row?.[col] ?? 0) || 0,
-      sizeDisplay: sizeKey,
-      location: null,
-    };
-  });
+  const allowedKeys = new Set(
+    getSizeOptionsByCode(c).map((opt) => String(opt.key || '').toUpperCase())
+  );
+  return SIZE_ORDER.filter((sizeKey) => allowedKeys.has(String(sizeKey || '').toUpperCase())).map(
+    (sizeKey) => {
+      const col = SIZE_TO_COLUMN[sizeKey];
+      return {
+        id: `${c}|${sizeKey}`,
+        code: c,
+        size: sizeKey,
+        stockQty: Number(row?.[col] ?? 0) || 0,
+        sizeDisplay: sizeKey,
+        location: null,
+      };
+    }
+  );
 }
 
 function normalizeProductRow(r) {
@@ -239,6 +252,28 @@ async function getNextInventoryNo() {
 export async function getProductByCode(code) {
   if (!code) return null;
   const c = String(code).trim();
+
+  const forceOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
+  if (forceOffline) {
+    try {
+      const cached = await db.table('product_cache').get(c);
+      if (cached) {
+        return normalizeProductRow({
+          code: cached.code,
+          name: cached.name,
+          sale_price: cached.sale_price,
+          free_gift: Boolean(cached.free_gift ?? false),
+        });
+      }
+      const legacy = await db.products.get(c);
+      if (legacy) return normalizeProductRow(legacy);
+    } catch {
+      /* fall through; return null at the end if server call also skipped */
+    }
+    if (forceOffline) return null;
+  }
+
   try {
     const rows = await sbSelect('products', {
       select: '*',
@@ -248,7 +283,25 @@ export async function getProductByCode(code) {
     return normalizeProductRow(rows?.[0]);
   } catch (e) {
     if (isNetworkFailure(e)) {
-      return db.products.get(c);
+      try {
+        const cached = await db.table('product_cache').get(c);
+        if (!cached) return null;
+        // Convert minimal cached product to a normalized row.
+        return normalizeProductRow({
+          code: cached.code,
+          name: cached.name,
+          sale_price: cached.sale_price,
+          free_gift: Boolean(cached.free_gift ?? false),
+        });
+      } catch {
+        // Legacy fallback on old Dexie products table (if any).
+        try {
+          const legacy = await db.products.get(c);
+          return normalizeProductRow(legacy);
+        } catch {
+          return null;
+        }
+      }
     }
     throw e;
   }
@@ -260,6 +313,31 @@ export async function getProductByCode(code) {
 export async function getInventoryByCode(code) {
   if (!code) return [];
   const c = String(code).trim();
+
+  const forceOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
+  if (forceOffline) {
+    try {
+      const cached = await db.table('product_cache').get(c);
+      if (cached && cached.sizes_json) {
+        try {
+          const rowObj =
+            typeof cached.sizes_json === 'string'
+              ? JSON.parse(cached.sizes_json)
+              : cached.sizes_json;
+          if (rowObj) return inventoriesRowToInventoryList(c, rowObj);
+        } catch {
+          /* fall through */
+        }
+      }
+      const legacy = await db.inventory.where('code').equals(c).toArray();
+      if (Array.isArray(legacy) && legacy.length) return legacy;
+    } catch {
+      /* fall through */
+    }
+    return [];
+  }
+
   try {
     const rows = await sbSelect('inventories', {
       select: '*',
@@ -270,7 +348,27 @@ export async function getInventoryByCode(code) {
     return inventoriesRowToInventoryList(c, row);
   } catch (e) {
     if (isNetworkFailure(e)) {
-      return db.inventory.where('code').equals(c).toArray();
+      try {
+        // 1. Try new product_cache.sizes_json (which stores the inventories row JSON)
+        const cached = await db.table('product_cache').get(c);
+        if (cached && cached.sizes_json) {
+          try {
+            const rowObj =
+              typeof cached.sizes_json === 'string'
+                ? JSON.parse(cached.sizes_json)
+                : cached.sizes_json;
+            if (rowObj) return inventoriesRowToInventoryList(c, rowObj);
+          } catch {
+            // fall through
+          }
+        }
+        // 2. Legacy fallback on old Dexie inventory table
+        const legacy = await db.inventory.where('code').equals(c).toArray();
+        if (Array.isArray(legacy) && legacy.length) return legacy;
+      } catch {
+        // fall through and return empty
+      }
+      return [];
     }
     throw e;
   }
@@ -342,7 +440,7 @@ export async function getProductInventoryList() {
 
     const baseRows = products.map((p) => {
       const invRow = byCode.get(p.code);
-      const totalStock = invRow ? sumInventoriesRow(invRow) : 0;
+      const totalStock = invRow ? sumInventoriesRow(invRow, p.code) : 0;
       const sizes = invRow ? inventoriesRowToInventoryList(p.code, invRow) : [];
       const err = errorByCode.get(p.code) || null;
       const memo = String(err?.memo || '').trim();
@@ -386,7 +484,7 @@ export async function getProductInventoryList() {
         p3price: 0,
         basePricePhp: 0,
         salePricePhp: 0,
-        totalStock: invRow ? sumInventoriesRow(invRow) : 0,
+        totalStock: invRow ? sumInventoriesRow(invRow, code) : 0,
         freeGift: false,
         archived: false,
         archivedAt: null,
@@ -846,12 +944,32 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
   if (!code) throw new Error('Code is required.');
   const c = String(code).trim();
 
+  const allowedKeys = new Set(
+    getSizeOptionsByCode(c).map((opt) => String(opt.key || '').toUpperCase())
+  );
+
   const changes = {};
   for (const [sizeRaw, qty] of Object.entries(sizeQtyMap || {})) {
     const sizeKey = normalizeSizeKey(sizeRaw);
     const col = SIZE_TO_COLUMN[sizeKey];
     if (!col) continue;
-    changes[col] = Number(qty) || 0;
+    // ✅ 핵심: 해당 제품에서 지원되지 않는 사이즈는 무조건 0으로 강제 클린징
+    //    (고립 재고가 DB에 남는 것을 원천 차단)
+    if (!allowedKeys.has(String(sizeKey || '').toUpperCase())) {
+      changes[col] = 0;
+    } else {
+      changes[col] = Number(qty) || 0;
+    }
+  }
+
+  // ✅ 방어 로직: SIZE_ORDER 전체를 순회하며 지원되지 않는 사이즈 컬럼은
+  //    명시적으로 0으로 SET 해주어 이전에 고립된 데이터도 함께 정리
+  for (const sizeKey of SIZE_ORDER) {
+    const col = SIZE_TO_COLUMN[sizeKey];
+    if (!col || col in changes) continue;
+    if (!allowedKeys.has(String(sizeKey || '').toUpperCase())) {
+      changes[col] = 0;
+    }
   }
 
   const existingRows = await sbSelect('inventories', {
@@ -863,8 +981,6 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
   const hasExisting = Array.isArray(existingRows) && existingRows.length > 0;
 
   if (hasExisting) {
-    // DB trigger `set_inventory_total_qty` will auto-calculate total_qty
-    // DB trigger `sync_products_qty_from_inventories` will auto-update products.qty
     const values = { ...changes };
     const existingNo = Number(existingRow?.no ?? 0) || 0;
     if (!existingNo) {
@@ -878,22 +994,21 @@ export async function updateInventoryQuantities(code, sizeQtyMap) {
     const insertRow = { code: c };
     for (const sizeKey of SIZE_ORDER) {
       const col = SIZE_TO_COLUMN[sizeKey];
-      insertRow[col] = 0;
+      const keyOk = allowedKeys.has(String(sizeKey || '').toUpperCase());
+      insertRow[col] = keyOk ? Number(changes[col] ?? 0) || 0 : 0;
     }
     Object.assign(insertRow, changes);
-    // insertRow.total_qty = sumInventoriesRow(insertRow); // Handled by trigger
     insertRow.no = await getNextInventoryNo();
     await sbInsert('inventories', [insertRow], { returning: 'minimal' });
   }
 
-  // Fetch updated row to return correct total
   const invRows = await sbSelect('inventories', {
     select: '*',
     filters: [{ column: 'code', op: 'eq', value: c }],
     limit: 1,
   });
   const row = invRows?.[0];
-  return { code: c, totalStock: sumInventoriesRow(row) };
+  return { code: c, totalStock: sumInventoriesRow(row, c) };
 }
 
 export async function getNextSerialForPrefix(prefix) {

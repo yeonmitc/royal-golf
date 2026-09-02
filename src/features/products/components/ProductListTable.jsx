@@ -6,6 +6,7 @@ import Modal from '../../../components/common/Modal';
 import { useToast } from '../../../context/ToastContext';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
+import { getSizeOptionsByCode } from '../../../utils/sizeMapper';
 import { useDeleteProductMutation } from '../productHooks';
 
 /**
@@ -67,7 +68,9 @@ export default function ProductListTable({
           const msg = String(e?.message || e);
           if (msg === 'ADMIN_REQUIRED') openLoginModal();
           if (msg === 'DELETE_BLOCKED_BY_SALES_FK') {
-            showToast('삭제 불가: 판매기록(sales)이 참조중입니다. Supabase에서 sales_code_fkey 삭제 SQL 실행하세요.');
+            showToast(
+              '삭제 불가: 판매기록(sales)이 참조중입니다. Supabase에서 sales_code_fkey 삭제 SQL 실행하세요.'
+            );
             return;
           }
           showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Deletion failed: ${msg}`);
@@ -86,7 +89,19 @@ export default function ProductListTable({
   };
 
   const totalCodes = filtered.length;
-  const totalQty = filtered.reduce((sum, p) => sum + (Number(p.totalStock ?? 0) || 0), 0);
+  const totalQty = filtered.reduce((sum, p) => {
+    const row = Array.isArray(p.sizes) ? p.sizes : [];
+    if (row.length === 0) return sum + (Number(p.totalStock ?? 0) || 0);
+    const allowed = new Set(
+      getSizeOptionsByCode(p.code).map((opt) => String(opt.key || '').toUpperCase())
+    );
+    const rowTotal = row.reduce((acc, s) => {
+      const key = String(s.sizeDisplay || s.size || '').toUpperCase();
+      if (!allowed.has(key)) return acc;
+      return acc + (Number(s.stockQty || 0) || 0);
+    }, 0);
+    return sum + rowTotal;
+  }, 0);
   const tableRows = filtered.map((p) => {
     const getLabel = (group, code) => {
       const arr = codePartsSeed[group] || [];
@@ -104,10 +119,33 @@ export default function ProductListTable({
       .join(' - ');
 
     const visibleSizes = Array.isArray(p.sizes)
-      ? p.sizes.filter((s) => Number(s.stockQty || 0) > 0)
+      ? (() => {
+          const allowedKeys = new Set(
+            getSizeOptionsByCode(p.code).map((opt) => String(opt.key || '').toUpperCase())
+          );
+          return p.sizes.filter(
+            (s) =>
+              Number(s.stockQty || 0) > 0 &&
+              allowedKeys.has(String(s.sizeDisplay || s.size || '').toUpperCase())
+          );
+        })()
       : [];
 
-    const isOutOfStock = (p.totalStock || 0) <= 0;
+    // 총재고(totalStock) 역시 유효한 사이즈만 합산하여 렌더링
+    // (무효 사이즈 컬럼에 고립된 수량은 DB에 있을 뿐, 표시하지 않음)
+    const allowedKeysForTotal = new Set(
+      getSizeOptionsByCode(p.code).map((opt) => String(opt.key || '').toUpperCase())
+    );
+    const allValidSizes = Array.isArray(p.sizes) ? p.sizes : [];
+    const safeTotalStock = allValidSizes.reduce((acc, s) => {
+      const key = String(s.sizeDisplay || s.size || '').toUpperCase();
+      if (!allowedKeysForTotal.has(key)) return acc;
+      return acc + (Number(s.stockQty || 0) || 0);
+    }, 0);
+    const displayTotalStock =
+      allValidSizes.length > 0 ? safeTotalStock : Number(p.totalStock ?? 0) || 0;
+
+    const isOutOfStock = displayTotalStock <= 0;
 
     return {
       id: p.code,
@@ -122,7 +160,7 @@ export default function ProductListTable({
         </span>
       ),
       name: p.nameKo && p.nameKo.trim() ? p.nameKo : fallbackName || '-',
-      totalStock: p.totalStock,
+      totalStock: displayTotalStock,
       salePrice: (p.salePricePhp || 0).toLocaleString('en-US'),
       sizes:
         visibleSizes.length > 0
@@ -161,7 +199,10 @@ export default function ProductListTable({
   });
 
   return (
-    <div className="product-table-container" style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}>
+    <div
+      className="product-table-container"
+      style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'auto' }}
+    >
       <DataTable
         columns={[
           {

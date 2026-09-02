@@ -60,10 +60,18 @@ export function useCheckoutCartMutation() {
   return useMutation({
     mutationKey: ['sales', 'checkoutCart'],
     mutationFn: checkoutCart,
+    networkMode: 'always',
+    retry: 0,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['offline', 'sales'] });
+      queryClient.invalidateQueries({ queryKey: ['offline', 'meta'] });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['offline', 'sales'] });
+      queryClient.invalidateQueries({ queryKey: ['offline', 'meta'] });
     },
   });
 }
@@ -96,10 +104,18 @@ export function useInstantSaleMutation() {
   return useMutation({
     mutationKey: ['sales', 'instantSale'],
     mutationFn: instantSale,
+    networkMode: 'always',
+    retry: 0,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['offline', 'sales'] });
+      queryClient.invalidateQueries({ queryKey: ['offline', 'meta'] });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['offline', 'sales'] });
+      queryClient.invalidateQueries({ queryKey: ['offline', 'meta'] });
     },
   });
 }

@@ -192,10 +192,16 @@ export default function SellPage() {
       setReceiptOpen(true);
 
       clearCart();
-      showToast('Sale completed successfully.');
+      if (result && result.isOffline) {
+        showToast(
+          'Sale saved on this device. This sale will be synced when the internet connection is restored.'
+        );
+      } else {
+        showToast('Sale completed successfully.');
+      }
     } catch (e) {
       console.error(e);
-      showToast(e.message || 'Payment failed.');
+      showToast(e.message || 'The sale could not be saved. Please try again.');
     }
   };
 
@@ -561,15 +567,29 @@ export default function SellPage() {
                       PHP
                     </span>
                   </div>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    disabled={isCheckoutPending}
-                    onClick={handleCheckout}
-                  >
-                    {isCheckoutPending ? 'Processing payment...' : 'Payment'}
-                  </Button>
+                  <div style={{ display: 'grid', gap: 8, alignItems: 'end' }}>
+                    {isCheckoutPending && (
+                      <div
+                        className="text-xs"
+                        style={{
+                          color: '#b45309',
+                          textAlign: 'center',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Do not close this page while the sale is being saved.
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={isCheckoutPending}
+                      onClick={handleCheckout}
+                    >
+                      {isCheckoutPending ? 'Processing sale...' : 'Payment'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}

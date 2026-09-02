@@ -6,6 +6,7 @@ import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
 import AdminLoginModal from '../admin/AdminLoginModal';
+import { getProductsSyncStatus } from '../../features/offline/offlineSync';
 import AttendanceModal from '../attendance/AttendanceModal';
 import ChecklistEmployeePickerModal from '../checklist/ChecklistEmployeePickerModal';
 import ChecklistModal from '../checklist/ChecklistModal';
@@ -26,6 +27,29 @@ export default function Header() {
   const [checklistEmployeeNames, setChecklistEmployeeNames] = useState('');
   const [checkStockDone, setCheckStockDone] = useState(false);
   const [stockReminderOpen, setStockReminderOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState({ syncedAt: null, cachedCount: 0, ready: false });
+
+  // Poll sync status every 30s (lightweight read from IndexedDB)
+  useEffect(() => {
+    let active = true;
+    const tick = async () => {
+      try {
+        const s = await getProductsSyncStatus();
+        if (!active) return;
+        const stamp = s?.syncedAt ? Date.parse(String(s.syncedAt)) : 0;
+        const ready = (s?.cachedCount || 0) > 0;
+        setSyncStatus({ syncedAt: s?.syncedAt || null, cachedCount: s?.cachedCount || 0, ready });
+      } catch {
+        /* ignore */
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 30 * 1000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   const getYesterdayKey = useCallback(() => {
     const d = new Date();
@@ -163,13 +187,17 @@ export default function Header() {
     if (!menuOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [menuOpen]);
 
   // ESC 키로 닫기
   useEffect(() => {
     if (!menuOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [menuOpen]);
@@ -389,7 +417,39 @@ export default function Header() {
           </nav>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Product cache ready indicator */}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '3px 8px',
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 600,
+              border: `1px solid ${syncStatus.ready ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
+              background: syncStatus.ready ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)',
+              color: syncStatus.ready ? '#22c55e' : '#ef4444',
+              whiteSpace: 'nowrap',
+            }}
+            title={
+              syncStatus.ready
+                ? `Products ready (${syncStatus.cachedCount} cached)`
+                : 'No product cache - connect to internet'
+            }
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: syncStatus.ready ? '#22c55e' : '#ef4444',
+                flexShrink: 0,
+              }}
+            />
+            {syncStatus.ready ? 'Products Ready' : 'No Cache'}
+          </span>
           <div
             style={{
               width: 32,
@@ -431,178 +491,188 @@ export default function Header() {
           </button>
         </div>
       </div>
-      {menuOpen && createPortal(
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mobile navigation"
-          onClick={() => setMenuOpen(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(0,0,0,0.55)',
-          }}
-        >
-          <motion.aside
-            id="mobile-navigation"
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            onClick={(e) => e.stopPropagation()}
+      {menuOpen &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile navigation"
+            onClick={() => setMenuOpen(false)}
             style={{
-              position: 'relative',
-              width: 'min(88vw, 360px)',
-              height: '100dvh',
-              maxHeight: '100dvh',
-              background: '#05050a',
-              color: '#ffffff',
-              overflowY: 'auto',
-              overflowX: 'hidden',
-              padding: 'max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom))',
-              boxSizing: 'border-box',
-              boxShadow: '12px 0 30px rgba(0,0,0,0.45)',
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              background: 'rgba(0,0,0,0.55)',
             }}
           >
-            <div
+            <motion.aside
+              id="mobile-navigation"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                minHeight: 56,
-                padding: '8px 0',
+                position: 'relative',
+                width: 'min(88vw, 360px)',
+                height: '100dvh',
+                maxHeight: '100dvh',
                 background: '#05050a',
+                color: '#ffffff',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                padding:
+                  'max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom))',
+                boxSizing: 'border-box',
+                boxShadow: '12px 0 30px rgba(0,0,0,0.45)',
               }}
             >
-              <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, fontWeight: 600, letterSpacing: '0.04em' }}>
-                Product List
-              </h2>
-              <button
-                type="button"
-                onClick={() => setMenuOpen(false)}
-                aria-label="Close menu"
+              <div
                 style={{
-                  flex: '0 0 auto',
-                  width: 44,
-                  height: 44,
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  borderRadius: 999,
-                  background: '#18182b',
-                  color: '#ffffff',
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontSize: 30,
-                  lineHeight: 1,
-                  cursor: 'pointer',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  minHeight: 56,
+                  padding: '8px 0',
+                  background: '#05050a',
                 }}
               >
-                ×
-              </button>
-            </div>
-
-            <nav style={{ width: '100%', paddingTop: 12 }}>
-              {visibleNavItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 20,
+                    lineHeight: 1.2,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  Product List
+                </h2>
+                <button
+                  type="button"
                   onClick={() => setMenuOpen(false)}
-                  style={({ isActive }) => ({
+                  aria-label="Close menu"
+                  style={{
+                    flex: '0 0 auto',
+                    width: 44,
+                    height: 44,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    borderRadius: 999,
+                    background: '#18182b',
+                    color: '#ffffff',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontSize: 30,
+                    lineHeight: 1,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <nav style={{ width: '100%', paddingTop: 12 }}>
+                {visibleNavItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMenuOpen(false)}
+                    style={({ isActive }) => ({
+                      display: 'block',
+                      padding: '12px 14px',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      borderRadius: 10,
+                      color: isActive ? 'var(--gold)' : 'var(--text-main)',
+                      background: isActive ? 'rgba(212,175,55,0.10)' : 'transparent',
+                      textDecoration: 'none',
+                      letterSpacing: '0.04em',
+                      transition: 'all 0.15s ease',
+                    })}
+                    end
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+                <div style={{ borderTop: '1px solid var(--border-soft)', margin: '12px 0 4px' }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAttendanceModalOpen(true);
+                  }}
+                  style={{
                     display: 'block',
+                    width: '100%',
                     padding: '12px 14px',
                     fontSize: 16,
                     fontWeight: 600,
                     borderRadius: 10,
-                    color: isActive ? 'var(--gold)' : 'var(--text-main)',
-                    background: isActive ? 'rgba(212,175,55,0.10)' : 'transparent',
-                    textDecoration: 'none',
+                    color: 'var(--text-main)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
                     letterSpacing: '0.04em',
-                    transition: 'all 0.15s ease',
-                  })}
+                  }}
+                >
+                  ⏰ Stamp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setChecklistPickerOpen(true);
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    borderRadius: 10,
+                    color: 'var(--text-main)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  ✅ Checklist
+                </button>
+                <NavLink
+                  to="/check-stock"
+                  onClick={() => {
+                    if (!checkStockDone) armStockCheck({ showUnchecked: true });
+                    setMenuOpen(false);
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: 16,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    color: checkStockDone ? '#22c55e' : '#ef4444',
+                    background: checkStockDone ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)',
+                    textDecoration: 'none',
+                    textAlign: 'left',
+                    letterSpacing: '0.04em',
+                  }}
                   end
                 >
-                  {item.label}
+                  📦 Check Stock
                 </NavLink>
-              ))}
-              <div style={{ borderTop: '1px solid var(--border-soft)', margin: '12px 0 4px' }} />
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setAttendanceModalOpen(true);
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '12px 14px',
-                  fontSize: 16,
-                  fontWeight: 600,
-                  borderRadius: 10,
-                  color: 'var(--text-main)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                ⏰ Stamp
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setChecklistPickerOpen(true);
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '12px 14px',
-                  fontSize: 16,
-                  fontWeight: 600,
-                  borderRadius: 10,
-                  color: 'var(--text-main)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                ✅ Checklist
-              </button>
-              <NavLink
-                to="/check-stock"
-                onClick={() => {
-                  if (!checkStockDone) armStockCheck({ showUnchecked: true });
-                  setMenuOpen(false);
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '12px 14px',
-                  fontSize: 16,
-                  fontWeight: 800,
-                  borderRadius: 10,
-                  color: checkStockDone ? '#22c55e' : '#ef4444',
-                  background: checkStockDone ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)',
-                  textDecoration: 'none',
-                  textAlign: 'left',
-                  letterSpacing: '0.04em',
-                }}
-                end
-              >
-                📦 Check Stock
-              </NavLink>
-            </nav>
-          </motion.aside>
-        </div>,
-        document.body
-      )}
+              </nav>
+            </motion.aside>
+          </div>,
+          document.body
+        )}
       <AdminLoginModal open={loginModalOpen} onClose={closeLoginModal} />
       <AttendanceModal open={attendanceModalOpen} onClose={() => setAttendanceModalOpen(false)} />
       <ChecklistEmployeePickerModal

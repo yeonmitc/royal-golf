@@ -1,119 +1,157 @@
 // src/db/dexieClient.js
 import Dexie from 'dexie';
 
-export const db = new Dexie('royalInventoryDB');
+const DB_NAME = 'royalInventoryDB';
+const GLOBAL_SINGLETON_KEY = '__ROYAL_INVENTORY_DEXIE_SINGLETON__';
 
-/**
- * version(1) - 최종 정규화 스키마
- *
- * 🧱 products
- *  - code: 제품코드 (PK, 예: GM-TP-AC-BK-01)
- *  - nameKo: 제품 한글 이름
- *  - categoryCode / genderCode / typeCode / brandCode / colorCode / modelNo
- *  - priceCny: 위안화 원가
- *  - basePricePhp: 기준 필리핀 금액 (seed-products-expanded.json 기준)
- *  - salePricePhp: 실제 판매가(페소 3배)  ← products.json 의 "페소 3배"에서 계산
- *  - totalStock: 모든 사이즈 재고 합
- *
- * 🧱 inventory
- *  - id: auto PK
- *  - code + size: 유니크 조합 (예: GM-TP-AC-BK-01 / M)
- *  - sizeDisplay: "M(50)" / "L(32)" / "Free" 등 (이미 seed-inventory.json 에 있음)
- *  - stockQty: 해당 사이즈 재고
- *  - location: 남자 상의 / 여자 하의 / 악세사리 등 (있으면 사용)
- *
- * 🧱 codeParts
- *  - group: 'category' | 'gender' | 'type' | 'brand' | 'color'
- *  - code: 실제 코드값 (G, M, TP, AC, BK …)
- *  - labelKo: 화면에 보여줄 이름
- *
- * 🧱 sales / saleItems
- *  - 장바구니 결제/즉시판매 시 기록용
- */
+// Prevent duplicate Dexie instances under Vite HMR or multiple imports.
+// NOTE: we intentionally keep schema registration identical; Dexie will
+// re-use existing open connections.
+function buildDbInstance() {
+  const dexieDb = new Dexie(DB_NAME);
 
-db.version(1).stores({
-  // 제품 마스터: code = PK
-  products: [
-    '&code',
-    'nameKo',
-    'categoryCode',
-    'genderCode',
-    'typeCode',
-    'brandCode',
-    'colorCode',
-    'modelNo',
-    'priceCny',
-    'basePricePhp',
-    'salePricePhp',
-    'totalStock',
-  ].join(','),
+  dexieDb.version(1).stores({
+    products: [
+      '&code',
+      'nameKo',
+      'categoryCode',
+      'genderCode',
+      'typeCode',
+      'brandCode',
+      'colorCode',
+      'modelNo',
+      'priceCny',
+      'basePricePhp',
+      'salePricePhp',
+      'totalStock',
+    ].join(','),
+    inventory: ['++id', 'code', 'size', '[code+size]', 'sizeDisplay', 'stockQty', 'location'].join(
+      ','
+    ),
+    codeParts: ['++id', 'group', 'code', 'labelKo'].join(','),
+    sales: ['++id', 'soldAt', 'totalAmount', 'itemCount'].join(','),
+    saleItems: ['++id', 'saleId', 'code', 'size', 'qty', 'unitPricePhp'].join(','),
+  });
 
-  // 사이즈별 재고
-  inventory: [
-    '++id',
-    'code',
-    'size',
-    '[code+size]', // 바코드/코드+사이즈 검색용
-    'sizeDisplay',
-    'stockQty',
-    'location',
-  ].join(','),
+  dexieDb.version(2).stores({
+    logs: ['++id', 'type', 'time', 'code'].join(','),
+  });
 
-  // 코드표
-  codeParts: ['++id', 'group', 'code', 'labelKo'].join(','),
+  dexieDb.version(3).stores({
+    saleItems: [
+      '++id',
+      'saleId',
+      'code',
+      'size',
+      'qty',
+      'unitPricePhp',
+      'discountUnitPricePhp',
+    ].join(','),
+  });
 
-  // 판매 헤더
-  sales: [
-    '++id',
-    'soldAt', // ISO string
-    'totalAmount', // 총 판매 금액 (PHP)
-    'itemCount', // 판매된 총 수량
-  ].join(','),
+  dexieDb.version(4).stores({
+    refunds: ['++id', 'saleId', 'code', 'size', 'qty', 'amountPhp', 'reason', 'time'].join(','),
+  });
 
-  // 판매 상세 (한 줄 = 장바구니 한 아이템)
-  saleItems: ['++id', 'saleId', 'code', 'size', 'qty', 'unitPricePhp'].join(','),
-});
+  dexieDb.version(5).stores({
+    saleItems: [
+      '++id',
+      'saleId',
+      'code',
+      'size',
+      'qty',
+      'unitPricePhp',
+      'discountUnitPricePhp',
+      'isExchanged',
+    ].join(','),
+  });
 
-// v2: 운영 로그 테이블 추가
-// logs: 각종 이벤트 기록용 (판매/상품 추가/삭제/재고 수정 등)
-// 인덱스: type, time, code
-db.version(2).stores({
-  logs: ['++id', 'type', 'time', 'code'].join(','),
-});
+  dexieDb.version(6).stores({
+    product_cache: [
+      '&code',
+      'name',
+      'sale_price',
+      'free_gift',
+      'brand',
+      'color',
+      'sizes_json',
+      'updated_at',
+    ].join(','),
+    offline_sales: [
+      '&local_id',
+      'sync_status',
+      'offline_group_id',
+      'sold_at',
+      'code',
+      'guide_id',
+      'guide_name_snapshot',
+      'guide_rate_snapshot',
+      'guide_commission_snapshot',
+      'is_mr_moon_snapshot',
+      'is_peter_snapshot',
+      'is_kakao_snapshot',
+      'local_guide_name_snapshot',
+      'sync_error',
+      'created_at',
+    ].join(','),
+    app_meta: ['&key'].join(','),
+  });
 
-// v3: 할인 단가 저장을 위한 필드 추가
-db.version(3).stores({
-  saleItems: ['++id', 'saleId', 'code', 'size', 'qty', 'unitPricePhp', 'discountUnitPricePhp'].join(
-    ','
-  ),
-});
+  // Lifecycle events (CRITICAL: never leave a DB open with a pending upgrade)
+  dexieDb.on('blocked', () => {
+    console.error('[Dexie] Database update is blocked. Please close other tabs and refresh.');
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('royal-inventory-db-blocked', {
+            detail: { message: 'Please close other shop tabs and refresh this page.' },
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+  });
 
-// v4: 환불 테이블 추가
-db.version(4).stores({
-  refunds: [
-    '++id',
-    'saleId',
-    'code',
-    'size',
-    'qty',
-    'amountPhp',
-    'reason',
-    'time',
-  ].join(','),
-});
+  dexieDb.on('versionchange', () => {
+    console.warn('[Dexie] versionchange received — closing local connection and signalling UI.');
+    try {
+      dexieDb.close();
+    } catch {
+      /* ignore */
+    }
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('royal-inventory-db-update-required', {
+            detail: {
+              message:
+                'An app update is ready. Please close other shop tabs and refresh this page.',
+            },
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+  });
 
-// v5: 교환 표시 플래그 저장
-db.version(5).stores({
-  saleItems: [
-    '++id',
-    'saleId',
-    'code',
-    'size',
-    'qty',
-    'unitPricePhp',
-    'discountUnitPricePhp',
-    'isExchanged',
-  ].join(','),
-});
+  dexieDb.on('populate', () => {
+    // v1 populate intentionally left empty; data is seeded via product API.
+  });
+
+  return dexieDb;
+}
+
+function getSingletonDb() {
+  const g =
+    typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : {};
+  if (!g[GLOBAL_SINGLETON_KEY] || !(g[GLOBAL_SINGLETON_KEY] instanceof Dexie)) {
+    g[GLOBAL_SINGLETON_KEY] = buildDbInstance();
+  }
+  return g[GLOBAL_SINGLETON_KEY];
+}
+
+export const db = getSingletonDb();
 
 export default db;

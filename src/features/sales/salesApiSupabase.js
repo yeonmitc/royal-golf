@@ -2,8 +2,9 @@ import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
 import { KAKAO_FRIEND_ID } from '../guides/guideSelectOptions';
+import { addOfflineSales, getAllCachedProducts, isBrowserOnline } from '../offline/offlineDB';
 
-const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
+const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
 const SIZE_TO_COLUMN = {
   S: 's',
   M: 'm',
@@ -11,6 +12,11 @@ const SIZE_TO_COLUMN = {
   XL: 'xl',
   '2XL': '2xl',
   '3XL': '3xl',
+  '4XL': '4xl',
+  '5XL': '5xl',
+  '6XL': '6xl',
+  '7XL': '7xl',
+  '8XL': '8xl',
   Free: 'free',
 };
 
@@ -117,9 +123,9 @@ function normalizeSizeKey(size) {
   if (!s) return 'Free';
   const upper = s.toUpperCase();
   if (upper === 'FREE') return 'Free';
-  if (upper === '2XL' || upper === '3XL') return upper;
-  if (upper === 'XL') return 'XL';
-  if (upper === 'S' || upper === 'M' || upper === 'L') return upper;
+  if (['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'].includes(upper)) {
+    return upper;
+  }
   return 'Free';
 }
 
@@ -472,8 +478,462 @@ export async function checkoutCart(payload) {
   return { saleId, soldAt, totalAmount, itemCount: totalQty };
 }
 
+// ---------------------------------------------------------------------------
+// Offline fallback: convert prepared sale rows (sale_groups + sales rows)
+// into IndexedDB offline_sales flat records (1 row per product line).
+//
+// Critical invariants:
+//   * snapshot values (price, guide_rate, guide_commission, sold_at, qty,
+//     code, size_std, color, etc.) are LOCKED IN exactly as computed at
+//     checkout time. Server sync will NEVER recalculate these.
+//   * every row has a UUID local_id, which will be stored into
+//     sales.offline_sale_id during sync for idempotency.
+// ---------------------------------------------------------------------------
+async function fallbackSaveOfflineCart(params) {
+  const {
+    saleGroupId,
+    soldAt,
+    guideId,
+    localGuideName,
+    isMrMoon,
+    isPeter,
+    isKakaoFriend,
+    saleRows,
+    totalAmount,
+    totalQty,
+  } = params;
+
+  // Resolve guide display name snapshot (used for commission rate freeze)
+  let guideNameSnapshot = '';
+  let guideRateSnapshot = 0;
+  if (isPeter) {
+    guideNameSnapshot = 'Sir Peter';
+    guideRateSnapshot = 0.2;
+  } else if (isMrMoon) {
+    guideNameSnapshot = 'Mr.Moon';
+    guideRateSnapshot = 0.1;
+  } else if (isKakaoFriend) {
+    guideNameSnapshot = 'Kakao Friend';
+    guideRateSnapshot = 0;
+  } else if (localGuideName) {
+    guideNameSnapshot = String(localGuideName || '').trim();
+    guideRateSnapshot = 0;
+  }
+
+  const offlineRows = saleRows.map((row) => {
+    const localId = crypto.randomUUID();
+    const lineSubtotal = Number(row.price ?? 0) * Number(row.qty ?? 0);
+    const isFreeGift = Boolean(row.free_gift ?? false);
+    // Commission per line (if applicable) = lineSubtotal * guideRateSnapshot
+    // (free gifts never contribute)
+    const lineComm =
+      !isFreeGift && guideRateSnapshot > 0 ? Math.round(lineSubtotal * guideRateSnapshot) : 0;
+
+    return {
+      local_id: localId,
+      offline_group_id: saleGroupId,
+      sync_status: 'PENDING',
+      sold_at: soldAt,
+      code: String(row.code || '').trim(),
+      size_raw: row.size_raw,
+      size_std: row.size_std,
+      color: row.color || null,
+      qty: Number(row.qty || 0) || 0,
+      list_price: Number(row.list_price ?? 0) || 0,
+      price: Number(row.price ?? 0) || 0,
+      free_gift: isFreeGift,
+      guide_id: guideId || null,
+      local_guide_name_snapshot: localGuideName || '',
+      guide_name_snapshot: guideNameSnapshot,
+      guide_rate_snapshot: guideRateSnapshot,
+      guide_commission_snapshot: lineComm,
+      is_mr_moon_snapshot: Boolean(isMrMoon),
+      is_peter_snapshot: Boolean(isPeter),
+      is_kakao_snapshot: Boolean(isKakaoFriend),
+      sync_error: null,
+      created_at: new Date().toISOString(),
+    };
+  });
+
+  console.log('[offline-sale] before addOfflineSales');
+
+  await Promise.race([
+    addOfflineSales(offlineRows),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('addOfflineSales timed out')), 5000)
+    ),
+  ]);
+
+  console.log('[offline-sale] after addOfflineSales, rows:', offlineRows.length);
+
+  const firstLocalId = offlineRows[0]?.local_id || saleGroupId;
+  return {
+    success: true,
+    mode: 'offline',
+    localId: firstLocalId,
+    message: 'Sale saved on this device.',
+    saleId: `offline-${firstLocalId.slice(0, 8)}`,
+    soldAt,
+    totalAmount,
+    itemCount: totalQty,
+    isOffline: true,
+    offlineCount: offlineRows.length,
+  };
+}
+
+/**
+ * Checkout a cart, with automatic offline fallback.
+ *
+ * Online path (default):
+ *   1. Fetch products + inventories from server
+ *   2. Insert sale_groups
+ *   3. Insert sales (item rows)
+ *   4. Finalize group (commission) via RPC
+ *
+ * Offline path (triggered automatically):
+ *   - navigator.onLine is false, OR
+ *   - server call fails with a network-like error (timeout, aborted, offline)
+ * Fallback saves items to IndexedDB offline_sales with price/commission
+ * snapshots frozen at checkout time. The original computed guide names are
+ * preserved (so commission rate never changes on later sync).
+ */
+export async function checkoutCartWithOfflineFallback(payload) {
+  // =============================================================
+  // STEP 1: Inputs normalization + validation (NO network calls)
+  // =============================================================
+  let cartItems = payload;
+  let guideId = null;
+  let localGuideName = '';
+  let isMrMoon = false;
+  let isPeter = false;
+  let isKakaoFriend = false;
+
+  if (!Array.isArray(payload) && payload?.items) {
+    cartItems = payload.items;
+    guideId = payload.guideId;
+    localGuideName = String(payload.localGuideName || '').trim();
+    isMrMoon = payload.isMrMoon;
+    isPeter = Boolean(payload.isPeter);
+    isKakaoFriend = Boolean(payload.isKakaoFriend);
+  }
+
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    throw new Error('Cart is empty.');
+  }
+  const items = cartItems.filter((i) => (i.qty ?? 0) > 0);
+  if (items.length === 0) throw new Error('No items with quantity > 0.');
+
+  const soldAt = nowLocalIsoLikeUtc();
+  const saleGroupId = crypto.randomUUID();
+  const browserOnline = isBrowserOnline();
+
+  // =============================================================
+  // STEP 2: Shared price / snapshot computation (identical for
+  //         both online and offline paths)
+  // =============================================================
+  const productCodes = [...new Set(items.map((i) => i.code))].filter(Boolean);
+  const buildRows = (productMapIn) => {
+    let totalAmount = 0;
+    let totalQty = 0;
+    const rows = [];
+    for (const item of items) {
+      const { code, size, qty } = item;
+      if (!code) throw new Error('Missing product code.');
+      const product = productMapIn.get(code);
+      if (!product) throw new Error(`No product: ${code}`);
+
+      const unitPriceOriginal =
+        Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
+      let calculatedPrice = unitPriceOriginal;
+      if (isPeter && unitPriceOriginal > 1000) {
+        calculatedPrice = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
+      } else if (isMrMoon && unitPriceOriginal > 1000) {
+        calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
+      } else if (isKakaoFriend && unitPriceOriginal > 1000) {
+        calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
+      }
+      const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
+      const isExplicitlyFree = item.unitPricePhp === 0 || Boolean(product.freeGift);
+      const unitPriceCharged = isExplicitlyFree
+        ? 0
+        : isPeter || isMrMoon
+          ? calculatedPrice
+          : isKakaoFriend
+            ? calculatedPrice
+            : Number.isFinite(unitPriceChargedCandidate)
+              ? unitPriceChargedCandidate
+              : unitPriceOriginal;
+      const lineTotal = unitPriceCharged * qty;
+      totalAmount += lineTotal;
+      totalQty += qty;
+
+      const sizeKey = normalizeSizeKey(size ?? item.sizeDisplay);
+      const colorFromItem = String(item.color || '').trim();
+      const colorFromCode = findLabel('color', String(code || '').split('-')[3] || '');
+      const colorLabel = colorFromItem || colorFromCode;
+      const sizeRaw = String(item.sizeDisplay ?? item.size ?? '').trim() || sizeKey;
+
+      rows.push({
+        sold_at: soldAt,
+        code: String(code).trim(),
+        size_raw: sizeRaw,
+        size_std: sizeKey,
+        color: colorLabel,
+        qty: Number(qty || 0) || 0,
+        list_price: unitPriceOriginal,
+        price: unitPriceCharged,
+        free_gift: unitPriceCharged === 0,
+        sale_group_id: saleGroupId,
+      });
+    }
+    return { rows, totalAmount, totalQty };
+  };
+
+  // =============================================================
+  // STEP 3: EARLY RETURN — OFFLINE PATH (zero Supabase calls)
+  // =============================================================
+  if (!browserOnline) {
+    console.log('[offline-sale] step3 offline path entered; browserOnline=false');
+
+    console.log('[offline-sale] before getAllCachedProducts');
+    const allCached =
+      (await Promise.race([
+        getAllCachedProducts(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getAllCachedProducts timed out')), 5000)
+        ),
+      ])) || [];
+    console.log('[offline-sale] after getAllCachedProducts count=', allCached.length);
+
+    const cacheByCode = new Map(allCached.map((r) => [String(r.code || '').trim(), r]));
+    const productMap = new Map();
+    for (const code of productCodes) {
+      const c = String(code || '').trim();
+      const r = cacheByCode.get(c);
+      if (r) {
+        productMap.set(c, {
+          code: c,
+          name: String(r.name || c).trim(),
+          salePrice: Number(r.sale_price ?? 0) || 0,
+          freeGift: Boolean(r.free_gift ?? false),
+        });
+      }
+    }
+    const missing = productCodes.filter((c) => !productMap.has(String(c || '').trim()));
+    if (missing.length) {
+      const msg =
+        `Missing product cache for: ${missing.slice(0, 5).join(', ')}` +
+        (missing.length > 5 ? ` (+${missing.length - 5} more)` : '') +
+        '. Please connect to the internet first.';
+      throw new Error(msg);
+    }
+    console.log('[offline-sale] buildRows start');
+    const { rows: saleRows, totalAmount, totalQty } = buildRows(productMap);
+    console.log(
+      '[offline-sale] buildRows done; rows=',
+      saleRows.length,
+      'totalAmount=',
+      totalAmount
+    );
+    return await fallbackSaveOfflineCart({
+      saleGroupId,
+      soldAt,
+      guideId,
+      localGuideName,
+      isMrMoon,
+      isPeter,
+      isKakaoFriend,
+      saleRows,
+      totalAmount,
+      totalQty,
+    });
+  }
+
+  // =============================================================
+  // STEP 4: ONLINE PATH (Supabase calls only from here downward)
+  // =============================================================
+  // 4a. Optional guide re-normalization (only online; offline uses the
+  //     booleans already passed in)
+  if (guideId) {
+    try {
+      const gids = await sbSelect('guides', {
+        select: 'id,name',
+        filters: [{ column: 'id', op: 'eq', value: guideId }],
+        limit: 1,
+      });
+      const g = Array.isArray(gids) && gids.length ? gids[0] : null;
+      const norm = String(g?.name || '')
+        .toLowerCase()
+        .replace(/[\s.]/g, '');
+      if (norm.includes('mrmoon')) isMrMoon = true;
+      if (norm.includes('peter')) isPeter = true;
+    } catch {
+      // ignore; keep caller's booleans
+    }
+  }
+
+  // 4b. Product map from server
+  const productMap = new Map();
+  {
+    const inList = buildInList(productCodes);
+    try {
+      const products = productCodes.length
+        ? await sbSelect('products', {
+            select: 'code,name,sale_price,free_gift,no,kprice',
+            filters: [{ column: 'code', op: 'in', value: inList }],
+          })
+        : [];
+      for (const p of products || []) {
+        productMap.set(p.code, {
+          code: p.code,
+          name: String(p.name || '').trim(),
+          salePrice: Number(p.sale_price ?? 0) || 0,
+          freeGift: Boolean(p.free_gift ?? false),
+        });
+      }
+    } catch (e) {
+      const msg = String(e?.message || '').toLowerCase();
+      const isNetwork =
+        msg.includes('network') ||
+        msg.includes('fetch') ||
+        msg.includes('timeout') ||
+        msg.includes('aborted') ||
+        msg.includes('offline') ||
+        msg.includes('socket') ||
+        msg.includes('connection') ||
+        msg.includes('failed to fetch') ||
+        msg.includes('load failed');
+      if (!isNetwork) throw e;
+      // Network failure before we even got the product list → treat as offline.
+      // But product map must still be populated via cache.
+      const allCached = (await getAllCachedProducts()) || [];
+      const cacheByCode = new Map(allCached.map((r) => [String(r.code || '').trim(), r]));
+      for (const code of productCodes) {
+        const c = String(code || '').trim();
+        const r = cacheByCode.get(c);
+        if (r) {
+          productMap.set(c, {
+            code: c,
+            name: String(r.name || c).trim(),
+            salePrice: Number(r.sale_price ?? 0) || 0,
+            freeGift: Boolean(r.free_gift ?? false),
+          });
+        }
+      }
+      const missing = productCodes.filter((c) => !productMap.has(String(c || '').trim()));
+      if (missing.length) throw e;
+      const { rows: saleRows, totalAmount, totalQty } = buildRows(productMap);
+      return await fallbackSaveOfflineCart({
+        saleGroupId,
+        soldAt,
+        guideId,
+        localGuideName,
+        isMrMoon,
+        isPeter,
+        isKakaoFriend,
+        saleRows,
+        totalAmount,
+        totalQty,
+      });
+    }
+  }
+
+  const missing = productCodes.filter((c) => !productMap.has(String(c || '').trim()));
+  if (missing.length) {
+    throw new Error(`Unknown product codes: ${missing.join(', ')}`);
+  }
+
+  const { rows: salesToInsert, totalAmount, totalQty } = buildRows(productMap);
+
+  try {
+    const baseRow = {
+      id: saleGroupId,
+      guide_id: guideId || null,
+      guide_rate: 0,
+      sold_at: soldAt,
+      subtotal: 0,
+      total: 0,
+      guide_commission: 0,
+    };
+    const withLocal =
+      !guideId && localGuideName ? { ...baseRow, local_guide_name: localGuideName } : baseRow;
+    try {
+      await sbInsert('sale_groups', [withLocal], { returning: 'minimal' });
+    } catch (e) {
+      const msg = String(e?.message || '').toLowerCase();
+      if (
+        (msg.includes('local_guide_name') || msg.includes('local guide')) &&
+        withLocal !== baseRow
+      ) {
+        await sbInsert('sale_groups', [baseRow], { returning: 'minimal' });
+      } else {
+        throw e;
+      }
+    }
+
+    let inserted;
+    const removed = new Set();
+    let rowsToInsert = salesToInsert;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        inserted = await sbInsert('sales', rowsToInsert, { returning: 'representation' });
+        break;
+      } catch (e) {
+        const msg = String(e?.message || '').toLowerCase();
+        const before = removed.size;
+        if (msg.includes('free_gift')) removed.add('free_gift');
+        if (msg.includes('color')) removed.add('color');
+        if (msg.includes('list_price')) removed.add('list_price');
+        if (removed.size === before) throw e;
+        rowsToInsert = salesToInsert.map((row) => {
+          const next = { ...row };
+          for (const k of removed) delete next[k];
+          return next;
+        });
+      }
+    }
+    if (!inserted) throw new Error('Failed to insert sales rows.');
+    const saleId = inserted?.[0]?.id ?? 0;
+
+    try {
+      await sbRpc('finalize_sale_group', { p_group_id: saleGroupId });
+    } catch (e) {
+      console.error('Failed to finalize sale group:', e);
+    }
+
+    return { saleId, soldAt, totalAmount, itemCount: totalQty };
+  } catch (e) {
+    const msg = String(e?.message || '').toLowerCase();
+    const isNetwork =
+      msg.includes('network') ||
+      msg.includes('fetch') ||
+      msg.includes('timeout') ||
+      msg.includes('aborted') ||
+      msg.includes('offline') ||
+      msg.includes('socket') ||
+      msg.includes('connection') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('load failed');
+
+    if (!isNetwork) throw e;
+
+    return await fallbackSaveOfflineCart({
+      saleGroupId,
+      soldAt,
+      guideId,
+      localGuideName,
+      isMrMoon,
+      isPeter,
+      isKakaoFriend,
+      saleRows: salesToInsert,
+      totalAmount,
+      totalQty,
+    });
+  }
+}
+
 export async function instantSale(payload) {
-  return checkoutCart([payload]);
+  return checkoutCartWithOfflineFallback([payload]);
 }
 
 export async function getSalesList() {

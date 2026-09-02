@@ -24,17 +24,14 @@ async function withOfflineFallback(runSupabase, runLocal) {
 }
 
 export function checkoutCart(cartItems) {
-  return withOfflineFallback(
-    () => supabase.checkoutCart(cartItems),
-    () => local.checkoutCart(cartItems)
-  );
+  // Use a single implementation with integrated offline fallback (IndexedDB queue).
+  // Never route through salesApi.local.checkoutCart (Dexie sales/saleItems tables
+  // which are legacy and not synced to server).
+  return Promise.resolve().then(() => supabase.checkoutCartWithOfflineFallback(cartItems));
 }
 
 export function instantSale(payload) {
-  return withOfflineFallback(
-    () => supabase.instantSale(payload),
-    () => local.instantSale(payload)
-  );
+  return Promise.resolve().then(() => supabase.checkoutCartWithOfflineFallback([payload]));
 }
 
 export function getSalesList() {

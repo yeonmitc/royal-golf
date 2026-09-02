@@ -1,4 +1,3 @@
-// src/main.jsx
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
@@ -33,27 +32,47 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </BrowserRouter>
 );
 
-
-// Offline support (after first load)
-if (import.meta.env.PROD) {
-  if ('serviceWorker' in navigator) {
-    try {
-      const cleanupKey = 'royal_sw_cleanup_v1';
-      if (!localStorage.getItem(cleanupKey)) {
-        navigator.serviceWorker
-          .getRegistrations()
-          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+// Service Worker registration
+// - Production only (import.meta.env.PROD)
+// - Development: unregister any existing SW to avoid stale cache issues
+if ('serviceWorker' in navigator) {
+  if (import.meta.env.PROD) {
+    // PRODUCTION: register the Service Worker
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register(`${import.meta.env.BASE_URL}sw.js`)
+        .then((reg) => {
+          console.info('[SW] registered:', reg.scope);
+        })
+        .catch((err) => {
+          console.warn('[SW] registration failed:', err);
+        });
+    });
+  } else {
+    // DEVELOPMENT: unregister all existing service workers
+    // This prevents stale dev caches from interfering with development.
+    const DEV_SW_CLEANUP_KEY = 'royal_sw_dev_cleanup_v2';
+    if (!sessionStorage.getItem(DEV_SW_CLEANUP_KEY)) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => {
+          if (regs.length === 0) return;
+          console.info(`[SW] dev mode: unregistering ${regs.length} service worker(s)`);
+          return Promise.all(regs.map((r) => r.unregister()));
+        })
+        .catch(() => {});
+      // Also clear all caches in dev
+      if ('caches' in window) {
+        caches
+          .keys()
+          .then((keys) => {
+            if (keys.length === 0) return;
+            console.info(`[SW] dev mode: clearing ${keys.length} cache(s)`);
+            return Promise.all(keys.map((k) => caches.delete(k)));
+          })
           .catch(() => {});
-        if ('caches' in window) {
-          caches
-            .keys()
-            .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-            .catch(() => {});
-        }
-        localStorage.setItem(cleanupKey, '1');
       }
-    } catch {
-      // ignore
+      sessionStorage.setItem(DEV_SW_CLEANUP_KEY, '1');
     }
   }
 }

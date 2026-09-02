@@ -14,7 +14,8 @@ import { getSizeOptionsByCode, formatSizeDisplay } from '../../../utils/sizeMapp
  * - code: 스캔된 제품코드
  */
 export default function ProductScanResult({ code }) {
-  const { data, isLoading, isError, error } = useProductWithInventory(code);
+  const normalizedCode = String(code || '').trim();
+  const { data, isLoading, fetchStatus, isError, error } = useProductWithInventory(normalizedCode);
   const addItem = useCartStore((s) => s.addItem);
   const cartItems = useCartStore((s) => s.items);
 
@@ -50,14 +51,22 @@ export default function ProductScanResult({ code }) {
     return Math.max(0, base - reserved);
   };
 
-  if (!code) {
+  if (!normalizedCode) {
     return (
       <div className="p-3 text-xs text-gray-500">Scan a barcode to see product info here.</div>
     );
   }
 
-  if (isLoading) {
-    return <div className="p-3 text-xs text-gray-500">Fetching {code}…</div>;
+  if (fetchStatus === 'paused' && !data) {
+    return (
+      <div className="p-3 text-xs text-gray-500">
+        Loading product data saved on this device…
+      </div>
+    );
+  }
+
+  if (isLoading && fetchStatus === 'fetching' && !data) {
+    return <div className="p-3 text-xs text-gray-500">Fetching {normalizedCode}…</div>;
   }
 
   if (isError) {
@@ -65,7 +74,11 @@ export default function ProductScanResult({ code }) {
   }
 
   if (!data) {
-    return <div className="p-3 text-xs text-red-600">Product not found for code: {code}</div>;
+    return (
+      <div className="p-3 text-xs text-red-600">
+        Product not found for code: {normalizedCode}
+      </div>
+    );
   }
 
   const findLabel = (group, c) => {

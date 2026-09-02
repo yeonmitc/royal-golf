@@ -21,10 +21,14 @@ import {
  * 단일 상품
  */
 export function useProduct(code, options = {}) {
+  const normalizedCode = String(code || '').trim();
   return useQuery({
-    queryKey: ['products', 'detail', code],
-    queryFn: () => getProductByCode(code),
-    enabled: !!code,
+    queryKey: ['products', 'detail', normalizedCode],
+    queryFn: () => getProductByCode(normalizedCode),
+    enabled: Boolean(normalizedCode),
+    networkMode: 'always',
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
     ...options,
   });
 }
@@ -33,10 +37,14 @@ export function useProduct(code, options = {}) {
  * 단일 상품 + 재고
  */
 export function useProductWithInventory(code, options = {}) {
+  const normalizedCode = String(code || '').trim();
   return useQuery({
-    queryKey: ['products', 'withInventory', code],
-    queryFn: () => getProductWithInventory(code),
-    enabled: !!code,
+    queryKey: ['products', 'withInventory', normalizedCode],
+    queryFn: () => getProductWithInventory(normalizedCode),
+    enabled: Boolean(normalizedCode),
+    networkMode: 'always',
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
     ...options,
   });
 }
