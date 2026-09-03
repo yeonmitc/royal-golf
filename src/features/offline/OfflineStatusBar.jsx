@@ -256,24 +256,28 @@ export default function OfflineStatusBar() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        gap: 10,
-        padding: '6px 16px 2px 16px',
+        gap: 8,
+        padding: '6px 16px 4px 16px',
         borderTop: '1px solid rgba(255,255,255,0.03)',
         fontSize: 12,
         color: 'var(--text-main)',
         background: '#05050a',
         flexWrap: 'wrap',
+        rowGap: 6,
       }}
     >
+      {/* Row 1: Online/Offline + Products cached */}
       <span
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
-          padding: '4px 10px',
+          padding: '3px 10px',
           borderRadius: 999,
           border: `1px solid ${dotColor}55`,
           background: `${dotColor}14`,
+          fontSize: 12,
+          fontWeight: 600,
         }}
         title={online ? 'Online' : 'Offline - sales are saved locally'}
       >
@@ -284,6 +288,7 @@ export default function OfflineStatusBar() {
             borderRadius: 999,
             background: dotColor,
             boxShadow: `0 0 6px ${dotColor}`,
+            flexShrink: 0,
           }}
         />
         {label}
@@ -291,64 +296,66 @@ export default function OfflineStatusBar() {
 
       {cachedCount > 0 ? (
         <span
-          style={{ color: isLongStale ? '#ef4444' : isStale ? '#f59e0b' : 'var(--text-muted)' }}
+          style={{
+            color: isLongStale ? '#ef4444' : isStale ? '#f59e0b' : 'var(--text-muted)',
+            fontSize: 12,
+          }}
         >
           Products cached: {cachedCount}
           {syncedAt ? ` (${formatAgoShort(syncedAt)})` : ''}
           {(isStale || syncStatus === 'failed') && (
-            <span style={{ color: isLongStale ? '#ef4444' : '#f59e0b', marginLeft: 6 }}>
+            <span style={{ color: isLongStale ? '#ef4444' : '#f59e0b', marginLeft: 4 }}>
               {syncStatus === 'failed' ? ' - last sync failed' : ' - needs sync'}
             </span>
           )}
         </span>
       ) : (
-        <span style={{ color: '#ef4444' }}>Product cache: empty</span>
+        <span style={{ color: '#ef4444', fontSize: 12 }}>Product cache: empty</span>
       )}
 
-      <span style={{ color: pendingCount > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
+      {/* Row 2: Unsynced + Buttons */}
+      <span style={{ color: pendingCount > 0 ? '#f59e0b' : 'var(--text-muted)', fontSize: 12 }}>
         Unsynced sales:{' '}
         <strong style={{ color: pendingCount > 0 ? '#f59e0b' : 'inherit' }}>{pendingCount}</strong>
       </span>
 
-      <button
-        type="button"
-        onClick={handleSyncSales}
-        disabled={!online || syncingSales || pendingCount === 0}
-        style={{
-          padding: '4px 12px',
-          borderRadius: 999,
-          border: `1px solid ${
-            !online || syncingSales || pendingCount === 0
-              ? 'var(--border-soft)'
-              : pendingCount > 0
-                ? '#f59e0b'
-                : 'rgba(255,255,255,0.12)'
-          }`,
-          background: pendingCount > 0 ? '#3a2a10' : '#141420',
-          color: !online || syncingSales || pendingCount === 0 ? 'var(--text-muted)' : '#fcd34d',
-          cursor: !online || syncingSales || pendingCount === 0 ? 'not-allowed' : 'pointer',
-          fontSize: 12,
-          fontWeight: 700,
-          whiteSpace: 'nowrap',
-        }}
-        title={
-          pendingCount === 0
-            ? 'All sales are up to date.'
-            : online
-              ? 'Sync pending offline sales to the server.'
-              : 'Connect to internet first.'
-        }
-      >
-        {syncingSales
-          ? 'Syncing sales records...'
-          : pendingCount === 0
-            ? 'All sales are up to date.'
+      {pendingCount === 0 ? (
+        <span
+          style={{
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            fontStyle: 'italic',
+          }}
+        >
+          All sales are up to date.
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSyncSales}
+          disabled={!online || syncingSales}
+          style={{
+            padding: '4px 12px',
+            borderRadius: 999,
+            border: '1px solid #f59e0b',
+            background: '#3a2a10',
+            color: !online || syncingSales ? 'var(--text-muted)' : '#fcd34d',
+            cursor: !online || syncingSales ? 'not-allowed' : 'pointer',
+            fontSize: 12,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+          title="Sync pending offline sales to the server."
+        >
+          {syncingSales
+            ? 'Syncing...'
             : `Sync ${pendingCount} Sale${pendingCount === 1 ? '' : 's'}`}
-      </button>
+        </button>
+      )}
 
       {pendingChecks > 0 && (
         <>
-          <span style={{ color: '#f59e0b' }}>
+          <span style={{ color: '#f59e0b', fontSize: 12 }}>
             Unsynced checks: <strong>{pendingChecks}</strong>
           </span>
           <button
@@ -392,7 +399,7 @@ export default function OfflineStatusBar() {
         }}
         title="Refresh product cache from server"
       >
-        {syncingProducts ? 'Refreshing product data...' : 'Refresh Products'}
+        {syncingProducts ? 'Refreshing...' : 'Refresh Products'}
       </button>
     </div>
   );

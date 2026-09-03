@@ -507,7 +507,7 @@ table td {
 .stock-check-table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 4px;
+  border-spacing: 0 2px;
 }
 
 .stock-check-table th,
@@ -518,18 +518,34 @@ table td {
 
 .stock-check-table th:first-child,
 .stock-check-table td:first-child {
-  width: 45%;
+  width: 42%;
 }
 
 .stock-check-table th:nth-child(2),
 .stock-check-table td:nth-child(2) {
-  width: 35%;
+  width: 38%;
 }
 
 .stock-check-table th:last-child,
 .stock-check-table td:last-child {
   width: 20%;
   white-space: nowrap;
+}
+
+/* Mobile: adjust column widths for compact view */
+@media (max-width: 480px) {
+  .stock-check-table th:first-child,
+  .stock-check-table td:first-child {
+    width: 38%;
+  }
+  .stock-check-table th:nth-child(2),
+  .stock-check-table td:nth-child(2) {
+    width: 38%;
+  }
+  .stock-check-table th:last-child,
+  .stock-check-table td:last-child {
+    width: 24%;
+  }
 }
 
 /* 인풋/버튼 기본 (공통 컴포넌트가 감싸도 base 스타일용) */

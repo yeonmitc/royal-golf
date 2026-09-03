@@ -108,7 +108,7 @@ const StockCodeCell = ({
             : isSold
               ? 'var(--gold-soft)'
               : 'inherit',
-        fontWeight: isError || isHovered ? 'bold' : 'normal',
+        fontWeight: isError ? 'bold' : isHovered ? 600 : 500,
         textDecoration: isError && isHovered ? 'underline' : 'none',
         transition: 'color 0.2s, font-weight 0.2s',
       }}
@@ -981,7 +981,7 @@ export default function CheckStockPage() {
   if (isLoading) return <div className="p-4">Loading stock data...</div>;
 
   return (
-    <div className="flex flex-col gap-4 pb-20">
+    <div className="flex flex-col gap-4 pb-28">
       <div
         className="flex flex-col gap-2 sticky top-0 bg-[var(--bg-main)] z-10 p-2 shadow-sm -mx-2"
         style={{
@@ -997,7 +997,7 @@ export default function CheckStockPage() {
               border: '1px solid var(--gold)',
               borderRadius: '999px',
               overflow: 'hidden',
-              height: 28,
+              height: 34,
               backgroundColor: 'rgba(20, 20, 32, 0.4)',
               width: '100%',
             }}
@@ -1012,7 +1012,7 @@ export default function CheckStockPage() {
                 height: '100%',
                 cursor: 'pointer',
                 color: 'white',
-                fontSize: 12,
+                fontSize: 13,
                 gap: 4,
                 position: 'relative', // Add relative positioning for child absolute
               }}
@@ -1059,9 +1059,9 @@ export default function CheckStockPage() {
                 border: 'none',
                 backgroundColor: '#2563eb', // Blue background
                 color: 'white',
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 'bold',
-                padding: '0 4px',
+                padding: '0 6px',
                 cursor: 'pointer',
                 textTransform: 'uppercase',
                 display: 'flex',
@@ -1087,9 +1087,9 @@ export default function CheckStockPage() {
                     border: 'none',
                     backgroundColor: 'rgba(212,175,55,0.95)',
                     color: '#000',
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: 900,
-                    padding: '0 6px',
+                    padding: '0 8px',
                     cursor: 'pointer',
                     borderLeft: '1px solid var(--gold)',
                     flex: 2,
@@ -1106,9 +1106,9 @@ export default function CheckStockPage() {
                     border: 'none',
                     backgroundColor: '#dc2626',
                     color: 'white',
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: 900,
-                    padding: '0 4px',
+                    padding: '0 6px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -1132,7 +1132,7 @@ export default function CheckStockPage() {
             style={{
               display: 'flex',
               justifyContent: 'space-between',
-              fontSize: 11,
+              fontSize: 12,
               color: 'var(--text-muted)',
             }}
           >
@@ -1145,7 +1145,7 @@ export default function CheckStockPage() {
           <div
             style={{
               marginTop: 6,
-              height: 11,
+              height: 14,
               borderRadius: 999,
               background: 'rgba(255,255,255,0.08)',
               overflow: 'hidden',
@@ -1166,7 +1166,7 @@ export default function CheckStockPage() {
           <Button
             variant={showCheckedOnly ? 'primary' : 'outline'}
             size="compact"
-            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[12px]"
             style={{ marginTop: '6px' }}
             onClick={() => {
               const next = !showCheckedOnly;
@@ -1188,7 +1188,7 @@ export default function CheckStockPage() {
           <Button
             variant={showUncheckedOnly ? 'primary' : 'outline'}
             size="compact"
-            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[12px]"
             style={{ marginTop: '6px' }}
             onClick={() => {
               const next = !showUncheckedOnly;
@@ -1210,7 +1210,7 @@ export default function CheckStockPage() {
           <Button
             variant={showErrorOnly ? 'primary' : 'outline'}
             size="compact"
-            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[12px]"
             style={{ marginTop: '6px' }}
             onClick={() => {
               const next = !showErrorOnly;
@@ -1229,22 +1229,27 @@ export default function CheckStockPage() {
           >
             Err
           </Button>
+          <span className="text-[11px] text-gray-500 ml-1 hidden sm:inline">
+            ✓ = Checked &nbsp; ✕ = Error
+          </span>
         </div>
 
         <div className="flex gap-2 w-full">
           <Button
             variant="success"
             size="compact"
-            className="flex-1 font-medium bg-green-600 border-green-600 text-green-600 hover:bg-green-600/10 text-[11px]"
+            className="flex-1 font-medium bg-green-600 border-green-600 text-green-600 hover:bg-green-600/10 text-[12px]"
             style={{ marginTop: '6px' }}
             onClick={handleDownloadTsv}
           >
             Download
           </Button>
           <Button
-            variant="outline"
+            variant={hasChanges ? 'primary' : 'outline'}
             size="compact"
-            className="flex-1 font-medium border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 text-[11px]"
+            className={`flex-1 font-medium text-[12px] ${
+              hasChanges ? '' : 'border-yellow-400 text-yellow-400 hover:bg-yellow-400/10'
+            }`}
             style={{ marginTop: '6px' }}
             onClick={handleSaveAll}
             disabled={isSaving || !hasChanges}
@@ -1254,7 +1259,7 @@ export default function CheckStockPage() {
           <Button
             variant="danger"
             size="compact"
-            className="flex-1 font-medium border-red-500 text-red-500 hover:bg-red-500/10 text-[11px]"
+            className="flex-1 font-medium border-red-500 text-red-500 hover:bg-red-500/10 text-[12px]"
             style={{ marginTop: '6px' }}
             onClick={handleResetAll}
             disabled={isResetting}
@@ -1262,8 +1267,8 @@ export default function CheckStockPage() {
             {isResetting ? 'Resetting...' : 'Reset All Checks'}
           </Button>
         </div>
-        <hr className="border-t-2 border-[var(--gold)]" />
-        <div className="flex flex-col gap-2 border-b pb-2">
+        <hr className="border-t border-[var(--gold)]/30" />
+        <div className="flex flex-col gap-2 border-b border-[var(--border-soft)] pb-2">
           <div className="flex gap-2 flex-wrap">
             {['G', 'L'].map((line) => (
               <Button
@@ -1271,7 +1276,7 @@ export default function CheckStockPage() {
                 onClick={() => setFilterLine(filterLine === line ? null : line)}
                 variant={filterLine === line ? 'primary' : 'outline'}
                 size="compact"
-                className="text-[11px]"
+                className="text-[12px]"
                 style={{ marginTop: '6px' }}
               >
                 {line === 'G' ? 'Golf' : 'Luxury'}
@@ -1288,14 +1293,14 @@ export default function CheckStockPage() {
                 onClick={() => setFilterGender(filterGender === code ? null : code)}
                 variant={filterGender === code ? 'primary' : 'outline'}
                 size="compact"
-                className="text-[11px]"
+                className="text-[12px]"
                 style={{ marginTop: '6px' }}
               >
                 {label}
               </Button>
             ))}
           </div>
-          <hr className="border-t-2 border-[var(--gold)]" />
+          <hr className="border-t border-[var(--gold)]/30" />
           <div
             className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pt-1"
             style={{ flexWrap: 'nowrap' }}
@@ -1316,7 +1321,7 @@ export default function CheckStockPage() {
                     : 'outline'
                 }
                 size="compact"
-                className="whitespace-nowrap flex-shrink-0 text-[11px]"
+                className="whitespace-nowrap flex-shrink-0 text-[12px]"
                 style={{ marginTop: '6px' }}
               >
                 {getTypeName(t)}
@@ -1324,7 +1329,7 @@ export default function CheckStockPage() {
             ))}
           </div>
 
-          <hr className="border-t-2 border-[var(--gold)]" />
+          <hr className="border-t border-[var(--gold)]/30" />
 
           {selectedType && productBrands.length > 0 && (
             <div
@@ -1343,7 +1348,7 @@ export default function CheckStockPage() {
                   }}
                   variant={filterBrand === b ? 'primary' : 'outline'}
                   size="compact"
-                  className="whitespace-nowrap flex-shrink-0 text-[11px]"
+                  className="whitespace-nowrap flex-shrink-0 text-[12px]"
                   style={{ marginTop: '6px' }}
                 >
                   {getBrandLabel(b)}
@@ -1352,7 +1357,7 @@ export default function CheckStockPage() {
             </div>
           )}
 
-          <hr className="border-t-2 border-[var(--gold)]" />
+          <hr className="border-t border-[var(--gold)]/30" />
         </div>
       </div>
 
@@ -1361,7 +1366,7 @@ export default function CheckStockPage() {
       ) : (
         <div className="stock-check-table-wrapper">
           {/* Total Count Display */}
-          <div className="flex justify-end mb-2 px-2 text-[var(--gold)] text-lg font-extrabold">
+          <div className="flex justify-end mb-2 px-2 text-[var(--gold)] text-[14px] font-bold">
             Total: {finalRows.length.toLocaleString()} codes /{' '}
             {finalRows
               .reduce((sum, item) => sum + (Number(item.totalStock) || 0), 0)
@@ -1370,12 +1375,12 @@ export default function CheckStockPage() {
           </div>
           <table className="stock-check-table text-xs">
             <thead>
-              <tr className="text-[10px] text-gray-400 border-b border-[var(--gold)]">
-                <th className="text-left font-normal border-r border-white/20 pr-2 whitespace-nowrap">
+              <tr className="text-[12px] text-gray-400 border-b border-[var(--gold)]/40">
+                <th className="text-left font-normal border-r border-white/10 pr-2 whitespace-nowrap">
                   Code
                 </th>
                 <th className="text-left font-normal pl-2 w-full">Size</th>
-                <th className="text-right font-normal w-16">Chk / Err</th>
+                <th className="text-right font-normal w-20">Chk / Err</th>
               </tr>
             </thead>
             <tbody>
@@ -1389,8 +1394,12 @@ export default function CheckStockPage() {
                   .join(', ');
 
                 return (
-                  <tr key={item.code} className={isChecked ? 'bg-[rgba(34,197,94,0.10)]' : ''}>
-                    <td className="font-mono text-[11px] pr-2 pl-2 align-top border-l border-r border-white/20 whitespace-nowrap">
+                  <tr
+                    key={item.code}
+                    className={isChecked ? 'bg-[rgba(34,197,94,0.10)]' : ''}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  >
+                    <td className="font-mono text-[13px] font-medium pr-2 pl-2 align-top border-l border-r border-white/10 whitespace-nowrap py-[6px]">
                       <StockCodeCell
                         item={item}
                         isError={isError}
@@ -1400,21 +1409,23 @@ export default function CheckStockPage() {
                         showToast={showToast}
                       />
                     </td>
-                    <td className="text-[11px] text-gray-300 dark:text-gray-400 align-top pl-2">
+                    <td className="text-[12px] text-gray-300 dark:text-gray-400 align-top pl-2 py-[6px]">
                       {availableSizes || 'No Stock'}
                     </td>
-                    <td className="align-top min-w-[80px]">
-                      <div className="flex justify-between gap-2">
+                    <td className="align-top min-w-[90px] py-[6px]">
+                      <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           icon="check"
-                          iconSize={12}
+                          iconSize={14}
                           onClick={() => toggleCheck(item.code, item.check_status)}
                           className="icon-only flex-shrink-0"
+                          aria-label="Mark as checked"
+                          title="Checked"
                           style={{
-                            width: 26,
-                            height: 26,
+                            width: 36,
+                            height: 36,
                             ...(isChecked
                               ? {
                                   background: '#22c55e',
@@ -1429,12 +1440,14 @@ export default function CheckStockPage() {
                           variant={isError ? 'danger' : 'outline'}
                           size="sm"
                           icon="x"
-                          iconSize={12}
+                          iconSize={14}
                           onClick={() => toggleError(item)}
                           className="icon-only flex-shrink-0"
+                          aria-label="Mark as error"
+                          title="Error"
                           style={{
-                            width: 26,
-                            height: 26,
+                            width: 36,
+                            height: 36,
                           }}
                         />
                       </div>
@@ -1601,7 +1614,7 @@ export default function CheckStockPage() {
             </div>
 
             <div className="mt-3">
-              <label className="block text-sm font-medium text-gray-300 mb-1">Error Memo</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Error message</label>
               <textarea
                 ref={textareaRef}
                 className="w-full bg-[#0f0f15] border border-[var(--border-soft)] rounded p-2 text-sm text-white h-24 focus:ring-1 focus:ring-red-500 focus:border-red-500 placeholder-gray-600"
@@ -1622,7 +1635,7 @@ export default function CheckStockPage() {
                   e.stopPropagation();
                 }}
                 onChange={(e) => setErrorOtherReason(e.target.value)}
-                placeholder={errorReason === 'other' ? 'Enter other reason...' : ''}
+                placeholder={errorReason === 'other' ? 'Describe the stock problem' : ''}
               />
             </div>
           </div>
@@ -1678,6 +1691,42 @@ export default function CheckStockPage() {
           {alertMessage}
         </div>
       </Modal>
+
+      {/* Sticky Save Bar - visible when there are pending changes */}
+      {hasChanges && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            padding: '8px 16px',
+            background: 'linear-gradient(to right, #141420, #1a1a2e, #141420)',
+            borderTop: '1px solid var(--gold)',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.6)',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          <span style={{ color: 'var(--gold-soft)' }}>
+            {Object.keys(pendingChanges).length} selected
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSaveAll}
+            disabled={isSaving}
+            style={{ fontSize: 13, fontWeight: 700 }}
+          >
+            {isSaving ? 'Saving...' : 'Save Checks'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
