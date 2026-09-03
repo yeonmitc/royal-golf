@@ -348,7 +348,26 @@ export default function SalesTable({
       soldAt: row.soldAt,
       guideId: row.guideId,
       soldAtDate,
-      soldAtTime,
+      soldAtTime: row._offlinePending ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {soldAtTime}
+          <span
+            style={{
+              fontSize: 10,
+              padding: '1px 5px',
+              borderRadius: 3,
+              backgroundColor: 'rgba(251, 191, 36, 0.25)',
+              color: '#fbbf24',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Waiting to sync
+          </span>
+        </span>
+      ) : (
+        soldAtTime
+      ),
       code: row.code,
       color:
         (row.color || '').trim() === 'Mix' &&
@@ -419,17 +438,15 @@ export default function SalesTable({
         ) : (
           brand
         ),
-      commission: row._offlinePending
-        ? 'Waiting to sync'
-        : isRefunded
-          ? 'refund'
-          : isExchanged
-            ? 'exchanged'
-            : giftChecked
-              ? 'gift'
-              : isElla
-                ? '-'
-                : localGuideLabel || guideName || '-',
+      commission: isRefunded
+        ? 'refund'
+        : isExchanged
+          ? 'exchanged'
+          : giftChecked
+            ? 'gift'
+            : isElla
+              ? '-'
+              : localGuideLabel || guideName || '-',
       unitPricePhp: (
         <div
           style={{
