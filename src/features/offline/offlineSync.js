@@ -9,6 +9,7 @@ import {
   markOfflineSaleFailed,
   removeOfflineSale,
   replaceCachedProducts,
+  replaceTodaySalesCache,
   setMeta,
   isBrowserOnline,
 } from './offlineDB';
@@ -121,51 +122,6 @@ export async function syncProductsIfStale() {
   }
 }
 
-let _bgIntervalId = null;
-const BG_SYNC_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-/**
- * Start a 24-hour background sync interval.
- * Safe to call multiple times; only one interval will be active.
- * Only runs when the browser is online.
- */
-export function startBackgroundProductSync() {
-  if (_bgIntervalId) return; // already running
-  if (typeof window === 'undefined') return;
-
-  // First check after 1 minute (in case app opens and goes idle)
-  setTimeout(async () => {
-    if (!isBrowserOnline()) return;
-    const stale = await (await import('./offlineDB')).shouldSyncProducts();
-    if (stale) {
-      try {
-        await syncProductsToCache();
-      } catch {
-        /* silent */
-      }
-    }
-  }, 60 * 1000);
-
-  _bgIntervalId = setInterval(async () => {
-    if (!isBrowserOnline()) return;
-    try {
-      const stale = await (await import('./offlineDB')).shouldSyncProducts();
-      if (stale) {
-        await syncProductsToCache();
-      }
-    } catch (e) {
-      console.warn('[offlineSync] background sync failed (non-fatal):', e);
-    }
-  }, BG_SYNC_MS);
-}
-
-export function stopBackgroundProductSync() {
-  if (_bgIntervalId) {
-    clearInterval(_bgIntervalId);
-    _bgIntervalId = null;
-  }
-}
-
 export async function getProductsSyncStatus() {
   const syncedAt = await getMeta('products_last_synced_at', null);
   const syncStatus = await getMeta('products_sync_status', 'unknown');
@@ -175,6 +131,174 @@ export async function getProductsSyncStatus() {
     syncStatus,
     cachedCount: cached.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Today's sales cache sync
+// ---------------------------------------------------------------------------
+
+function todayDateKey() {
+  const d = new Date();
+  const yyyy = String(d.getFullYear());
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+let _syncTodaySalesInFlight = null;
+
+/**
+ * Fetch today's sales from server and cache in IndexedDB.
+ * Uses getSalesHistoryFilteredResult with today's date range.
+ * Duplicate-safe: if a sync is already running, returns the same promise.
+ */
+export async function syncTodaySalesToCache({ onInfo } = {}) {
+  if (_syncTodaySalesInFlight) return _syncTodaySalesInFlight;
+
+  _syncTodaySalesInFlight = (async () => {
+    try {
+      const dateKey = todayDateKey();
+      const { getSalesHistoryFilteredResult } = await import('../sales/salesApiSupabase');
+      const result = await getSalesHistoryFilteredResult({
+        fromDate: dateKey,
+        toDate: dateKey,
+      });
+      const rows = result?.rows || [];
+      await replaceTodaySalesCache(rows, dateKey);
+      if (onInfo) onInfo(`Today's sales cached: ${rows.length} records`);
+      return { count: rows.length, dateKey };
+    } catch (e) {
+      console.error('[offlineSync] syncTodaySalesToCache failed:', e);
+      if (onInfo) onInfo("Could not refresh today's sales.");
+      return { count: 0, error: String(e?.message || e) };
+    } finally {
+      _syncTodaySalesInFlight = null;
+    }
+  })();
+
+  return _syncTodaySalesInFlight;
+}
+
+/**
+ * Refresh both products and today's sales.
+ * Called by manual "Refresh Data" button and scheduled auto-refresh.
+ */
+export async function refreshAllData({ onInfo } = {}) {
+  const results = { products: null, todaySales: null };
+
+  // Products
+  try {
+    results.products = await syncProductsToCache({ onInfo, force: true });
+  } catch (e) {
+    results.products = { error: String(e?.message || e) };
+  }
+
+  // Today's sales
+  try {
+    results.todaySales = await syncTodaySalesToCache({ onInfo });
+  } catch (e) {
+    results.todaySales = { error: String(e?.message || e) };
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled auto-refresh (8:00, 12:00, 15:00 local time)
+// ---------------------------------------------------------------------------
+
+const SCHEDULED_HOURS = [8, 12, 15]; // 8am, 12pm, 3pm
+let _scheduleIntervalId = null;
+
+/**
+ * Get the most recent scheduled refresh time (in ms) that should have fired.
+ * Returns 0 if no schedule applies.
+ */
+function getLastScheduledTimeMs() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = now.getMinutes();
+  const todayBase = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  // Find the latest scheduled time that has passed today
+  let lastMs = 0;
+  for (const hour of SCHEDULED_HOURS) {
+    const scheduledMs = todayBase + hour * 60 * 60 * 1000;
+    if (Date.now() >= scheduledMs) {
+      lastMs = scheduledMs;
+    }
+  }
+  return lastMs;
+}
+
+/**
+ * Check if we should run a scheduled refresh.
+ * Returns true if the last scheduled time is newer than our last recorded refresh.
+ */
+async function shouldRunScheduledRefresh() {
+  const lastScheduledMs = getLastScheduledTimeMs();
+  if (!lastScheduledMs) return false; // before first scheduled time today
+
+  const lastRun = await getMeta('last_scheduled_refresh_at', null);
+  const lastRunMs = lastRun ? Date.parse(String(lastRun)) : 0;
+
+  // If we haven't run since the last scheduled time, we should refresh
+  return lastRunMs < lastScheduledMs;
+}
+
+async function runScheduledRefresh() {
+  if (!isBrowserOnline()) return;
+  try {
+    const needed = await shouldRunScheduledRefresh();
+    if (!needed) return;
+    console.info('[offlineSync] Scheduled refresh triggered');
+    await refreshAllData({
+      onInfo: (msg) => console.info('[offlineSync] scheduled:', msg),
+    });
+    await setMeta('last_scheduled_refresh_at', new Date().toISOString());
+  } catch (e) {
+    console.warn('[offlineSync] Scheduled refresh failed (non-fatal):', e);
+  }
+}
+
+/**
+ * Start the scheduled auto-refresh system.
+ * Checks every 60 seconds if a scheduled time has been missed.
+ * On first call, also checks if a past schedule was missed (app opened late).
+ * Safe to call multiple times; only one interval will be active.
+ */
+export function startScheduledRefresh() {
+  if (_scheduleIntervalId) return;
+  if (typeof window === 'undefined') return;
+
+  // First check after 30 seconds (missed schedule recovery)
+  setTimeout(() => runScheduledRefresh(), 30 * 1000);
+
+  // Check every 60 seconds for scheduled times
+  _scheduleIntervalId = setInterval(() => runScheduledRefresh(), 60 * 1000);
+}
+
+export function stopScheduledRefresh() {
+  if (_scheduleIntervalId) {
+    clearInterval(_scheduleIntervalId);
+    _scheduleIntervalId = null;
+  }
+}
+
+// Keep backward-compatible alias
+export const startBackgroundProductSync = startScheduledRefresh;
+export const stopBackgroundProductSync = stopScheduledRefresh;
+
+/**
+ * Notify that a sale was completed (online or offline).
+ * Refreshes today's sales cache in background (non-blocking).
+ * Call this after finalize_sale_group or after saving an offline sale.
+ */
+export function notifySaleCompleted() {
+  // Fire-and-forget: refresh today's sales cache in background
+  syncTodaySalesToCache().catch((e) => {
+    console.warn('[offlineSync] notifySaleCompleted background refresh failed:', e);
+  });
 }
 
 export async function findCachedProduct(code) {
@@ -388,6 +512,15 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
     message = `${failCount} sale could not be synced. Please try again.`;
   }
   if (onInfo && message) onInfo(message);
+
+  // After successful sync, refresh today's sales cache
+  if (successCount > 0) {
+    try {
+      await syncTodaySalesToCache();
+    } catch {
+      /* non-fatal */
+    }
+  }
 
   return {
     ok: failCount === 0,

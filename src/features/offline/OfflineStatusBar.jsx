@@ -6,7 +6,8 @@ import {
   getProductsSyncStatus,
   startBackgroundProductSync,
   syncOfflineSalesToServer,
-  syncProductsToCache,
+  syncTodaySalesToCache,
+  refreshAllData,
   syncStockChecksToServer,
 } from './offlineSync';
 import { isBrowserOnline, countUnsyncedStockChecks } from './offlineDB';
@@ -114,7 +115,7 @@ export default function OfflineStatusBar() {
   }, [showToast, refreshCounts]);
 
   // On first render: auto-sync if cache is empty or stale (>= 24 hours).
-  // Does NOT block rendering. Runs async in background.
+  // Also sync today's sales. Does NOT block rendering. Runs async in background.
   useEffect(() => {
     if (!firstRun.current) return;
     firstRun.current = false;
@@ -127,12 +128,15 @@ export default function OfflineStatusBar() {
         const isStale = !stamp || Date.now() - stamp >= STALE_MS;
         if (isEmptyCache || isStale) {
           setSyncingProducts(true);
-          await syncProductsToCache({
+          await refreshAllData({
             onInfo: (msg) => {
               console.info('[OfflineStatusBar] initial auto-sync:', msg);
             },
           });
           await refreshCounts();
+        } else {
+          // Products are fresh, but still sync today's sales
+          await syncTodaySalesToCache();
         }
       } catch (e) {
         console.warn('[OfflineStatusBar] initial auto-sync skipped:', e);
@@ -150,20 +154,17 @@ export default function OfflineStatusBar() {
     if (syncingProducts) return;
     setSyncingProducts(true);
     try {
-      showToast('Refreshing product data...');
-      await syncProductsToCache({
+      showToast('Refreshing data...');
+      await refreshAllData({
         onInfo: (msg) => {
-          console.info('[OfflineStatusBar] product refresh info:', msg);
+          console.info('[OfflineStatusBar] refresh info:', msg);
         },
-        force: true,
       });
       await refreshCounts();
-      showToast('Product data updated successfully.');
+      showToast('Data updated successfully.');
     } catch (e) {
       console.error(e);
-      showToast(
-        'Product data could not be updated. Previously saved data will continue to be used.'
-      );
+      showToast('Data could not be updated. Previously saved data will continue to be used.');
     } finally {
       setSyncingProducts(false);
     }
@@ -397,9 +398,9 @@ export default function OfflineStatusBar() {
           fontWeight: 600,
           whiteSpace: 'nowrap',
         }}
-        title="Refresh product cache from server"
+        title="Refresh product and sales data from server"
       >
-        {syncingProducts ? 'Refreshing...' : 'Refresh Products'}
+        {syncingProducts ? 'Refreshing...' : 'Refresh Data'}
       </button>
     </div>
   );

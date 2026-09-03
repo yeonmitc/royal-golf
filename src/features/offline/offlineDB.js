@@ -199,6 +199,74 @@ export async function shouldSyncProducts() {
 }
 
 // ---------------------------------------------------------------------------
+// Today's sales cache
+// ---------------------------------------------------------------------------
+
+/**
+ * Replace the entire today_sales cache with fresh rows from server.
+ * Each row: { id, sale_date, sold_at, ... (any extra fields from server) }
+ */
+export async function replaceTodaySalesCache(sales, dateKey) {
+  const clean = (sales || []).filter((r) => r && r.id);
+  try {
+    await db.transaction('rw', db.table('today_sales'), async () => {
+      await db.table('today_sales').clear();
+      if (clean.length) {
+        const rows = clean.map((r) => ({ ...r, sale_date: dateKey }));
+        await db.table('today_sales').bulkPut(rows);
+      }
+    });
+    await setMeta('today_sales_date', dateKey);
+    await setMeta('today_sales_synced_at', new Date().toISOString());
+    return clean.length;
+  } catch (e) {
+    console.error('[offlineDB] replaceTodaySalesCache failed:', e);
+    throw e;
+  }
+}
+
+/**
+ * Get all cached today's sales for a given date key.
+ * Returns [] if the cache is for a different date.
+ */
+export async function getTodaySalesCache(dateKey) {
+  try {
+    const cachedDate = await getMeta('today_sales_date', null);
+    if (cachedDate !== dateKey) return [];
+    return await db.table('today_sales').where('sale_date').equals(dateKey).toArray();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Add a single sale to today's cache (for immediate update after sale completion).
+ * If the cache date doesn't match, this is a no-op.
+ */
+export async function addTodaySaleToCache(sale, dateKey) {
+  if (!sale || !sale.id) return;
+  try {
+    const cachedDate = await getMeta('today_sales_date', null);
+    if (cachedDate !== dateKey) return; // cache is for a different day
+    await db.table('today_sales').put({ ...sale, sale_date: dateKey });
+  } catch (e) {
+    console.warn('[offlineDB] addTodaySaleToCache failed:', e);
+  }
+}
+
+/**
+ * Remove specific sales from today's cache (after sync dedup).
+ */
+export async function removeTodaySalesFromCache(ids) {
+  if (!ids || ids.length === 0) return;
+  try {
+    await db.table('today_sales').bulkDelete(ids);
+  } catch (e) {
+    console.warn('[offlineDB] removeTodaySalesFromCache failed:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Offline stock checks (check_date + code compound key)
 // ---------------------------------------------------------------------------
 

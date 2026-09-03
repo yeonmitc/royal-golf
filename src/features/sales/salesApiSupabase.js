@@ -475,6 +475,9 @@ export async function checkoutCart(payload) {
     // Non-fatal, but admin should check.
   }
 
+  // Notify today's sales cache to refresh (non-blocking)
+  import('../offline/offlineSync').then((m) => m.notifySaleCompleted()).catch(() => {});
+
   return { saleId, soldAt, totalAmount, itemCount: totalQty };
 }
 
@@ -900,6 +903,9 @@ export async function checkoutCartWithOfflineFallback(payload) {
     } catch (e) {
       console.error('Failed to finalize sale group:', e);
     }
+
+    // Notify today's sales cache to refresh (non-blocking)
+    import('../offline/offlineSync').then((m) => m.notifySaleCompleted()).catch(() => {});
 
     return { saleId, soldAt, totalAmount, itemCount: totalQty };
   } catch (e) {
