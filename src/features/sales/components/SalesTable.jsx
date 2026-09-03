@@ -419,15 +419,17 @@ export default function SalesTable({
         ) : (
           brand
         ),
-      commission: isRefunded
-        ? 'refund'
-        : isExchanged
+      commission: row._offlinePending
+        ? 'Waiting to sync'
+        : isRefunded
+          ? 'refund'
+          : isExchanged
             ? 'exchanged'
-          : giftChecked
-            ? 'gift'
-          : isElla
-            ? '-'
-            : localGuideLabel || guideName || '-',
+            : giftChecked
+              ? 'gift'
+              : isElla
+                ? '-'
+                : localGuideLabel || guideName || '-',
       unitPricePhp: (
         <div
           style={{
@@ -624,7 +626,9 @@ export default function SalesTable({
               setGuideTargetSaleId(row.saleId || null);
               setGuideTargetCode(String(row.code || ''));
               setSelectedLocalGuideName(
-                rowLocalGuideName && !isSpecialLocalGuideName(rowLocalGuideName) ? rowLocalGuideName : ''
+                rowLocalGuideName && !isSpecialLocalGuideName(rowLocalGuideName)
+                  ? rowLocalGuideName
+                  : ''
               );
               setSelectedGuide(
                 resolveGuideSelectValue({
@@ -664,23 +668,29 @@ export default function SalesTable({
           />
         </div>
       ),
-      style: isRefunded
-        ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
-        : isExchanged
-          ? { backgroundColor: 'rgba(255, 182, 193, 0.10)', color: 'var(--text-main)' }
-          : giftChecked
-            ? { backgroundColor: 'rgba(239, 68, 68, 0.10)', color: 'var(--text-main)' }
-          : isMrMoon
-            ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
-            : isElla
-              ? { backgroundColor: 'rgba(255, 182, 193, 0.2)', color: 'var(--text-main)' }
-              : isRental
-                ? { backgroundColor: 'rgba(255, 165, 0, 0.2)', color: 'var(--text-main)' }
-                : row.guideId
-                  ? isPeter
-                    ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
-                    : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
-                  : undefined,
+      style: row._offlinePending
+        ? {
+            backgroundColor: 'rgba(251, 191, 36, 0.12)',
+            color: 'var(--text-main)',
+            borderLeft: '3px solid rgba(251, 191, 36, 0.5)',
+          }
+        : isRefunded
+          ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
+          : isExchanged
+            ? { backgroundColor: 'rgba(255, 182, 193, 0.10)', color: 'var(--text-main)' }
+            : giftChecked
+              ? { backgroundColor: 'rgba(239, 68, 68, 0.10)', color: 'var(--text-main)' }
+              : isMrMoon
+                ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
+                : isElla
+                  ? { backgroundColor: 'rgba(255, 182, 193, 0.2)', color: 'var(--text-main)' }
+                  : isRental
+                    ? { backgroundColor: 'rgba(255, 165, 0, 0.2)', color: 'var(--text-main)' }
+                    : row.guideId
+                      ? isPeter
+                        ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
+                        : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
+                      : undefined,
       __copyText: [
         soldAtDate ? `\u200B${soldAtDate}` : '',
         soldAtTime,
@@ -869,12 +879,12 @@ export default function SalesTable({
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
               <div>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>Date</div>
-                  <DateInput
-                    className="input-field date-control-input"
-                    value={timeDate}
-                    readOnly
-                    disabled
-                  />
+                <DateInput
+                  className="input-field date-control-input"
+                  value={timeDate}
+                  readOnly
+                  disabled
+                />
               </div>
               <div>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>Time</div>
@@ -928,7 +938,10 @@ export default function SalesTable({
                   showToast('Admin required.');
                   return;
                 }
-                if (selectedGuide === LOCAL_GUIDE_ID && !String(selectedLocalGuideName || '').trim()) {
+                if (
+                  selectedGuide === LOCAL_GUIDE_ID &&
+                  !String(selectedLocalGuideName || '').trim()
+                ) {
                   setLocalGuideDraft('');
                   setLocalGuideErr('Please enter Local Guide name.');
                   setLocalGuideModalOpen(true);
@@ -1017,7 +1030,9 @@ export default function SalesTable({
                 disabled={!guideTargetSaleId}
                 style={{ width: 16, height: 16, accentColor: 'var(--gold-soft)', margin: 0 }}
               />
-              <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              <span
+                style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap' }}
+              >
                 Only this item
               </span>
             </span>
