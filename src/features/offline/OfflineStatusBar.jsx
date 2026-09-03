@@ -7,8 +7,9 @@ import {
   startBackgroundProductSync,
   syncOfflineSalesToServer,
   syncProductsToCache,
+  syncStockChecksToServer,
 } from './offlineSync';
-import { isBrowserOnline } from './offlineDB';
+import { isBrowserOnline, countUnsyncedStockChecks } from './offlineDB';
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -31,18 +32,25 @@ export default function OfflineStatusBar() {
   const { showToast } = useToast();
   const [online, setOnline] = useState(() => isBrowserOnline());
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingChecks, setPendingChecks] = useState(0);
   const [syncedAt, setSyncedAt] = useState(null);
   const [syncStatus, setSyncStatus] = useState('unknown');
   const [cachedCount, setCachedCount] = useState(0);
   const [syncingProducts, setSyncingProducts] = useState(false);
   const [syncingSales, setSyncingSales] = useState(false);
+  const [syncingChecks, setSyncingChecks] = useState(false);
   const firstRun = useRef(true);
   const bgStarted = useRef(false);
 
   const refreshCounts = useCallback(async () => {
     try {
-      const [n, status] = await Promise.all([countPendingOfflineSales(), getProductsSyncStatus()]);
+      const [n, checks, status] = await Promise.all([
+        countPendingOfflineSales(),
+        countUnsyncedStockChecks(),
+        getProductsSyncStatus(),
+      ]);
       setPendingCount(Number(n || 0));
+      setPendingChecks(Number(checks || 0));
       setSyncedAt(status.syncedAt);
       setSyncStatus(status.syncStatus || 'unknown');
       setCachedCount(status.cachedCount || 0);
@@ -193,6 +201,33 @@ export default function OfflineStatusBar() {
     }
   };
 
+  const handleSyncChecks = async () => {
+    if (!online) {
+      showToast('You are offline. Connect to the internet first to sync.');
+      return;
+    }
+    if (pendingChecks <= 0) {
+      showToast('No unsynced stock checks found.');
+      return;
+    }
+    if (syncingChecks) return;
+    setSyncingChecks(true);
+    try {
+      const result = await syncStockChecksToServer({
+        onInfo: (msg) => {
+          console.info('[OfflineStatusBar] syncChecks info:', msg);
+        },
+      });
+      showToast(result?.message || 'Stock checks synced successfully.');
+    } catch (e) {
+      console.error(e);
+      showToast(`Sync failed: ${e?.message || String(e).slice(0, 80)}`);
+    } finally {
+      await refreshCounts();
+      setSyncingChecks(false);
+    }
+  };
+
   // Warnings
   const isStale = (() => {
     if (!syncedAt) return true;
@@ -310,6 +345,35 @@ export default function OfflineStatusBar() {
             ? 'All sales are up to date.'
             : `Sync ${pendingCount} Sale${pendingCount === 1 ? '' : 's'}`}
       </button>
+
+      {pendingChecks > 0 && (
+        <>
+          <span style={{ color: '#f59e0b' }}>
+            Unsynced checks: <strong>{pendingChecks}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={handleSyncChecks}
+            disabled={!online || syncingChecks}
+            style={{
+              padding: '4px 12px',
+              borderRadius: 999,
+              border: '1px solid #f59e0b',
+              background: '#3a2a10',
+              color: !online || syncingChecks ? 'var(--text-muted)' : '#fcd34d',
+              cursor: !online || syncingChecks ? 'not-allowed' : 'pointer',
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            }}
+            title="Sync offline stock checks to server"
+          >
+            {syncingChecks
+              ? 'Syncing...'
+              : `Sync ${pendingChecks} Check${pendingChecks === 1 ? '' : 's'}`}
+          </button>
+        </>
+      )}
 
       <button
         type="button"

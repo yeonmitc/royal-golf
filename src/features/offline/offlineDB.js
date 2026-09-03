@@ -197,3 +197,114 @@ export async function shouldSyncProducts() {
   if (!Number.isFinite(t)) return true;
   return Date.now() - t >= PRODUCTS_SYNC_INTERVAL_MS;
 }
+
+// ---------------------------------------------------------------------------
+// Offline stock checks (check_date + code compound key)
+// ---------------------------------------------------------------------------
+
+/**
+ * Save a batch of stock check results to IndexedDB.
+ * Each record: { check_date, code, check_status, has_error, memo, checked_at, sync_status }
+ * Same (check_date + code) = latest record replaces previous.
+ */
+export async function saveOfflineStockChecks(checkDate, changes, memos = {}) {
+  if (!changes || Object.keys(changes).length === 0) return 0;
+  const now = new Date().toISOString();
+  const rows = Object.entries(changes)
+    .filter(([, status]) => status === 'checked' || status === 'error')
+    .map(([code, status]) => ({
+      check_date: checkDate,
+      code: String(code).trim(),
+      check_status: status,
+      has_error: status === 'error',
+      memo: status === 'error' ? String(memos[code] || '').trim() : '',
+      checked_at: now,
+      sync_status: 'PENDING',
+    }));
+  if (rows.length === 0) return 0;
+  try {
+    await db.table('stock_checks').bulkPut(rows);
+    return rows.length;
+  } catch (e) {
+    console.error('[offlineDB] saveOfflineStockChecks failed:', e);
+    throw e;
+  }
+}
+
+/**
+ * Get all offline stock checks for a given date.
+ */
+export async function getOfflineStockChecksByDate(checkDate) {
+  try {
+    return await db.table('stock_checks').where('check_date').equals(checkDate).toArray();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get offline stock checks as a map { code: record } for a given date.
+ * IDB records take priority over DB values.
+ */
+export async function getOfflineStockChecksMap(checkDate) {
+  const rows = await getOfflineStockChecksByDate(checkDate);
+  const map = {};
+  for (const r of rows) {
+    map[r.code] = r;
+  }
+  return map;
+}
+
+/**
+ * Count unsynced stock checks (PENDING or FAILED).
+ */
+export async function countUnsyncedStockChecks() {
+  try {
+    return await db
+      .table('stock_checks')
+      .where('sync_status')
+      .anyOf(['PENDING', 'FAILED'])
+      .count();
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Get all unsynced stock checks.
+ */
+export async function getUnsyncedStockChecks() {
+  try {
+    return await db
+      .table('stock_checks')
+      .where('sync_status')
+      .anyOf(['PENDING', 'FAILED'])
+      .toArray();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Mark a stock check as synced (remove from IDB).
+ */
+export async function removeStockCheck(checkDate, code) {
+  try {
+    await db.table('stock_checks').delete([checkDate, code]);
+  } catch (e) {
+    console.warn('[offlineDB] removeStockCheck failed:', e);
+  }
+}
+
+/**
+ * Bulk remove stock checks after successful sync.
+ */
+export async function removeStockChecks(records) {
+  if (!records || records.length === 0) return;
+  try {
+    const keys = records.map((r) => [r.check_date, r.code]);
+    await db.table('stock_checks').bulkDelete(keys);
+  } catch (e) {
+    console.warn('[offlineDB] removeStockChecks failed:', e);
+  }
+}

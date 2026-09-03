@@ -12,6 +12,11 @@ import {
   useUpsertErroStockMutation,
 } from '../features/products/productHooks';
 import { getSalesHistoryFilteredResult } from '../features/sales/salesApiClient';
+import {
+  saveOfflineStockChecks,
+  getOfflineStockChecksMap,
+  isBrowserOnline,
+} from '../features/offline/offlineDB';
 
 const BRAND_LABEL_MAP = new Map((codePartsSeed.brand || []).map((b) => [b.code, b.label]));
 
@@ -66,7 +71,7 @@ function parseMemo(memo) {
         ? 'size_error'
         : mNorm.startsWith('[no data]') || mNorm.startsWith('no data')
           ? 'no_data'
-        : 'other';
+          : 'other';
 
   const counts = {};
   const re = /\b(2XL|3XL|XL|Free|S|M|L)\((\d+)\)/gi;
@@ -79,7 +84,14 @@ function parseMemo(memo) {
   return { reason, otherText: reason === 'other' ? m : '', countsFromMemo: counts };
 }
 
-const StockCodeCell = ({ item, isError, isSold, setEditingError, setErrorModalOpen, showToast }) => {
+const StockCodeCell = ({
+  item,
+  isError,
+  isSold,
+  setEditingError,
+  setErrorModalOpen,
+  showToast,
+}) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -89,7 +101,13 @@ const StockCodeCell = ({ item, isError, isSold, setEditingError, setErrorModalOp
       style={{
         cursor: 'pointer',
         display: 'inline-block',
-        color: isError ? '#f87171' : isHovered ? '#22c55e' : isSold ? 'var(--gold-soft)' : 'inherit',
+        color: isError
+          ? '#f87171'
+          : isHovered
+            ? '#22c55e'
+            : isSold
+              ? 'var(--gold-soft)'
+              : 'inherit',
         fontWeight: isError || isHovered ? 'bold' : 'normal',
         textDecoration: isError && isHovered ? 'underline' : 'none',
         transition: 'color 0.2s, font-weight 0.2s',
@@ -98,7 +116,11 @@ const StockCodeCell = ({ item, isError, isSold, setEditingError, setErrorModalOp
       onClick={async (e) => {
         e.stopPropagation(); // Prevent row click if any
         if (isError) {
-          setEditingError({ code: item.code, memo: item.error_memo || '', sizes: item.sizes || [] });
+          setEditingError({
+            code: item.code,
+            memo: item.error_memo || '',
+            sizes: item.sizes || [],
+          });
           setErrorModalOpen(true);
         } else {
           try {
@@ -117,16 +139,19 @@ const StockCodeCell = ({ item, isError, isSold, setEditingError, setErrorModalOp
 
 export default function CheckStockPage() {
   const { showToast } = useToast();
-  const { data: allProducts = [], isLoading } = useProductInventoryList();
+  const { data: allProductsRaw = [], isLoading } = useProductInventoryList();
   const { mutate: batchUpdateStatus, isPending: isSaving } =
     useBatchUpdateInventoryStatusMutation();
   const { mutate: resetAllStatus, isPending: isResetting } = useResetAllInventoryStatusMutation();
   const { mutate: upsertErroStock, isPending: isUpsertingError } = useUpsertErroStockMutation();
   const { mutate: deleteErroStock, isPending: isDeletingError } = useDeleteErroStockMutation();
+
   // const { mutate: updateStatus } = useUpdateInventoryStatusMutation();
 
   // Local state for pending changes: { [code]: 'checked' | 'error' | 'unchecked' }
   const [pendingChanges, setPendingChanges] = useState({});
+  // Local state for pending error memos: { [code]: 'memo text' }
+  const [pendingMemos, setPendingMemos] = useState({});
   const dateInputRef = useRef(null);
 
   const [alertOpen, setAlertOpen] = useState(false);
@@ -167,17 +192,51 @@ export default function CheckStockPage() {
     requestConfirm({
       title: 'Save Changes',
       message: `Save ${n} changes?`,
-      onConfirm: () => {
-        batchUpdateStatus(pendingChanges, {
-          onSuccess: () => {
+      onConfirm: async () => {
+        if (isBrowserOnline()) {
+          // Online: use existing DB save flow
+          batchUpdateStatus(pendingChanges, {
+            onSuccess: async () => {
+              // Also save error memos if there are error items
+              const errorEntries = Object.entries(pendingChanges).filter(([, s]) => s === 'error');
+              for (const [code] of errorEntries) {
+                const memo = pendingMemos[code];
+                if (memo !== undefined) {
+                  try {
+                    await upsertErroStock({ code, memo });
+                  } catch (e) {
+                    console.warn('Error memo save failed for', code, e);
+                  }
+                }
+              }
+              setPendingChanges({});
+              setPendingMemos({});
+              showAlert({ title: 'Saved', message: 'Changes saved successfully.' });
+            },
+            onError: (err) => {
+              console.error(err);
+              showAlert({
+                title: 'Save Failed',
+                message: String(err?.message || 'Failed to save.'),
+              });
+            },
+          });
+        } else {
+          // Offline: save to IndexedDB
+          try {
+            const checkDate = soldDate || toLocalDateKey(new Date());
+            const count = await saveOfflineStockChecks(checkDate, pendingChanges, pendingMemos);
+            // Refresh IDB map so merged view updates immediately
+            const freshMap = await getOfflineStockChecksMap(checkDate);
+            setIdbCheckMap(freshMap);
             setPendingChanges({});
-            showAlert({ title: 'Saved', message: 'Changes saved successfully.' });
-          },
-          onError: (err) => {
-            console.error(err);
-            showAlert({ title: 'Save Failed', message: String(err?.message || 'Failed to save.') });
-          },
-        });
+            setPendingMemos({});
+            showToast('Stock checks saved offline.');
+          } catch (e) {
+            console.error(e);
+            showAlert({ title: 'Save Failed', message: 'Could not save stock checks offline.' });
+          }
+        }
       },
     });
   };
@@ -222,86 +281,115 @@ export default function CheckStockPage() {
   const [isLoadingSold, setIsLoadingSold] = useState(false);
   const SOLD_STATE_KEY = 'checkstock_sold_state_v1';
 
-  const runSoldCheck = useCallback(async (dateStr, { showOnly = false, resetChecked = false } = {}) => {
-    const dateKey = String(dateStr || soldDate || '').trim();
-    if (!dateKey) return;
-    setIsLoadingSold(true);
-    try {
-      // Fetch sales for that date (fromDate = toDate = soldDate)
-      const result = await getSalesHistoryFilteredResult({
-        fromDate: dateKey,
-        toDate: dateKey,
-      });
+  // Merge offline stock checks from IDB into allProducts
+  const [idbCheckMap, setIdbCheckMap] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    const checkDate = soldDate || toLocalDateKey(new Date());
+    getOfflineStockChecksMap(checkDate).then((map) => {
+      if (!cancelled) setIdbCheckMap(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [soldDate, allProductsRaw.length]);
 
-      if (!result.rows || result.rows.length === 0) {
-        showAlert({ title: 'Sold Check', message: 'No sales found for the selected date.' });
-        setSoldProductCodes(null);
-        setSoldOnlyView(false);
-        try {
-          localStorage.removeItem(SOLD_STATE_KEY);
-        } catch {
-          void 0;
+  // Merge IDB records into product list: IDB takes priority over DB
+  const allProducts = useMemo(() => {
+    if (!idbCheckMap || Object.keys(idbCheckMap).length === 0) return allProductsRaw;
+    return allProductsRaw.map((p) => {
+      const idb = idbCheckMap[p.code];
+      if (!idb) return p;
+      return {
+        ...p,
+        check_status: idb.check_status,
+        check_updated_at: idb.checked_at,
+        error_memo: idb.has_error ? idb.memo || p.error_memo : p.error_memo,
+      };
+    });
+  }, [allProductsRaw, idbCheckMap]);
+
+  const runSoldCheck = useCallback(
+    async (dateStr, { showOnly = false, resetChecked = false } = {}) => {
+      const dateKey = String(dateStr || soldDate || '').trim();
+      if (!dateKey) return;
+      setIsLoadingSold(true);
+      try {
+        // Fetch sales for that date (fromDate = toDate = soldDate)
+        const result = await getSalesHistoryFilteredResult({
+          fromDate: dateKey,
+          toDate: dateKey,
+        });
+
+        if (!result.rows || result.rows.length === 0) {
+          showAlert({ title: 'Sold Check', message: 'No sales found for the selected date.' });
+          setSoldProductCodes(null);
+          setSoldOnlyView(false);
+          try {
+            localStorage.removeItem(SOLD_STATE_KEY);
+          } catch {
+            void 0;
+          }
+          setIsLoadingSold(false);
+          return;
         }
-        setIsLoadingSold(false);
-        return;
-      }
 
-      const soldCodes = new Set(
-        result.rows
-          .map((r) => String(r?.code || '').trim())
-          .filter(Boolean)
-      );
-      const codes = new Set(soldCodes);
-      const hasGaGgSale = Array.from(soldCodes).some((code) => code.startsWith('GA-GG-'));
-      if (hasGaGgSale) {
-        allProducts.forEach((p) => {
-          const code = String(p?.code || '').trim();
-          if (code.startsWith('GA-GG-')) codes.add(code);
-        });
-      }
-      setSoldProductCodes(codes);
-      setSoldOnlyView(Boolean(showOnly));
-
-      const allSold = Array.from(codes);
-      const soldInStock = new Set(
-        allProducts.filter((p) => (p.totalStock || 0) > 0 && codes.has(p.code)).map((p) => p.code)
-      );
-      const missing = allSold.filter((c) => !soldInStock.has(c));
-      if (missing.length) {
-        showToast(`Sold codes not in stock list: ${missing.length}`, 900);
-      }
-
-      if (resetChecked) {
-        setPendingChanges((prev) => {
-          const next = { ...prev };
+        const soldCodes = new Set(
+          result.rows.map((r) => String(r?.code || '').trim()).filter(Boolean)
+        );
+        const codes = new Set(soldCodes);
+        const hasGaGgSale = Array.from(soldCodes).some((code) => code.startsWith('GA-GG-'));
+        if (hasGaGgSale) {
           allProducts.forEach((p) => {
-            if (!codes.has(p.code)) return;
-            const dbStatus = p.check_status ?? 'unchecked';
-            const effective = prev[p.code] ?? dbStatus;
-            if (effective !== 'checked') return;
-            if (dbStatus === 'unchecked') {
-              delete next[p.code];
-            } else {
-              next[p.code] = 'unchecked';
-            }
+            const code = String(p?.code || '').trim();
+            if (code.startsWith('GA-GG-')) codes.add(code);
           });
-          return next;
-        });
+        }
+        setSoldProductCodes(codes);
+        setSoldOnlyView(Boolean(showOnly));
+
+        const allSold = Array.from(codes);
+        const soldInStock = new Set(
+          allProducts.filter((p) => (p.totalStock || 0) > 0 && codes.has(p.code)).map((p) => p.code)
+        );
+        const missing = allSold.filter((c) => !soldInStock.has(c));
+        if (missing.length) {
+          showToast(`Sold codes not in stock list: ${missing.length}`, 900);
+        }
+
+        if (resetChecked) {
+          setPendingChanges((prev) => {
+            const next = { ...prev };
+            allProducts.forEach((p) => {
+              if (!codes.has(p.code)) return;
+              const dbStatus = p.check_status ?? 'unchecked';
+              const effective = prev[p.code] ?? dbStatus;
+              if (effective !== 'checked') return;
+              if (dbStatus === 'unchecked') {
+                delete next[p.code];
+              } else {
+                next[p.code] = 'unchecked';
+              }
+            });
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        showAlert({ title: 'Sold Check Failed', message: 'Failed to fetch sales data.' });
+      } finally {
+        setIsLoadingSold(false);
       }
-    } catch (err) {
-      console.error(err);
-      showAlert({ title: 'Sold Check Failed', message: 'Failed to fetch sales data.' });
-    } finally {
-      setIsLoadingSold(false);
-    }
-  }, [allProducts, showAlert, showToast, soldDate]);
+    },
+    [allProducts, showAlert, showToast, soldDate]
+  );
 
   const handleCheckSoldItems = () => {
     if (!soldDate) return;
     requestConfirm({
       title: 'Sold Check',
       message:
-        "This will highlight sold codes in yellow, and reset only the sold codes that are currently CHECKED back to UNCHECKED. Continue?",
+        'This will highlight sold codes in yellow, and reset only the sold codes that are currently CHECKED back to UNCHECKED. Continue?',
       onConfirm: () => runSoldCheck(soldDate, { showOnly: false, resetChecked: true }),
     });
   };
@@ -425,29 +513,55 @@ export default function CheckStockPage() {
     if (!dateKey) return;
     const keys = Object.keys(yesterdayPendingChanges);
     if (keys.length === 0) return;
-    if (autoSaveYesterdayRef.current.dateKey === dateKey && autoSaveYesterdayRef.current.ran) return;
+    if (autoSaveYesterdayRef.current.dateKey === dateKey && autoSaveYesterdayRef.current.ran)
+      return;
     autoSaveYesterdayRef.current = { dateKey, ran: true };
 
-    batchUpdateStatus(yesterdayPendingChanges, {
-      onSuccess: () => {
-        setPendingChanges((prev) => {
-          const next = { ...prev };
-          keys.forEach((k) => {
-            delete next[k];
+    if (isBrowserOnline()) {
+      batchUpdateStatus(yesterdayPendingChanges, {
+        onSuccess: () => {
+          setPendingChanges((prev) => {
+            const next = { ...prev };
+            keys.forEach((k) => {
+              delete next[k];
+            });
+            return next;
           });
-          return next;
+          showToast("Yesterday's stock checks were saved.", 900);
+        },
+        onError: (err) => {
+          autoSaveYesterdayRef.current = { dateKey, ran: false };
+          console.error(err);
+          showAlert({
+            title: 'Auto Save Failed',
+            message: String(err?.message || 'Failed to auto save.'),
+          });
+        },
+      });
+    } else {
+      // Offline: save to IDB
+      saveOfflineStockChecks(dateKey, yesterdayPendingChanges, {})
+        .then(async () => {
+          const freshMap = await getOfflineStockChecksMap(dateKey);
+          setIdbCheckMap(freshMap);
+          setPendingChanges((prev) => {
+            const next = { ...prev };
+            keys.forEach((k) => {
+              delete next[k];
+            });
+            return next;
+          });
+          showToast("Yesterday's stock checks saved offline.", 900);
+        })
+        .catch((err) => {
+          autoSaveYesterdayRef.current = { dateKey, ran: false };
+          console.error(err);
+          showAlert({
+            title: 'Auto Save Failed',
+            message: 'Failed to save offline.',
+          });
         });
-        showToast("Yesterday's stock checks were saved.", 900);
-      },
-      onError: (err) => {
-        autoSaveYesterdayRef.current = { dateKey, ran: false };
-        console.error(err);
-        showAlert({
-          title: 'Auto Save Failed',
-          message: String(err?.message || 'Failed to auto save.'),
-        });
-      },
-    });
+    }
   }, [
     batchUpdateStatus,
     isSaving,
@@ -737,7 +851,6 @@ export default function CheckStockPage() {
       return;
     }
 
-    // Optimistic update: Close modal and update local state immediately
     const targetCode = editingError.code;
     const finalMemo =
       errorReason === 'other'
@@ -747,42 +860,56 @@ export default function CheckStockPage() {
           : String(
               `${errorReason === 'missing_cnt' ? '[Missing Cnt]' : '[Size Error]'} ${buildSizeText(errorSizeCounts)}`
             ).trim();
+
+    // Always update local pending state
     setPendingChanges((prev) => ({ ...prev, [targetCode]: 'error' }));
+    setPendingMemos((prev) => ({ ...prev, [targetCode]: finalMemo }));
     setErrorModalOpen(false);
     setEditingError(null);
 
-    // Fire and forget (but handle errors quietly or via toast if needed)
-    upsertErroStock({ code: targetCode, memo: finalMemo }, {
-      onError: (err) => {
-        console.error('Save failed:', err);
-        // We might want to alert the user or revert the state here
-        showAlert({
-          title: 'Save Failed',
-          message: `Failed to save error memo for ${targetCode}: ${String(err?.message || '')}`,
-        });
-      },
-    });
+    // If online, also save to DB immediately (existing behavior)
+    if (isBrowserOnline()) {
+      upsertErroStock(
+        { code: targetCode, memo: finalMemo },
+        {
+          onError: (err) => {
+            console.error('Save failed:', err);
+            showAlert({
+              title: 'Save Failed',
+              message: `Failed to save error memo for ${targetCode}: ${String(err?.message || '')}`,
+            });
+          },
+        }
+      );
+    }
   };
 
   const handleDeleteError = () => {
     if (!editingError) return;
 
-    // Optimistic update
+    // Always update local pending state
     const targetCode = editingError.code;
     setPendingChanges((prev) => ({ ...prev, [targetCode]: 'unchecked' }));
+    setPendingMemos((prev) => {
+      const next = { ...prev };
+      delete next[targetCode];
+      return next;
+    });
     setErrorModalOpen(false);
     setEditingError(null);
 
-    // Fire and forget
-    deleteErroStock(targetCode, {
-      onError: (err) => {
-        console.error(err);
-        showAlert({
-          title: 'Delete Failed',
-          message: `Failed to delete error for ${targetCode}: ${String(err?.message || '')}`,
-        });
-      },
-    });
+    // If online, also delete from DB (existing behavior)
+    if (isBrowserOnline()) {
+      deleteErroStock(targetCode, {
+        onError: (err) => {
+          console.error(err);
+          showAlert({
+            title: 'Delete Failed',
+            message: `Failed to delete error for ${targetCode}: ${String(err?.message || '')}`,
+          });
+        },
+      });
+    }
   };
 
   const handleDownloadTsv = () => {
@@ -816,6 +943,17 @@ export default function CheckStockPage() {
 
   const textareaRef = useRef(null);
   const firstSizeRef = useRef(null);
+
+  // Warn user if leaving with unsaved stock check selections
+  useEffect(() => {
+    if (!hasChanges) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasChanges]);
 
   // Focus textarea when error modal opens
   useEffect(() => {
@@ -990,7 +1128,14 @@ export default function CheckStockPage() {
         </div>
 
         <div style={{ width: '100%', padding: '0 6px', marginTop: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+            }}
+          >
             <span>
               Progress: {progress.done.toLocaleString()} / {progress.total.toLocaleString()}
               {progress.error ? ` (Err ${progress.error.toLocaleString()})` : ''}
@@ -1212,9 +1357,7 @@ export default function CheckStockPage() {
       </div>
 
       {finalRows.length === 0 && !soldOnlyView && !showCheckedOnly ? (
-        <div className="text-center text-gray-500 mt-10">
-          No products found.
-        </div>
+        <div className="text-center text-gray-500 mt-10">No products found.</div>
       ) : (
         <div className="stock-check-table-wrapper">
           {/* Total Count Display */}
@@ -1434,7 +1577,10 @@ export default function CheckStockPage() {
 
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
                 {SIZE_ORDER.map((k, idx) => (
-                  <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 52 }}>
+                  <div
+                    key={k}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 52 }}
+                  >
                     <div className="text-[11px] text-gray-400 text-center">{k}</div>
                     <input
                       ref={idx === 0 ? firstSizeRef : undefined}
@@ -1442,7 +1588,8 @@ export default function CheckStockPage() {
                       min={0}
                       value={errorSizeCounts?.[k] ?? 0}
                       onChange={(e) => {
-                        const v = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0);
+                        const v =
+                          e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0);
                         setErrorSizeCounts((p) => ({ ...(p || {}), [k]: v }));
                       }}
                       className="bg-[#0f0f15] border border-[var(--border-soft)] rounded px-2 py-2 text-sm text-white text-center focus:ring-1 focus:ring-red-500 focus:border-red-500"

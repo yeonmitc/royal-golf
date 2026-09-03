@@ -97,6 +97,10 @@ function buildDbInstance() {
     app_meta: ['&key'].join(','),
   });
 
+  dexieDb.version(7).stores({
+    stock_checks: '[check_date+code],check_date,sync_status,check_status,has_error',
+  });
+
   // Lifecycle events (CRITICAL: never leave a DB open with a pending upgrade)
   dexieDb.on('blocked', () => {
     console.error('[Dexie] Database update is blocked. Please close other tabs and refresh.');

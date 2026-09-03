@@ -47,9 +47,7 @@ export async function syncProductsToCache({ onInfo, force = false } = {}) {
         }),
       ]);
 
-      const invByCode = new Map(
-        (inventories || []).map((r) => [String(r?.code || '').trim(), r])
-      );
+      const invByCode = new Map((inventories || []).map((r) => [String(r?.code || '').trim(), r]));
 
       const rows = (products || []).map((p) => {
         const code = String(p.code || '').trim();
@@ -68,8 +66,16 @@ export async function syncProductsToCache({ onInfo, force = false } = {}) {
 
       const result = await replaceCachedProducts(rows);
       // Mark successful sync timestamp
-      try { await setMeta('products_last_synced_at', result.syncedAt); } catch { /* ignore */ }
-      try { await setMeta('products_sync_status', 'ok'); } catch { /* ignore */ }
+      try {
+        await setMeta('products_last_synced_at', result.syncedAt);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await setMeta('products_sync_status', 'ok');
+      } catch {
+        /* ignore */
+      }
 
       if (onInfo) {
         onInfo(`Product data updated successfully. (${result.count} items)`);
@@ -78,7 +84,11 @@ export async function syncProductsToCache({ onInfo, force = false } = {}) {
     } catch (e) {
       console.error('[offlineSync] syncProductsToCache failed:', e);
       // Do NOT delete existing cache on failure!
-      try { await setMeta('products_sync_status', 'failed'); } catch { /* ignore */ }
+      try {
+        await setMeta('products_sync_status', 'failed');
+      } catch {
+        /* ignore */
+      }
       const msg = e?.message || String(e);
       if (onInfo) {
         onInfo(
@@ -128,7 +138,11 @@ export function startBackgroundProductSync() {
     if (!isBrowserOnline()) return;
     const stale = await (await import('./offlineDB')).shouldSyncProducts();
     if (stale) {
-      try { await syncProductsToCache(); } catch { /* silent */ }
+      try {
+        await syncProductsToCache();
+      } catch {
+        /* silent */
+      }
     }
   }, 60 * 1000);
 
@@ -389,4 +403,114 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
 
 export async function countPendingOfflineSales() {
   return countUnsyncedOfflineSales();
+}
+
+// ---------------------------------------------------------------------------
+// Offline stock checks -> server sync
+// ---------------------------------------------------------------------------
+
+/**
+ * Sync unsynced stock checks from IndexedDB to Supabase.
+ * For each record:
+ *   - 'checked' status → inventories.check_status='checked' + resolve any existing erro_stock
+ *   - 'error' status   → inventories.check_status='error' + upsert erro_stock with memo
+ * On success → remove from IndexedDB.
+ * On failure → keep in IndexedDB with FAILED status.
+ */
+export async function syncStockChecksToServer({ onInfo } = {}) {
+  const { getUnsyncedStockChecks, removeStockChecks } = await import('./offlineDB');
+
+  const pending = await getUnsyncedStockChecks();
+  if (!pending || pending.length === 0) {
+    if (onInfo) onInfo('No unsynced stock checks found.');
+    return {
+      ok: true,
+      total: 0,
+      success: 0,
+      failed: 0,
+      message: 'No unsynced stock checks found.',
+    };
+  }
+
+  if (onInfo) {
+    onInfo(`Syncing stock checks... (${pending.length} items)`);
+  }
+
+  const { batchUpdateInventoryStatus, upsertErroStock } = await import('../products/productApi');
+  const { sbUpdate } = await import('../../db/supabaseRest');
+
+  let successCount = 0;
+  let failCount = 0;
+  const succeeded = [];
+
+  const checkedRows = pending.filter((r) => r.check_status === 'checked');
+  const errorRows = pending.filter((r) => r.check_status === 'error');
+
+  // --- Checked items: inventories.check_status='checked' + resolve any old erro_stock ---
+  if (checkedRows.length > 0) {
+    try {
+      const changes = {};
+      for (const r of checkedRows) {
+        changes[r.code] = 'checked';
+      }
+      await batchUpdateInventoryStatus(changes);
+
+      // Resolve any existing erro_stock records for these codes (stamp checked_at).
+      // Same logic as deleteErroStock's erro_stock part, but without setting inventories to unchecked.
+      const now = new Date().toISOString();
+      await Promise.all(
+        checkedRows.map((r) =>
+          sbUpdate(
+            'erro_stock',
+            { checked_at: now, updated_at: now },
+            { filters: [{ column: 'code', op: 'eq', value: r.code }], returning: 'minimal' }
+          ).catch(() => {})
+        )
+      );
+
+      successCount += checkedRows.length;
+      succeeded.push(...checkedRows);
+    } catch (e) {
+      console.error('[offlineSync] stock check sync (checked) failed:', e);
+      failCount += checkedRows.length;
+    }
+  }
+
+  // --- Error items: inventories.check_status='error' + upsert erro_stock with memo ---
+  for (const r of errorRows) {
+    try {
+      // 1. Update inventories.check_status to 'error'
+      await batchUpdateInventoryStatus({ [r.code]: 'error' });
+      // 2. Upsert erro_stock with code + memo
+      await upsertErroStock({ code: r.code, memo: r.memo || '' });
+      successCount += 1;
+      succeeded.push(r);
+    } catch (e) {
+      console.error('[offlineSync] stock check sync (error) failed:', e);
+      failCount += 1;
+    }
+  }
+
+  // Remove successfully synced from IndexedDB
+  if (succeeded.length > 0) {
+    await removeStockChecks(succeeded);
+  }
+
+  let message = '';
+  if (failCount === 0) {
+    message = 'Stock checks synced successfully.';
+  } else if (successCount > 0) {
+    message = `${successCount} checks synced, ${failCount} failed. Please try again.`;
+  } else {
+    message = `${failCount} checks could not be synced.`;
+  }
+  if (onInfo) onInfo(message);
+
+  return {
+    ok: failCount === 0,
+    total: pending.length,
+    success: successCount,
+    failed: failCount,
+    message,
+  };
 }
