@@ -105,7 +105,7 @@ export default function GuidesPage() {
   const groupedDates = useMemo(() => {
     const map = {};
     groups.forEach((g) => {
-      const dateKey = g.sold_at ? new Date(g.sold_at).toISOString().split('T')[0] : 'unknown';
+      const dateKey = g.sold_at ? String(g.sold_at).match(/\d{4}-\d{2}-\d{2}/)?.[0] || 'unknown' : 'unknown';
       if (!map[dateKey]) {
         map[dateKey] = { dateKey, soldAt: g.sold_at, commission: 0, itemCount: 0, groupIds: [] };
       }
@@ -378,7 +378,7 @@ export default function GuidesPage() {
                               />
                             </td>
                             <td style={{ padding: '8px 6px' }}>
-                              {d.soldAt ? new Date(d.soldAt).toLocaleDateString() : '-'}
+                              {d.soldAt ? String(d.soldAt).match(/\d{4}-\d{2}-\d{2}/)?.[0] || '-' : '-'}
                             </td>
                             <td style={{ padding: '8px 6px', textAlign: 'right' }}>
                               {selectedGuide.guide_type === 'local' ? '10%' : '10%/20%'}
