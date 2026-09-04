@@ -515,6 +515,19 @@ export default function ReportPage() {
     return rows.find((row) => row.month === formatMonthKey(selectedYear, selectedMonth)) || null;
   }, [rows, selectedMonth, selectedYear]);
 
+  const allMonthSummary = useMemo(() => {
+    const keys = [
+      'total_sales', 'product_cost', 'gift_cost', 'guide_commission',
+      'sales_profit', 'operating_cost_total', 'net_profit', 'final_net_profit',
+    ];
+    const isAllZero = (row) => keys.every((k) => !Number(row[k]));
+    const activeRows = rows.filter((r) => !isAllZero(r));
+    if (activeRows.length === 0) return null;
+    const sum = {};
+    keys.forEach((k) => { sum[k] = activeRows.reduce((s, r) => s + Number(r[k] || 0), 0); });
+    return { ...sum, monthCount: activeRows.length };
+  }, [rows]);
+
   const tableRows = useMemo(
     () =>
       rows.map((row) => ({
@@ -741,6 +754,49 @@ export default function ReportPage() {
               </Button>
             }
           >
+            {allMonthSummary ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  alignItems: 'center',
+                  padding: '10px 14px',
+                  marginBottom: 14,
+                  borderRadius: 8,
+                  background: 'rgba(212,175,55,0.06)',
+                  border: '1px solid rgba(212,175,55,0.15)',
+                }}
+              >
+                <span style={{ fontWeight: 700, color: 'var(--gold-soft)', marginRight: 8, whiteSpace: 'nowrap' }}>
+                  전체 월 통합 ({allMonthSummary.monthCount}개월)
+                </span>
+                {[
+                  { label: '총매출', value: allMonthSummary.total_sales },
+                  { label: '상품원가', value: allMonthSummary.product_cost },
+                  { label: '선물원가', value: allMonthSummary.gift_cost },
+                  { label: '가이드 커미션', value: allMonthSummary.guide_commission },
+                  { label: '매출이익', value: allMonthSummary.sales_profit },
+                  { label: '지출', value: allMonthSummary.operating_cost_total },
+                  { label: '순수익', value: allMonthSummary.net_profit },
+                  { label: '최종순수익', value: allMonthSummary.final_net_profit },
+                ].map(({ label, value }) => (
+                  <span
+                    key={label}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 13,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                    <span style={{ color: 'var(--gold-soft)', fontWeight: 600 }}>{formatPhp(value)}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <DataTable columns={columns} rows={tableRows} emptyMessage="No monthly report data." />
           </Card>
         </>
