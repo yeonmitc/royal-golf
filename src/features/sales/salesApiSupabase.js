@@ -1852,6 +1852,13 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
     guideNameMap = new Map((guides || []).map((row) => [String(row?.id), String(row?.name || '')]));
   }
 
+  // Count sales per group for proportional commission distribution
+  const groupSalesCount = new Map();
+  for (const row of sales || []) {
+    const gid = String(row?.sale_group_id || '').trim();
+    if (gid) groupSalesCount.set(gid, (groupSalesCount.get(gid) || 0) + 1);
+  }
+
   return (sales || [])
     .map((row) => {
       const qty = Number(row?.qty || 0) || 0;
@@ -1871,6 +1878,11 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const freeGift = !isExchanged && (Boolean(row?.free_gift ?? false) || unit === 0);
       const finalUnit = isRefunded || freeGift ? 0 : unit;
 
+      // Distribute group commission proportionally across sales rows
+      const groupCommission = ginfo?.guideCommission || 0;
+      const salesInGroup = groupId ? (groupSalesCount.get(groupId) || 1) : 1;
+      const rowCommission = groupCommission / salesInGroup;
+
       return {
         saleId: row?.id,
         soldAt: row?.sold_at,
@@ -1886,7 +1898,7 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
         isMrMoon,
         isElla,
         isPeter,
-        commission: 0, // commission will be calculated from sale_groups.guide_commission
+        commission: rowCommission,
       };
     })
     .filter((row) => row.qty > 0 && !isExcludedRevenueSale(row));
