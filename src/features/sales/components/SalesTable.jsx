@@ -365,9 +365,7 @@ export default function SalesTable({
             Waiting to sync
           </span>
         </span>
-      ) : (
-        soldAtTime
-      ),
+      ) : soldAtTime,
       code: row.code,
       color:
         (row.color || '').trim() === 'Mix' &&
