@@ -803,29 +803,17 @@ export default function SchedulerPage() {
     showToast(`Auto 생성 완료 (빈칸만 채움): ${startKey} ~ ${endKey} (${rowsToInsert.length}건 추가)`);
   };
 
+  // Manual schedule: only block exact duplicate (same date + employee + shift)
   const upsertSchedule = async ({ dateKey, shiftType, employeeId, manualValues }) => {
     if (!employeeId) return;
-    const v = validateShiftRules({ dateKey, shiftType, employeeId });
-    if (!v.ok) {
-      showToast(v.message);
-      return;
-    }
-
-    const cap = getDayCapacity(dateKey);
-    if (cap <= 0) {
-      showToast('해당 날짜는 휴무입니다.');
-      return;
-    }
-    if (getDayCount(dateKey) >= cap) {
-      showToast(`하루 최대 ${cap}명까지만 배정 가능합니다.`);
-      return;
-    }
-    if (getDayHasEmployee(dateKey, employeeId)) {
-      showToast('같은 직원이 같은 날짜에 중복 배정될 수 없습니다.');
-      return;
-    }
-    if (shiftType !== 'manual' && getDayHasShift(dateKey, shiftType)) {
-      showToast(`이미 ${shiftType} 배정이 있습니다.`);
+    const isExactDuplicate = (rows || []).some(
+      (r) =>
+        String(r.work_date) === String(dateKey) &&
+        String(r.employee_id) === String(employeeId) &&
+        String(r.shift_type) === String(shiftType)
+    );
+    if (isExactDuplicate) {
+      showToast('동일한 직원/날짜/shift가 이미 존재합니다.');
       return;
     }
     const payload =
@@ -850,33 +838,15 @@ export default function SchedulerPage() {
     manualValues,
   }) => {
     if (!scheduleId) return;
-    const v = validateShiftRules({ dateKey: targetDateKey, shiftType: nextShift, employeeId });
-    if (!v.ok) {
-      showToast(v.message);
-      return;
-    }
-    if (fromDateKey !== targetDateKey) {
-      const cap = getDayCapacity(targetDateKey);
-      if (cap <= 0) {
-        showToast('해당 날짜는 휴무입니다.');
-        return;
-      }
-      if (getDayCount(targetDateKey) >= cap) {
-        showToast(`하루 최대 ${cap}명까지만 배정 가능합니다.`);
-        return;
-      }
-      if (getDayHasEmployee(targetDateKey, employeeId)) {
-        showToast('같은 직원이 같은 날짜에 중복 배정될 수 없습니다.');
-        return;
-      }
-    }
-    const existsSameShift =
-      nextShift === 'manual' ? false : getDayHasShift(targetDateKey, nextShift);
-    const current = getDayList(targetDateKey).find((r) => String(r.id) === String(scheduleId));
-    const isSameDateAndShift =
-      fromDateKey === targetDateKey && String(current?.shift_type) === String(nextShift);
-    if (existsSameShift && !isSameDateAndShift) {
-      showToast(`이미 ${nextShift} 배정이 있습니다.`);
+    const isExactDuplicate = rows.some(
+      (r) =>
+        String(r.id) !== String(scheduleId) &&
+        String(r.work_date) === String(targetDateKey) &&
+        String(r.employee_id) === String(employeeId) &&
+        String(r.shift_type) === String(nextShift)
+    );
+    if (isExactDuplicate) {
+      showToast('동일한 직원/날짜/shift가 이미 존재합니다.');
       return;
     }
     const updateValues =
