@@ -489,7 +489,7 @@ export default function SellPage() {
             )}
 
             {cartItems.length > 0 && (
-              <div className="mt-4 px-1">
+              <div className="mt-4 px-1" style={{ paddingBottom: 16 }}>
                 <div className="mb-2">
                   <label className="text-xs font-semibold text-gray-500 mb-1 block">Guide</label>
                   <select
