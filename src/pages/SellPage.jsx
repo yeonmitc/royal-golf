@@ -292,6 +292,7 @@ export default function SellPage() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="Scan barcode or enter code"
+            className="w-[320px] max-w-full"
           />
         </div>
       </div>
@@ -507,9 +508,9 @@ export default function SellPage() {
                               padding: '2px 4px',
                               borderRadius: 6,
                               fontSize: 13,
-                              border: '1px solid var(--border-soft)',
-                              background: 'var(--surface)',
-                              color: 'var(--text-main)',
+                              border: '1px solid #2a2a35',
+                              background: '#0b0b10',
+                              color: '#fff',
                               textAlign: 'center',
                             }}
                           >
@@ -604,7 +605,7 @@ export default function SellPage() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(160px, 220px) auto minmax(240px, 1fr)',
+                    gridTemplateColumns: 'minmax(180px, 220px) auto minmax(300px, 1fr)',
                     alignItems: 'center',
                     gap: 12,
                     marginTop: 8,
@@ -616,7 +617,7 @@ export default function SellPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="whitespace-nowrap"
+                    className="whitespace-nowrap min-w-[180px]"
                     style={{ justifySelf: 'start' }}
                     onClick={clearCart}
                   >
