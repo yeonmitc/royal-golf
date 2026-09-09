@@ -489,8 +489,8 @@ export default function SellPage() {
             )}
 
             {cartItems.length > 0 && (
-              <div className="mt-4 px-1" style={{ paddingBottom: 16 }}>
-                <div className="mb-2">
+              <div className="mt-4" style={{ paddingBottom: 8 }}>
+                <div className="mb-2 px-1">
                   <label className="text-xs font-semibold text-gray-500 mb-1 block">Guide</label>
                   <select
                     className="w-full border rounded px-2 py-1.5 text-sm"
@@ -535,48 +535,54 @@ export default function SellPage() {
 
                 <div
                   style={{
-                    display: 'flex',
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
                     gap: 12,
                     marginTop: 8,
-                    paddingLeft: 4,
-                    paddingRight: 4,
-                    paddingBottom: 8,
+                    paddingLeft: 16,
+                    paddingRight: 16,
+                    paddingBottom: 4,
                   }}
                 >
                   <Button
                     variant="outline"
                     size="sm"
-                    className="shrink-0 whitespace-nowrap"
+                    className="whitespace-nowrap"
+                    style={{ justifySelf: 'start' }}
                     onClick={clearCart}
                   >
                     Clear
                   </Button>
-                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0 }}>
-                    <span
-                      className="text-sm"
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: 999,
-                        background: '#141420',
-                        border: '1px solid var(--border-soft)',
-                        color: 'var(--text-main)',
-                        fontWeight: 600,
-                        fontSize: 15,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Total{' '}
-                      <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{totalQty}</span>{' '}
-                      items ·{' '}
-                      <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>
-                        {displayTotalPrice.toLocaleString('en-PH')}
-                      </span>{' '}
-                      PHP
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gap: 8, alignItems: 'end', flexShrink: 0 }}>
+                  <span
+                    className="text-sm"
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 999,
+                      background: '#141420',
+                      border: '1px solid var(--border-soft)',
+                      color: 'var(--text-main)',
+                      fontWeight: 600,
+                      fontSize: 15,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Total{' '}
+                    <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>{totalQty}</span>{' '}
+                    items ·{' '}
+                    <span style={{ color: 'var(--gold-soft)', fontWeight: 700 }}>
+                      {displayTotalPrice.toLocaleString('en-PH')}
+                    </span>{' '}
+                    PHP
+                  </span>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
                     {isCheckoutPending && (
                       <div
                         className="text-xs"
@@ -584,6 +590,7 @@ export default function SellPage() {
                           color: '#b45309',
                           textAlign: 'center',
                           fontWeight: 600,
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         Do not close this page while the sale is being saved.
@@ -594,7 +601,8 @@ export default function SellPage() {
                       variant="primary"
                       size="sm"
                       disabled={isCheckoutPending}
-                      className="shrink-0 whitespace-nowrap px-5"
+                      className="whitespace-nowrap px-5"
+                      style={{ minWidth: 'max-content' }}
                       onClick={handleCheckout}
                     >
                       {isCheckoutPending ? 'Processing sale...' : 'Payment'}
