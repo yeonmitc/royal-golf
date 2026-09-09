@@ -540,12 +540,20 @@ export default function SellPage() {
                     justifyContent: 'space-between',
                     gap: 12,
                     marginTop: 8,
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    paddingBottom: 8,
                   }}
                 >
-                  <Button variant="outline" size="sm" onClick={clearCart}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 whitespace-nowrap"
+                    onClick={clearCart}
+                  >
                     Clear
                   </Button>
-                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0 }}>
                     <span
                       className="text-sm"
                       style={{
@@ -556,6 +564,7 @@ export default function SellPage() {
                         color: 'var(--text-main)',
                         fontWeight: 600,
                         fontSize: 15,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       Total{' '}
@@ -567,7 +576,7 @@ export default function SellPage() {
                       PHP
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gap: 8, alignItems: 'end' }}>
+                  <div style={{ display: 'grid', gap: 8, alignItems: 'end', flexShrink: 0 }}>
                     {isCheckoutPending && (
                       <div
                         className="text-xs"
@@ -585,6 +594,7 @@ export default function SellPage() {
                       variant="primary"
                       size="sm"
                       disabled={isCheckoutPending}
+                      className="shrink-0 whitespace-nowrap px-5"
                       onClick={handleCheckout}
                     >
                       {isCheckoutPending ? 'Processing sale...' : 'Payment'}
