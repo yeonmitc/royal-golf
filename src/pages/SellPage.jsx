@@ -18,6 +18,7 @@ import {
   LOCAL_GUIDE_ID,
   ONLINE_ID,
 } from '../features/guides/guideSelectOptions';
+import { useProductInventoryList } from '../features/products/productHooks';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
 import { useCartStore } from '../store/cartStore';
@@ -42,11 +43,31 @@ export default function SellPage() {
   const togglePromo = useCartStore((s) => s.togglePromo);
   const setItemColor = useCartStore((s) => s.setItemColor);
   const removeItem = useCartStore((s) => s.removeItem);
+  const setQty = useCartStore((s) => s.setQty);
   const setRentalInfo = useCartStore((s) => s.setRentalInfo);
   const guideId = useCartStore((s) => s.guideId);
   const setGuideId = useCartStore((s) => s.setGuideId);
   const localGuideName = useCartStore((s) => s.localGuideName);
   const setLocalGuideName = useCartStore((s) => s.setLocalGuideName);
+
+  const { data: inventoryList } = useProductInventoryList();
+
+  // Build stock map: code → size → stockQty
+  const stockMap = useMemo(() => {
+    const map = new Map();
+    if (!inventoryList) return map;
+    for (const p of inventoryList) {
+      const code = String(p.code || '').trim();
+      if (!code || !Array.isArray(p.sizes)) continue;
+      const sizeMap = new Map();
+      for (const s of p.sizes) {
+        const sizeKey = String(s.size || 'Free').trim() || 'Free';
+        sizeMap.set(sizeKey, Number(s.stockQty ?? 0) || 0);
+      }
+      map.set(code, sizeMap);
+    }
+    return map;
+  }, [inventoryList]);
 
   const guideKey = String(guideId || '');
   const isKakaoFriendSelected = guideKey === KAKAO_FRIEND_ID;
@@ -110,6 +131,19 @@ export default function SellPage() {
     const currentGuideId = useCartStore.getState().guideId;
     const currentLocalGuideName = useCartStore.getState().localGuideName;
     if (currentItems.length === 0) return;
+
+    // Stock validation before checkout
+    for (const item of currentItems) {
+      const codeKey = String(item.code || '').trim();
+      const sizeKey = String(item.size || 'Free').trim() || 'Free';
+      const available = stockMap.get(codeKey)?.get(sizeKey) ?? 0;
+      if (item.qty > available) {
+        showToast(
+          `Stock changed for ${item.nameKo || item.code} (${sizeKey}). Maximum available quantity is ${available}.`
+        );
+        return;
+      }
+    }
 
     const currentGuideKey = String(currentGuideId || '');
     if (currentGuideKey === LOCAL_GUIDE_ID) {
@@ -452,7 +486,41 @@ export default function SellPage() {
                           ))}
                         </select>
                       ),
-                      qty: item.qty,
+                      qty: (() => {
+                        const codeKey = String(item.code || '').trim();
+                        const sizeKey = String(item.size || 'Free').trim() || 'Free';
+                        const baseStock = stockMap.get(codeKey)?.get(sizeKey) ?? 0;
+                        const maxQty = Math.max(item.qty, baseStock);
+                        if (maxQty <= 1) return item.qty;
+                        return (
+                          <select
+                            value={item.qty}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const v = Number(e.target.value);
+                              if (v >= 1 && v <= baseStock) {
+                                setQty(item.code, item.size, v);
+                              }
+                            }}
+                            style={{
+                              padding: '2px 4px',
+                              borderRadius: 6,
+                              fontSize: 13,
+                              border: '1px solid var(--border-soft)',
+                              background: 'var(--surface)',
+                              color: 'var(--text-main)',
+                              textAlign: 'center',
+                            }}
+                          >
+                            {Array.from({ length: maxQty }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n} disabled={n > baseStock}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })(),
                       amount: (() => {
                         const originalUnit = Number(item.unitPricePhp || 0);
                         const finalUnit = calculateItemPrice(originalUnit);
@@ -536,7 +604,7 @@ export default function SellPage() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                    gridTemplateColumns: 'minmax(160px, 220px) auto minmax(240px, 1fr)',
                     alignItems: 'center',
                     gap: 12,
                     marginTop: 8,
@@ -601,8 +669,7 @@ export default function SellPage() {
                       variant="primary"
                       size="sm"
                       disabled={isCheckoutPending}
-                      className="whitespace-nowrap px-5"
-                      style={{ minWidth: 'max-content' }}
+                      className="w-full whitespace-nowrap px-5"
                       onClick={handleCheckout}
                     >
                       {isCheckoutPending ? 'Processing sale...' : 'Payment'}

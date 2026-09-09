@@ -98,6 +98,17 @@ export const useCartStore = create(
   },
 
   /**
+   * 수량 직접 설정 (Qty select용)
+   */
+  setQty: (code, size, qty) => {
+    const id = makeCartItemId(code, size);
+    const newQty = Math.max(1, Number(qty) || 1);
+    const updated = get().items.map((i) => (i.id === id ? { ...i, qty: newQty } : i));
+    const { totalQty, totalPrice } = computeTotals(updated);
+    set({ items: updated, totalQty, totalPrice });
+  },
+
+  /**
    * 수량 1 증가
    */
   incrementQty: (code, size) => {
