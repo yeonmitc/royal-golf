@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -16,18 +16,9 @@ import {
 } from '../features/expenses/expensesHooks';
 import { getNextProductNo, getNextSerialForPrefix, isProductCodeExists } from '../features/products/productApi';
 import { generateProductCode } from '../utils/codeGenerator';
+import { getSizeOptionsByCode, formatSizeDisplay } from '../utils/sizeMapper';
 import { useToast } from '../context/ToastContext';
 import { useAdminStore } from '../store/adminStore';
-
-const EMPTY_SIZE_INPUTS = {
-  S: '',
-  M: '',
-  L: '',
-  XL: '',
-  '2XL': '',
-  '3XL': '',
-  Free: '',
-};
 
 function toInputDate(d) {
   const y = d.getFullYear();
@@ -104,7 +95,20 @@ export default function AddProductPage() {
     .filter((p) => p.group === 'color')
     .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
 
-  const [sizeInputs, setSizeInputs] = useState(EMPTY_SIZE_INPUTS);
+  const sizeOptions = useMemo(() => getSizeOptionsByCode(codePreview), [codePreview]);
+
+  const [sizeInputs, setSizeInputs] = useState({});
+
+  // Reset sizeInputs when codePreview changes (prefix may change)
+  useEffect(() => {
+    setSizeInputs((prev) => {
+      const next = {};
+      for (const opt of sizeOptions) {
+        next[opt.key] = prev[opt.key] ?? '';
+      }
+      return next;
+    });
+  }, [sizeOptions]);
 
   async function refreshProductNo() {
     try {
@@ -284,7 +288,13 @@ export default function AddProductPage() {
       setPriceCny('');
       setSalePricePhp('');
       setSalePriceManual(false);
-      setSizeInputs({ ...EMPTY_SIZE_INPUTS });
+      setSizeInputs(() => {
+        const next = {};
+        for (const opt of sizeOptions) {
+          next[opt.key] = '';
+        }
+        return next;
+      });
 
       await refreshProductNo();
       await recomputeCode({});
@@ -585,19 +595,19 @@ export default function AddProductPage() {
               </FormSection>
 
               <FormSection title="" columns={7}>
-                {['S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'].map((sz) => (
-                  <div key={sz}>
+                {sizeOptions.map((opt) => (
+                  <div key={opt.key}>
                     <Input
                       className="size-label"
-                      label={sz.toUpperCase()}
+                      label={formatSizeDisplay(codePreview, opt.key)}
                       type="number"
                       min={0}
-                      value={sizeInputs[sz]}
+                      value={sizeInputs[opt.key] ?? ''}
                       onChange={(e) => {
                         const raw = e.target.value;
                         const num = Number(raw);
                         const next = raw === '' ? '' : Math.max(0, Number.isNaN(num) ? 0 : num);
-                        setSizeInputs((prev) => ({ ...prev, [sz]: next }));
+                        setSizeInputs((prev) => ({ ...prev, [opt.key]: next }));
                       }}
                     />
                   </div>
