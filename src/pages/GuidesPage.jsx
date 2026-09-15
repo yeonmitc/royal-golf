@@ -5,6 +5,7 @@ import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
+import { normalizeAppError } from '../utils/errorHandler';
 import {
   getGuideStats,
   getGuideUnsettledSales,
@@ -50,7 +51,7 @@ function getRateLabel(g) {
 }
 
 export default function GuidesPage() {
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const queryClient = useQueryClient();
 
   const { data: guideStats, isLoading } = useQuery({
@@ -95,7 +96,8 @@ export default function GuidesPage() {
       setSelectedGroupIds(new Set());
     },
     onError: (e) => {
-      showToast(e.message || 'Settlement failed.');
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'GUIDE_UPDATE_FAILED', fallbackMessage: 'Settlement could not be completed.' }));
     },
   });
 

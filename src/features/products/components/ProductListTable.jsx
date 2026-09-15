@@ -4,6 +4,7 @@ import Button from '../../../components/common/Button';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
 import { useToast } from '../../../context/ToastContext';
+import { normalizeAppError } from '../../../utils/errorHandler';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import { useAdminStore } from '../../../store/adminStore';
 import { getSizeOptionsByCode } from '../../../utils/sizeMapper';
@@ -39,7 +40,7 @@ export default function ProductListTable({
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteProductMutation();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   if (isLoading) {
@@ -66,14 +67,23 @@ export default function ProductListTable({
         },
         onError: (e) => {
           const msg = String(e?.message || e);
-          if (msg === 'ADMIN_REQUIRED') openLoginModal();
+          if (msg === 'ADMIN_REQUIRED') {
+            openLoginModal();
+            showToast('Admin required.');
+            return;
+          }
           if (msg === 'DELETE_BLOCKED_BY_SALES_FK') {
             showToast(
               '삭제 불가: 판매기록(sales)이 참조중입니다. Supabase에서 sales_code_fkey 삭제 SQL 실행하세요.'
             );
             return;
           }
-          showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Deletion failed: ${msg}`);
+          showToastTyped(
+            normalizeAppError(e, {
+              code: 'PRODUCT_DELETE_FAILED',
+              fallbackMessage: 'Product could not be deleted.',
+            })
+          );
         },
       });
       setDeleteTarget(null);

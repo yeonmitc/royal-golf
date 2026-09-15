@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Input from '../../../components/common/Input';
 import { useProductCodeExists, useUpsertProductMutation } from '../productHooks';
 import { useToast } from '../../../context/ToastContext';
+import { normalizeAppError } from '../../../utils/errorHandler';
 
 /**
  * 상품 등록/수정 폼
@@ -26,7 +27,7 @@ export default function ProductForm({ initialProduct, onSaved, onCancel }) {
 
   const { data: codeExists } = useProductCodeExists(code);
   const { mutateAsync: saveProduct, isPending, error: saveError } = useUpsertProductMutation();
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,8 +54,16 @@ export default function ProductForm({ initialProduct, onSaved, onCancel }) {
       salePricePhp: Number(salePricePhp || 0) || 0,
     };
 
-    const savedCode = await saveProduct(payload);
-    if (onSaved) onSaved(savedCode);
+    try {
+      const savedCode = await saveProduct(payload);
+      if (onSaved) onSaved(savedCode);
+    } catch (e) {
+      console.error(e);
+      showToastTyped(normalizeAppError(e, {
+        code: isEdit ? 'PRODUCT_UPDATE_FAILED' : 'PRODUCT_CREATE_FAILED',
+        fallbackMessage: isEdit ? 'Product could not be updated.' : 'Product could not be created.',
+      }));
+    }
   };
 
   return (

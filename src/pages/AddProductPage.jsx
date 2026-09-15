@@ -18,6 +18,7 @@ import { getNextProductNo, getNextSerialForPrefix, isProductCodeExists } from '.
 import { generateProductCode } from '../utils/codeGenerator';
 import { getSizeOptionsByCode, formatSizeDisplay } from '../utils/sizeMapper';
 import { useToast } from '../context/ToastContext';
+import { normalizeAppError } from '../utils/errorHandler';
 import { useAdminStore } from '../store/adminStore';
 
 function toInputDate(d) {
@@ -49,7 +50,7 @@ async function copyTextToClipboard(text) {
 
 export default function AddProductPage() {
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
 
@@ -302,8 +303,15 @@ export default function AddProductPage() {
       showToast(copied ? `Saved and copied: ${savedCode}` : `Saved: ${savedCode}`);
     } catch (err) {
       const msg = String(err?.message || err);
-      if (msg === 'ADMIN_REQUIRED') openLoginModal();
-      showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Add failed: ${msg}`);
+      if (msg === 'ADMIN_REQUIRED') {
+        openLoginModal();
+        showToast('Admin required.');
+        return;
+      }
+      showToastTyped(normalizeAppError(err, {
+        code: 'PRODUCT_CREATE_FAILED',
+        fallbackMessage: 'Product could not be created.',
+      }));
     }
   }
 
@@ -347,7 +355,15 @@ export default function AddProductPage() {
       showToast(`Expense added: ${codePreview}`);
     } catch (err) {
       const msg = String(err?.message || err || '');
-      showToast(`Expense add failed: ${msg}`);
+      if (msg === 'ADMIN_REQUIRED') {
+        openLoginModal();
+        showToast('Admin required.');
+        return;
+      }
+      showToastTyped(normalizeAppError(err, {
+        code: 'EXPENSE_CREATE_FAILED',
+        fallbackMessage: 'Expense could not be added.',
+      }));
     }
   }
 

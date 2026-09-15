@@ -4,6 +4,7 @@ import DataTable from '../components/common/DataTable';
 import Input from '../components/common/Input';
 import { sbRpc } from '../db/supabaseRest';
 import { useToast } from '../context/ToastContext';
+import { normalizeAppError } from '../utils/errorHandler';
 
 export default function StaffSoldProductPage() {
   const [data, setData] = useState([]);
@@ -12,7 +13,7 @@ export default function StaffSoldProductPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [hideUnsold, setHideUnsold] = useState(false);
 
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
 
   useEffect(() => {
     fetchData();
@@ -37,7 +38,8 @@ export default function StaffSoldProductPage() {
 
       setData(mapped);
     } catch (err) {
-      console.error('Error fetching staff sold product stats:', err);
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'SALES_FETCH_FAILED', fallbackMessage: 'Staff sales data could not be loaded.' }));
       setError(err.message);
     } finally {
       setLoading(false);

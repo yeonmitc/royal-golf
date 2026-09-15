@@ -5,6 +5,7 @@ import { PencilIcon, TrashIcon } from '../../components/common/Icons';
 import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
 import { useToast } from '../../context/ToastContext';
+import { normalizeAppError } from '../../utils/errorHandler';
 import {
   useAddCashTransactionMutation,
   useCashBalances,
@@ -27,7 +28,7 @@ const ACCOUNT_OPTIONS = Object.keys(ACCOUNT_LABELS).map((key) => ({
 }));
 
 export default function CashManagementModal({ open, onClose }) {
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const { data: balances, isLoading: loadingBalances } = useCashBalances();
   const { data: transactions = [], isLoading: loadingTransactions } = useCashTransactions(200);
   const addMutation = useAddCashTransactionMutation();
@@ -68,7 +69,7 @@ export default function CashManagementModal({ open, onClose }) {
       setForm((prev) => ({ ...prev, amount: '', memo: '' }));
     } catch (err) {
       console.error(err);
-      showToast(err.message || 'Failed to save transaction');
+      showToastTyped(normalizeAppError(err, { code: 'CASH_SAVE_FAILED', fallbackMessage: 'Transaction could not be saved.' }));
     }
   };
 
@@ -79,7 +80,7 @@ export default function CashManagementModal({ open, onClose }) {
       showToast('삭제되었습니다.');
     } catch (err) {
       console.error(err);
-      showToast('삭제 실패');
+      showToastTyped(normalizeAppError(err, { code: 'CASH_DELETE_FAILED', fallbackMessage: 'Transaction could not be deleted.' }));
     }
   };
 
@@ -161,7 +162,8 @@ export default function CashManagementModal({ open, onClose }) {
       showToast('Updated');
       closeEdit();
     } catch (e) {
-      showToast(String(e?.message || 'Failed to update'));
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'CASH_UPDATE_FAILED', fallbackMessage: 'Transaction could not be updated.' }));
     }
   };
 

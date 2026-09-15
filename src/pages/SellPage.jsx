@@ -22,6 +22,7 @@ import { useProductInventoryList } from '../features/products/productHooks';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
 import { useCartStore } from '../store/cartStore';
+import { normalizeAppError } from '../utils/errorHandler';
 import {
   buildRentalSig,
   formatRentalLabel,
@@ -33,9 +34,13 @@ import { formatSizeDisplay } from '../utils/sizeMapper';
 export default function SellPage() {
   const [code, setCode] = useState('');
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
 
-  const { data: guides } = useQuery({ queryKey: ['guides'], queryFn: getGuides });
+  const { data: guides } = useQuery({
+    queryKey: ['guides'],
+    queryFn: getGuides,
+    staleTime: 1000 * 60 * 5,
+  });
 
   const cartItems = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
@@ -235,7 +240,11 @@ export default function SellPage() {
       }
     } catch (e) {
       console.error(e);
-      showToast(e.message || 'The sale could not be saved. Please try again.');
+      const { appCode, rawCode, message } = normalizeAppError(e, {
+        code: e?.isOffline ? 'OFFLINE_SAVE_FAILED' : 'SALE_INSERT_FAILED',
+        fallbackMessage: 'The sale could not be saved. Please try again.',
+      });
+      showToastTyped({ type: 'error', code: appCode, message, rawCode });
     }
   };
 

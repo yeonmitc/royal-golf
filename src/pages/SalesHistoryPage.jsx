@@ -130,7 +130,11 @@ export default function SalesHistoryPage() {
     query: filters.query,
   });
 
-  const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
+  const { data: guides = [] } = useQuery({
+    queryKey: ['guides', 'active'],
+    queryFn: getGuides,
+    staleTime: 1000 * 60 * 5,
+  });
   const guideFilterOptions = useMemo(
     () =>
       (guides || [])

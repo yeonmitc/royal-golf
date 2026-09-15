@@ -1,5 +1,6 @@
 import { useToast } from '../../context/ToastContext';
 import { exportToTsv } from '../../utils/csvExport';
+import { normalizeAppError } from '../../utils/errorHandler';
 import Button from './Button';
 
 async function ensureGapiLoaded() {
@@ -59,7 +60,7 @@ export default function ExportActions({
 }) {
   const hasRows = Array.isArray(rows) && rows.length > 0;
   const canDrive = !!(import.meta.env.VITE_GOOGLE_API_KEY && import.meta.env.VITE_GOOGLE_CLIENT_ID);
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
 
   const finalFilename =
     typeof filename === 'string' && filename.toLowerCase().endsWith('.csv')
@@ -143,8 +144,9 @@ export default function ExportActions({
         body: multipartRequestBody,
       });
       showToast('Uploaded to Google Drive.');
-    } catch {
-      showToast('Google Drive upload unavailable.');
+    } catch (e) {
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'EXPORT_FAILED', fallbackMessage: 'Google Drive upload unavailable.' }));
     }
   }
 

@@ -1,14 +1,36 @@
 import { sbSelect, sbInsert, sbRpc } from '../../db/supabaseRest';
 
+const GUIDE_CACHE_KEY = 'rg_guides_cache';
+
 /**
  * Get all active guides (with guide_type, fixed_commission_rate, employee_id)
+ * Caches to localStorage for offline fallback.
  */
 export async function getGuides() {
-  return sbSelect('guides', {
-    select: 'id, name, is_active, guide_type, normalized_name, commission_enabled, fixed_commission_rate, employee_id',
-    filters: [{ column: 'is_active', op: 'eq', value: true }],
-    order: { column: 'name', ascending: true },
-  });
+  try {
+    const guides = await sbSelect('guides', {
+      select: 'id, name, is_active, guide_type, normalized_name, commission_enabled, fixed_commission_rate, employee_id',
+      filters: [{ column: 'is_active', op: 'eq', value: true }],
+      order: { column: 'name', ascending: true },
+    });
+    try {
+      localStorage.setItem(GUIDE_CACHE_KEY, JSON.stringify(guides));
+    } catch {
+      // localStorage full or unavailable — non-fatal
+    }
+    return guides;
+  } catch (err) {
+    // Offline or network error — try localStorage cache
+    try {
+      const cached = localStorage.getItem(GUIDE_CACHE_KEY);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {
+      // corrupted cache — non-fatal
+    }
+    throw err;
+  }
 }
 
 /**

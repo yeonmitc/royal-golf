@@ -4,6 +4,7 @@ import Button from '../common/Button';
 import { useChecklistDaily, useUpsertChecklistDailyMutation } from '../../features/checklist/checklistHooks';
 import { useToast } from '../../context/ToastContext';
 import { useAdminStore } from '../../store/adminStore';
+import { normalizeAppError } from '../../utils/errorHandler';
 
 const DEFAULT_ITEMS = [
   'Open the door for 2 hours and check attendance stamp (MUST FIRST)',
@@ -96,7 +97,7 @@ function toSharedRecord(dayRow, maxItems) {
 
 export default function ChecklistModal({ open, onClose, employeeNames }) {
   const { mutate: upsertChecklist, isPending } = useUpsertChecklistDailyMutation();
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
 
   const [now, setNow] = useState(() => new Date());
@@ -347,7 +348,8 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
             showToast('DB에 checklist_daily 테이블이 없습니다. SQL 실행 후 다시 저장하세요.');
             return;
           }
-          showToast(msg || 'Save failed.');
+          console.error(err);
+          showToastTyped(normalizeAppError(err, { code: 'CHECKLIST_SAVE_FAILED', fallbackMessage: 'Checklist save failed.' }));
         },
       }
     );

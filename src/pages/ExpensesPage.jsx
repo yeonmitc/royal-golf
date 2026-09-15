@@ -6,6 +6,7 @@ import ExportActions from '../components/common/ExportActions';
 import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
+import { normalizeAppError } from '../utils/errorHandler';
 import CashManagementModal from '../features/cash/CashManagementModal';
 import {
   useCreateExpenseMutation,
@@ -65,7 +66,7 @@ class ErrorBoundary extends React.Component {
 
 export default function ExpensesPage() {
   // Mobile UI Optimization: Force Refresh
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
 
@@ -169,7 +170,7 @@ export default function ExpensesPage() {
       showToast('Expense deleted.');
     } catch (e) {
       console.error(e);
-      showToast('Failed to delete expense.');
+      showToastTyped(normalizeAppError(e, { code: 'EXPENSE_DELETE_FAILED', fallbackMessage: 'Expense could not be deleted.' }));
     }
   };
 
@@ -551,7 +552,7 @@ export default function ExpensesPage() {
 
 function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
   const safeCategories = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const createMutation = useCreateExpenseMutation();
   const updateMutation = useUpdateExpenseMutation();
 
@@ -681,9 +682,10 @@ function ExpenseFormContent({ categories, initialData, onSuccess, onCancel }) {
       else if (!initialData) setFormData((p) => ({ ...p, title: '', amount: '' }));
     } catch (e) {
       console.error(e);
-      showToast(
-        e?.message || (initialData ? 'Failed to update expense.' : 'Failed to add expense.')
-      );
+      showToastTyped(normalizeAppError(e, {
+        code: initialData ? 'EXPENSE_UPDATE_FAILED' : 'EXPENSE_CREATE_FAILED',
+        fallbackMessage: initialData ? 'Expense could not be updated.' : 'Expense could not be created.',
+      }));
     }
   };
 

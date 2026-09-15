@@ -30,7 +30,7 @@ function formatAgoShort(isoDate) {
 }
 
 export default function OfflineStatusBar() {
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const [online, setOnline] = useState(() => isBrowserOnline());
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingChecks, setPendingChecks] = useState(0);
@@ -187,15 +187,49 @@ export default function OfflineStatusBar() {
           console.info('[OfflineStatusBar] syncSales info:', msg);
         },
       });
-      showToast(
-        result?.message ||
-          (result?.failed
-            ? `${result.success} synced, ${result.failed} failed.`
-            : 'Sales records synced successfully.')
-      );
+      if (result?.failed > 0 && result?.errors?.length > 0) {
+        const uniqueErrors = [...new Set(result.errors.map((e) => e.error))];
+        const isStockIssue = uniqueErrors.some(
+          (e) =>
+            String(e || '')
+              .toLowerCase()
+              .includes('stock') ||
+            String(e || '')
+              .toLowerCase()
+              .includes('inventory')
+        );
+        const detail = uniqueErrors[0] || '';
+        const shortDetail = detail.length > 80 ? detail.slice(0, 77) + '...' : detail;
+        const errorForRaw = result.errors[0]?.error || '';
+        const rawCode = errorForRaw.match(/Code:\s*(\S+)/)?.[1] || (isStockIssue ? 'P0001' : null);
+        showToastTyped({
+          type: 'error',
+          code: isStockIssue ? 'OFFLINE_SYNC_STOCK_CONFLICT' : 'OFFLINE_SYNC_FAILED',
+          message: isStockIssue
+            ? `Insufficient stock during offline sale sync. ${result.success > 0 ? `${result.success} synced. ` : ''}${result.failed} failed. Please restock and try again.`
+            : `${result.message || `${result.failed} sale(s) could not be synced.`} ${shortDetail}`,
+          rawCode,
+        });
+      } else {
+        showToast(
+          result?.message ||
+            (result?.failed
+              ? `${result.success} synced, ${result.failed} failed.`
+              : 'Sales records synced successfully.')
+        );
+      }
     } catch (e) {
-      console.error(e);
-      showToast(`Sync failed: ${e?.message || String(e).slice(0, 80)}`);
+      console.error('[OfflineStatusBar] handleSyncSales:', e);
+      const errInfo = normalizeAppError(e, {
+        code: 'OFFLINE_SYNC_FAILED',
+        fallbackMessage: 'Sync failed. Please try again.',
+      });
+      showToastTyped({
+        type: 'error',
+        code: errInfo.appCode,
+        message: errInfo.message,
+        rawCode: errInfo.rawCode,
+      });
     } finally {
       await refreshCounts();
       setSyncingSales(false);

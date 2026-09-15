@@ -4,11 +4,12 @@ import Input from '../common/Input';
 import Button from '../common/Button';
 import { useProcessRefundMutation } from '../../features/sales/salesHooks';
 import { useToast } from '../../context/ToastContext';
+import { normalizeAppError } from '../../utils/errorHandler';
 
 export default function RefundModal({ open, onClose, saleItem }) {
   const [reason, setReason] = useState('');
   const [err, setErr] = useState('');
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   
   const { mutateAsync: processRefund, isPending } = useProcessRefundMutation();
 
@@ -50,6 +51,7 @@ export default function RefundModal({ open, onClose, saleItem }) {
     } catch (e) {
       console.error('Refund failed:', e);
       setErr('Refund failed: ' + (e.message || 'Unknown error'));
+      showToastTyped(normalizeAppError(e, { code: 'REFUND_FAILED', fallbackMessage: 'Refund could not be processed.' }));
     }
   }
 

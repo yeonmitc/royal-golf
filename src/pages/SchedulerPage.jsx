@@ -6,9 +6,10 @@ import { useToast } from '../context/ToastContext';
 import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../db/supabaseRest';
 import { useEmployees } from '../features/employees/employeesHooks';
 import { useAdminStore } from '../store/adminStore';
+import { normalizeAppError } from '../utils/errorHandler';
 
 export default function SchedulerPage() {
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const { data: employees = [] } = useEmployees();
 
@@ -487,7 +488,8 @@ export default function SchedulerPage() {
         );
         return;
       }
-      showToast(msg);
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'SCHEDULE_FETCH_FAILED', fallbackMessage: 'Schedule data could not be loaded.' }));
     } finally {
       setLoading(false);
     }
@@ -927,7 +929,8 @@ export default function SchedulerPage() {
         await loadMonth();
       }
     } catch (err) {
-      showToast(String(err?.message || err));
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'SCHEDULE_UPDATE_FAILED', fallbackMessage: 'Schedule update failed.' }));
     } finally {
       setBusy(false);
       setDragOverDateKey(null);
@@ -1098,7 +1101,8 @@ export default function SchedulerPage() {
             await deleteSchedule(row.id);
             await loadMonth();
           } catch (err) {
-            showToast(String(err?.message || err));
+            console.error(err);
+            showToastTyped(normalizeAppError(err, { code: 'SCHEDULE_DELETE_FAILED', fallbackMessage: 'Schedule delete failed.' }));
           } finally {
             setBusy(false);
           }
@@ -1149,7 +1153,8 @@ export default function SchedulerPage() {
                 await deleteSchedule(row.id);
                 await loadMonth();
               } catch (err) {
-                showToast(String(err?.message || err));
+                console.error(err);
+                showToastTyped(normalizeAppError(err, { code: 'SCHEDULE_DELETE_FAILED', fallbackMessage: 'Schedule delete failed.' }));
               } finally {
                 setBusy(false);
               }
@@ -1208,7 +1213,8 @@ export default function SchedulerPage() {
       showToast(`월 스케줄 초기화 완료: ${monthStartKey} ~ ${monthEndKey}`);
       await loadMonth();
     } catch (err) {
-      showToast(String(err?.message || err));
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'SCHEDULE_UPDATE_FAILED', fallbackMessage: 'Schedule reset failed.' }));
     } finally {
       setBusy(false);
       setResetMonthOpen(false);
@@ -1226,7 +1232,8 @@ export default function SchedulerPage() {
       });
       await loadMonth();
     } catch (err) {
-      showToast(String(err?.message || err));
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'SCHEDULE_UPDATE_FAILED', fallbackMessage: 'Auto month generation failed.' }));
     } finally {
       setBusy(false);
     }
@@ -1585,7 +1592,8 @@ export default function SchedulerPage() {
                 });
                 showToast(`Marked paid: ${payrollResult.startDate} ~ ${payrollResult.endDate}`);
               } catch (e) {
-                showToast('Failed to save: ' + (e.message || ''));
+                console.error(e);
+                showToastTyped(normalizeAppError(e, { code: 'PAYROLL_SAVE_FAILED', fallbackMessage: 'Payroll save failed.' }));
               }
             }}
             disabled={paidPeriods.some((p) => p.payDate === payrollResult.payDate)}

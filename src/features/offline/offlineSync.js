@@ -389,6 +389,10 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
   const errors = [];
 
   for (const [groupId, g] of byGroup.entries()) {
+    // Track per-group failures so finalize only runs when ALL rows in a group succeed.
+    let groupFailCount = 0;
+    const groupErrors = [];
+
     // First: insert or skip the sale_groups row for this transaction group.
     let groupDbId = null;
     try {
@@ -438,10 +442,20 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
       }
       if (!groupDbId) {
         // Group insert failed completely → mark all rows as FAILED.
+        const errMsg = `Group insert failed: ${e?.message || e}`;
+        console.error('[offlineSync] sale_groups INSERT failed:', {
+          groupId,
+          error: e?.message || String(e),
+          guideId: g.guide_id,
+          guideName: g.local_guide_name,
+          rowCount: g.rows.length,
+        });
         for (const r of g.rows) {
-          await markOfflineSaleFailed(r.local_id, `Group insert failed: ${e?.message || e}`);
+          await markOfflineSaleFailed(r.local_id, errMsg);
           failCount += 1;
-          errors.push({ local_id: r.local_id, error: e?.message || String(e) });
+          groupFailCount += 1;
+          errors.push({ local_id: r.local_id, error: errMsg });
+          groupErrors.push({ local_id: r.local_id, code: r.code, error: errMsg });
         }
         continue;
       }
@@ -480,15 +494,28 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
         await removeOfflineSale(r.local_id);
         successCount += 1;
       } catch (e) {
-        await markOfflineSaleFailed(r.local_id, e?.message || String(e));
+        const errMsg = String(e?.message || 'Unknown error');
+        console.error('[offlineSync] sales INSERT failed:', {
+          localId: r.local_id,
+          code: r.code,
+          size: r.size_std,
+          qty: r.qty,
+          price: r.price,
+          groupId,
+          groupDbId,
+          error: errMsg,
+        });
+        await markOfflineSaleFailed(r.local_id, errMsg);
         failCount += 1;
-        errors.push({ local_id: r.local_id, error: e?.message || String(e) });
+        groupFailCount += 1;
+        errors.push({ local_id: r.local_id, error: errMsg });
+        groupErrors.push({ local_id: r.local_id, code: r.code, error: errMsg });
       }
     }
 
     // After all sales rows: finalize the group via dedicated RPC (snapshot overwrite).
-    // Called once per group, not per row. Non-fatal if RPC is not deployed yet.
-    if (failCount === 0) {
+    // Called once per group, only when ALL rows in this group succeeded.
+    if (groupFailCount === 0) {
       try {
         await sbRpc('finalize_offline_sale_group', {
           p_group_id: groupDbId,
@@ -497,6 +524,11 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
       } catch (finalizeErr) {
         console.warn('[offlineSync] finalize_offline_sale_group non-fatal:', finalizeErr);
       }
+    } else {
+      console.warn(
+        `[offlineSync] Group ${groupId} had ${groupFailCount} failure(s), skipping finalize.`,
+        groupErrors
+      );
     }
   }
 
@@ -512,6 +544,24 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
     message = `${failCount} sale could not be synced. Please try again.`;
   }
   if (onInfo && message) onInfo(message);
+
+  // Log detailed error summary for debugging
+  if (failCount > 0) {
+    const uniqueErrors = [...new Set(errors.map((e) => e.error))];
+    const isStockIssue = uniqueErrors.some(
+      (e) => e.toLowerCase().includes('stock') || e.toLowerCase().includes('inventory')
+    );
+    console.error('[offlineSync] Sync failures summary:', {
+      total: pending.length,
+      success: successCount,
+      failed: failCount,
+      duplicate: duplicateCount,
+      remaining: stillLeft,
+      uniqueErrors,
+      isStockIssue,
+      errors,
+    });
+  }
 
   // After successful sync, refresh today's sales cache
   if (successCount > 0) {

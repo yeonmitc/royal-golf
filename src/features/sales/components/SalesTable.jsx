@@ -11,6 +11,7 @@ import PriceEditModal from '../../../components/sales/PriceEditModal';
 import ReceiptModal from '../../../components/sales/ReceiptModal';
 import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
+import { normalizeAppError } from '../../../utils/errorHandler';
 import codePartsSeed from '../../../db/seed/seed-code-parts.json';
 import {
   buildGuideAssignmentPayload,
@@ -36,7 +37,7 @@ export default function SalesTable({
   isError = false,
   error = null,
 }) {
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const [refundOpen, setRefundOpen] = useState(false);
@@ -65,7 +66,11 @@ export default function SalesTable({
   const [colorEditTarget, setColorEditTarget] = useState(null);
   const [rentalContactOpen, setRentalContactOpen] = useState(false);
   const [rentalContact, setRentalContact] = useState(null);
-  const { data: guides = [] } = useQuery({ queryKey: ['guides', 'active'], queryFn: getGuides });
+  const { data: guides = [] } = useQuery({
+    queryKey: ['guides', 'active'],
+    queryFn: getGuides,
+    staleTime: 1000 * 60 * 5,
+  });
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
   const { mutateAsync: updateColor } = useUpdateSaleItemColorMutation();
   const { mutateAsync: setSaleTime, isPending: savingTime } = useSetSaleTimeMutation();
@@ -199,8 +204,12 @@ export default function SalesTable({
       scope: 'item',
     })
       .catch((e) => {
-        console.error(e);
-        showToast('Ella 우선 품목 자동 저장에 실패했습니다.');
+        showToastTyped(
+          normalizeAppError(e, {
+            code: 'SALE_UPDATE_FAILED',
+            fallbackMessage: 'Ella 우선 품목 자동 저장에 실패했습니다.',
+          })
+        );
       })
       .finally(() => {
         autoEllaRunningRef.current = false;
@@ -300,6 +309,12 @@ export default function SalesTable({
     } catch (e) {
       console.error(e);
       setTimeError('시간 수정에 실패했습니다.');
+      showToastTyped(
+        normalizeAppError(e, {
+          code: 'SALE_UPDATE_FAILED',
+          fallbackMessage: '시간 수정에 실패했습니다.',
+        })
+      );
     }
   }
 
@@ -365,7 +380,9 @@ export default function SalesTable({
             Waiting to sync
           </span>
         </span>
-      ) : soldAtTime,
+      ) : (
+        soldAtTime
+      ),
       code: row.code,
       color:
         (row.color || '').trim() === 'Mix' &&
@@ -987,7 +1004,12 @@ export default function SalesTable({
                     showToast('Admin required.');
                     return;
                   }
-                  showToast(msg || 'Failed to set guide.');
+                  showToastTyped(
+                    normalizeAppError(e, {
+                      code: 'SALE_UPDATE_FAILED',
+                      fallbackMessage: 'Failed to set guide.',
+                    })
+                  );
                 }
               }}
               disabled={settingGuide}
@@ -1124,7 +1146,12 @@ export default function SalesTable({
             showToast('Color updated.');
           } catch (e) {
             console.error(e);
-            showToast('Failed to update color.');
+            showToastTyped(
+              normalizeAppError(e, {
+                code: 'SALE_UPDATE_FAILED',
+                fallbackMessage: 'Failed to update color.',
+              })
+            );
           }
         }}
       />

@@ -6,9 +6,10 @@ import { getSupabaseConfigSummary, sbDelete, sbInsert, sbSelect } from '../db/su
 import { useEmployees } from '../features/employees/employeesHooks';
 import { getProductInventoryList } from '../features/products/productApi';
 import * as csvExport from '../utils/csvExport';
+import { normalizeAppError } from '../utils/errorHandler';
 
 export default function SettingsPage() {
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const [busy, setBusy] = useState(false);
   const cfg = getSupabaseConfigSummary();
   const { data: employees = [] } = useEmployees();
@@ -106,7 +107,8 @@ export default function SettingsPage() {
       });
       showToast('Sales backup downloaded.');
     } catch (e) {
-      showToast(e?.message || 'Supabase request failed.');
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: 'Sales backup download failed.' }));
     } finally {
       setBusy(false);
     }
@@ -124,7 +126,8 @@ export default function SettingsPage() {
           'Supabase 설정이 없습니다. .env에 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY를 넣어주세요.'
         );
       } else {
-        showToast(msg || 'Supabase request failed.');
+        console.error(e);
+        showToastTyped(normalizeAppError(e, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: 'Supabase connection test failed.' }));
       }
     } finally {
       setBusy(false);
@@ -155,7 +158,8 @@ export default function SettingsPage() {
         );
         return;
       }
-      showToast(msg);
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: 'Schedule data could not be loaded.' }));
     } finally {
       setScheduleLoading(false);
     }
@@ -264,7 +268,8 @@ export default function SettingsPage() {
         );
         return;
       }
-      showToast(msg);
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: 'Auto schedule generation failed.' }));
     } finally {
       setBusy(false);
     }

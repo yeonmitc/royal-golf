@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { sbRpc } from '../db/supabaseRest';
 import ProductLookup from '../features/products/components/ProductLookup';
 import { useAdminStore } from '../store/adminStore';
+import { normalizeAppError } from '../utils/errorHandler';
 
 export default function SoldProductPage() {
   const [data, setData] = useState([]);
@@ -20,7 +21,7 @@ export default function SoldProductPage() {
   const [modalCode, setModalCode] = useState('');
   const [editMode, setEditMode] = useState(false);
 
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
 
   useEffect(() => {
@@ -57,7 +58,8 @@ export default function SoldProductPage() {
 
       setData(mapped);
     } catch (err) {
-      console.error('Error fetching sold product stats:', err);
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'SALES_FETCH_FAILED', fallbackMessage: 'Sales data could not be loaded.' }));
       setError(err.message);
     } finally {
       setLoading(false);

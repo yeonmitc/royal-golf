@@ -12,6 +12,7 @@ import { useAdminStore } from '../../store/adminStore';
 import Button from '../common/Button';
 import DateInput from '../common/DateInput';
 import Modal from '../common/Modal';
+import { normalizeAppError } from '../../utils/errorHandler';
 
 // Helper to get score based on time diff with discrete buckets
 // Rules:
@@ -400,7 +401,7 @@ export default function AttendanceModal({ open, onClose }) {
   const [selectedShift, setSelectedShift] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [hoverKey, setHoverKey] = useState(null);
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const navigate = useNavigate();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
@@ -692,7 +693,8 @@ export default function AttendanceModal({ open, onClose }) {
               setAlertMessage(msg);
               setAlertOpen(true);
             } else {
-              showToast(msg);
+              console.error(err);
+              showToastTyped(normalizeAppError(err, { code: 'ATTENDANCE_SAVE_FAILED', fallbackMessage: 'Failed to check in.' }));
             }
           },
         }
@@ -815,11 +817,12 @@ export default function AttendanceModal({ open, onClose }) {
           if (isCompact) {
             setAlertTone('error');
             setAlertTitle('Admin Edit Failed');
-            setAlertMessage(msg);
-            setAlertOpen(true);
-          } else {
-            showToast(msg);
-          }
+              setAlertMessage(msg);
+              setAlertOpen(true);
+            } else {
+              console.error(err);
+              showToastTyped(normalizeAppError(err, { code: 'ATTENDANCE_UPDATE_FAILED', fallbackMessage: 'Failed to update attendance.' }));
+            }
         },
       }
     );
@@ -864,7 +867,8 @@ export default function AttendanceModal({ open, onClose }) {
             setAlertMessage(msg);
             setAlertOpen(true);
           } else {
-            showToast(msg);
+            console.error(err);
+            showToastTyped(normalizeAppError(err, { code: 'ATTENDANCE_DELETE_FAILED', fallbackMessage: 'Failed to delete attendance.' }));
           }
         },
       }

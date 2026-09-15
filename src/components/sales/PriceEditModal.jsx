@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { useUpdateSalePriceMutation } from '../../features/sales/salesHooks';
+import { normalizeAppError } from '../../utils/errorHandler';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import Modal from '../common/Modal';
@@ -8,7 +9,7 @@ import Modal from '../common/Modal';
 export default function PriceEditModal({ open, onClose, saleItem, mode = 'edit' }) {
   const [price, setPrice] = useState('');
   const [err, setErr] = useState('');
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
 
   const { mutateAsync: updatePrice, isPending } = useUpdateSalePriceMutation();
 
@@ -54,7 +55,8 @@ export default function PriceEditModal({ open, onClose, saleItem, mode = 'edit' 
       onClose?.();
       showToast(mode === 'exchange' ? 'Exchange saved.' : 'Price updated.');
     } catch (e) {
-      console.error('Update failed:', e);
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'SALE_UPDATE_FAILED', fallbackMessage: 'Price update failed.' }));
       setErr('Update failed: ' + (e.message || 'Unknown error'));
     }
   }

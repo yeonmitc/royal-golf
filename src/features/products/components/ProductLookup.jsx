@@ -11,6 +11,7 @@ import {
 } from '../productHooks';
 import { useToast } from '../../../context/ToastContext';
 import { useAdminStore } from '../../../store/adminStore';
+import { normalizeAppError } from '../../../utils/errorHandler';
 import { validateProductCode, isProductCodeExists } from '../productApi';
 import { getSizeOptionsByCode } from '../../../utils/sizeMapper';
 
@@ -26,7 +27,7 @@ export default function ProductLookup({
   const { data: prod, refetch } = useProductWithInventory(code);
   const [editLocal, setEditLocal] = useState(Boolean(autoEdit));
   const edit = editMode !== undefined ? Boolean(editMode) : editLocal;
-  const { showToast } = useToast();
+  const { showToast, showToastTyped } = useToast();
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const isAdmin = useAdminStore((s) => s.isAuthorized());
 
@@ -229,8 +230,12 @@ export default function ProductLookup({
       await refetch();
     } catch (e) {
       const msg = String(e?.message || e);
-      if (msg === 'ADMIN_REQUIRED') openLoginModal();
-      showToast(msg === 'ADMIN_REQUIRED' ? 'Admin required.' : `Update failed: ${msg}`);
+      if (msg === 'ADMIN_REQUIRED') {
+        openLoginModal();
+        return;
+      }
+      console.error(e);
+      showToastTyped(normalizeAppError(e, { code: 'PRODUCT_FETCH_FAILED', fallbackMessage: 'Product update failed.' }));
     }
   }
 
