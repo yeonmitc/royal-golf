@@ -81,8 +81,18 @@ export function normalizeAppError(error, { code, fallbackMessage = 'Unexpected e
 
   const classification = classifyError(error);
   const rawCode = extractRawCode(error) || extractSupabaseErrorCode(error) || classification;
-  const appCode = code || (`${classification}_ERROR`);
+  let appCode = code || (`${classification}_ERROR`);
   const message = extractMessage(error, fallbackMessage);
+
+  // Auto-upgrade appCode for DB constraint violations to avoid misleading labels
+  const msgLower = String(error?.message || '').toLowerCase();
+  if (msgLower.includes('violates foreign key') || rawCode === '23503') {
+    appCode = 'DB_FK_VIOLATION';
+  } else if (msgLower.includes('duplicate key') || rawCode === '23505') {
+    appCode = 'DB_DUPLICATE_KEY';
+  } else if (msgLower.includes('insufficient stock') || rawCode === 'P0001') {
+    appCode = 'STOCK_INSUFFICIENT';
+  }
 
   console.error(`[${appCode}]`, error);
   return { type: 'error', code: appCode, rawCode, message };

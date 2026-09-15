@@ -56,6 +56,7 @@ export function useProductInventoryList(options = {}) {
   return useQuery({
     queryKey: ['inventory', 'withProducts'],
     queryFn: getProductInventoryList,
+    networkMode: 'always',       // run query even when browser is offline, so IDB fallback works
     ...options,
   });
 }

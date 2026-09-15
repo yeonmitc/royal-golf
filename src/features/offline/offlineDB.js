@@ -49,6 +49,91 @@ export async function getAllCachedProducts() {
   }
 }
 
+/**
+ * Option B: Derive offline available inventory WITHOUT mutating product_cache.
+ * Returns a Map<productCode, Map<sizeStd, availableQty>>.
+ *
+ * availableQty = product_cache qty − UNSYNCED offline_sales qty for same SKU.
+ */
+export async function getOfflineAvailableInventoryMap() {
+  try {
+    const [products, unsold] = await Promise.all([
+      db.table('product_cache').toArray(),
+      db
+        .table('offline_sales')
+        .where('sync_status')
+        .anyOf(['PENDING', 'FAILED'])
+        .toArray(),
+    ]);
+
+    // Build deduction map: code|size → total unsynced qty
+    const deduction = new Map(); // key: `${code}||${size}`
+    for (const r of unsold || []) {
+      const key = `${String(r.code || '').trim()}||${String(r.size_std || 'Free').trim() || 'Free'}`;
+      deduction.set(key, (deduction.get(key) || 0) + (Number(r.qty) || 0));
+    }
+
+    // Build available map: code → { size → qty }
+    const result = new Map();
+    for (const p of products || []) {
+      const code = String(p.code || '').trim();
+      if (!code || !p.sizes_json) continue;
+      let sizesObj;
+      try {
+        sizesObj = typeof p.sizes_json === 'string' ? JSON.parse(p.sizes_json) : p.sizes_json;
+      } catch {
+        continue;
+      }
+      if (!sizesObj || typeof sizesObj !== 'object') continue;
+
+      const sizeMap = new Map();
+      for (const [sizeLabel, rawQty] of Object.entries(sizesObj)) {
+        if (sizeLabel === 'updatedAt' || sizeLabel === 'updated_at') continue;
+        const cached = Number(rawQty) || 0;
+        const sizeKey = String(sizeLabel || 'Free').trim() || 'Free';
+        const dedKey = `${code}||${sizeKey}`;
+        const deducted = deduction.get(dedKey) || 0;
+        sizeMap.set(sizeKey, Math.max(0, cached - deducted));
+      }
+      result.set(code, sizeMap);
+    }
+    return result;
+  } catch (e) {
+    console.warn('[offlineDB] getOfflineAvailableInventoryMap failed:', e);
+    return new Map();
+  }
+}
+
+/**
+ * Convert the available inventory map to the same shape as getProductInventoryList()
+ * so SellPage stockMap works identically for offline/online.
+ */
+export async function buildOfflineInventoryList() {
+  const products = await getAllCachedProducts();
+  const availMap = await getOfflineAvailableInventoryMap();
+  return products
+    .filter((p) => String(p.code || '').trim() && p.sizes_json)
+    .map((p) => {
+      const code = String(p.code).trim();
+      const sizeMap = availMap.get(code) || new Map();
+      const sizes = [];
+      for (const [sizeKey, qty] of sizeMap.entries()) {
+        sizes.push({ size: sizeKey, stockQty: qty, display: sizeKey });
+      }
+      return {
+        code,
+        name: p.name || '',
+        totalStock: sizes.reduce((sum, s) => sum + (Number(s.stockQty) || 0), 0),
+        sizes,
+        salePrice: p.sale_price || 0,
+        free_gift: p.free_gift || false,
+        check_status: 'unchecked',
+        check_updated_at: null,
+        _source: 'offline_cache',
+      };
+    });
+}
+
 export async function getCachedProductByCode(code) {
   try {
     return await db.table('product_cache').get(String(code || '').trim());

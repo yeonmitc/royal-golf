@@ -110,12 +110,13 @@ export function ToastProvider({ children }) {
       {children}
       {createPortal(
         <div
+          aria-live="polite"
           style={{
             position: 'fixed',
             top: 24,
             left: '50%',
             transform: 'translateX(-50%)',
-            zIndex: 9999,
+            zIndex: 2147483647,
             display: 'flex',
             flexDirection: 'column',
             gap: 12,

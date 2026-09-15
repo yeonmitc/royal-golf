@@ -30,6 +30,7 @@ import {
   saveRentalMetaForSoldAt,
 } from '../utils/rentalMeta';
 import { formatSizeDisplay } from '../utils/sizeMapper';
+import { isBrowserOnline } from '../features/offline/offlineDB';
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -72,6 +73,14 @@ export default function SellPage() {
       map.set(code, sizeMap);
     }
     return map;
+  }, [inventoryList]);
+
+  // Cold Offline Guard: if offline AND product cache has never been loaded, block sell.
+  const isOfflineNoCache = useMemo(() => {
+    if (isBrowserOnline()) return false;
+    // inventoryList from offline fallback = product_cache; if empty/null, cache never loaded
+    if (!inventoryList || inventoryList.length === 0) return true;
+    return false;
   }, [inventoryList]);
 
   const guideKey = String(guideId || '');
@@ -305,6 +314,30 @@ export default function SellPage() {
           />
         </div>
       </div>
+
+      {/* Cold Offline Guard */}
+      {isOfflineNoCache && (
+        <div
+          style={{
+            background: '#7f1d1d',
+            border: '1px solid #ef4444',
+            borderRadius: 12,
+            padding: '20px 24px',
+            margin: '0 0 16px',
+            color: '#fca5a5',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: '#fee2e2' }}>
+            Offline Sales Unavailable
+          </div>
+          This terminal has not synced product and inventory data yet. Offline sales require at
+          least one successful sync while connected to the internet.
+          <br />
+          <strong>Connect to the internet once to initialize this terminal, then try again.</strong>
+        </div>
+      )}
 
       {/* Body: scan result + cart (row layout, stacked on mobile) */}
       <div className="stack-mobile" style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>

@@ -4,6 +4,7 @@ import { sbDelete, sbInsert, sbSelect, sbUpdate, sbRpc } from '../../db/supabase
 import { requireAdminOrThrow } from '../../utils/admin';
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { getSizeOptionsByCode } from '../../utils/sizeMapper';
+import { buildOfflineInventoryList } from '../offline/offlineDB';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
 
@@ -502,6 +503,14 @@ export async function getProductInventoryList() {
     );
   } catch (e) {
     if (!isNetworkFailure(e)) throw e;
+
+    // Offline fallback: use product_cache with unsynced sales deducted (Option B).
+    // This gives accurate local available stock without mutating the cache.
+    try {
+      return await buildOfflineInventoryList();
+    } catch {
+      // Fallback to legacy Dexie tables if offlineDB unavailable
+    }
 
     const [products, inventoryRows] = await Promise.all([
       db.products.orderBy('code').toArray(),

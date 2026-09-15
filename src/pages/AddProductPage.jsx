@@ -129,6 +129,21 @@ export default function AddProductPage() {
     return (found?.label || found?.labelKo || code || '').trim();
   }
 
+  /** Resolve a stored value (which may be label or code) to the canonical code_part code. */
+  function canonicalCode(group, value) {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    // 1) Already a valid code?
+    const byCode = allCodeParts.find((p) => p.group === group && p.code === v);
+    if (byCode) return byCode.code;
+    // 2) Match by label (case-insensitive) — handles legacy label-as-code stores
+    const byLabel = allCodeParts.find(
+      (p) => p.group === group && String(p.label || '').toLowerCase() === v.toLowerCase()
+    );
+    if (byLabel) return byLabel.code;
+    return v; // unknown — pass through to preserve existing behavior
+  }
+
   function ceilToUnit(value, unit) {
     const v = Number(value);
     const u = Number(unit);
@@ -160,11 +175,12 @@ export default function AddProductPage() {
   const expenseAmountKrw = (Number(priceCny || 0) || 0) * totalQty * 223;
 
   async function recomputeCode(next = {}) {
-    const c = next.category ?? category;
-    const g = next.kind ?? kind;
-    const t = next.type ?? type;
-    const b = next.brand ?? brand;
-    const k = next.color ?? color;
+    // Canonicalize: resolve labels to codes (handles legacy localStorage stores)
+    const c = canonicalCode('category', next.category ?? category);
+    const g = canonicalCode('kind', next.kind ?? kind);
+    const t = canonicalCode('type', next.type ?? type);
+    const b = canonicalCode('brand', next.brand ?? brand);
+    const k = canonicalCode('color', next.color ?? color);
 
     if (!(c && g && t && b && k)) {
       setCodePreview('');

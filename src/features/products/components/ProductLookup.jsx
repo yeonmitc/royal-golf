@@ -235,7 +235,7 @@ export default function ProductLookup({
         return;
       }
       console.error(e);
-      showToastTyped(normalizeAppError(e, { code: 'PRODUCT_FETCH_FAILED', fallbackMessage: 'Product update failed.' }));
+      showToastTyped(normalizeAppError(e, { code: 'PRODUCT_UPDATE_FAILED', fallbackMessage: 'Product update failed.' }));
     }
   }
 

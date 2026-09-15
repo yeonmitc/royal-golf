@@ -13,6 +13,7 @@ import {
 import { isBrowserOnline, countUnsyncedStockChecks } from './offlineDB';
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
+const STALE_WARN_MS = 12 * 60 * 60 * 1000; // 12 hours (offline warning threshold)
 
 function formatAgoShort(isoDate) {
   if (!isoDate) return 'never';
@@ -275,6 +276,15 @@ export default function OfflineStatusBar() {
     return !Number.isFinite(t) || Date.now() - t >= 7 * 24 * 60 * 60 * 1000;
   })();
 
+  // Warn immediately when offline + cache older than 12hr
+  const isStaleWarnOffline =
+    !online &&
+    (() => {
+      if (!syncedAt) return true;
+      const t = Date.parse(String(syncedAt));
+      return !Number.isFinite(t) || Date.now() - t >= STALE_WARN_MS;
+    })();
+
   const onlineGreen = '#22c55e';
   const offlineOrange = '#f59e0b';
   const dotColor = online ? onlineGreen : offlineOrange;
@@ -332,16 +342,25 @@ export default function OfflineStatusBar() {
       {cachedCount > 0 ? (
         <span
           style={{
-            color: isLongStale ? '#ef4444' : isStale ? '#f59e0b' : 'var(--text-muted)',
+            color: isLongStale
+              ? '#ef4444'
+              : isStale
+                ? '#f59e0b'
+                : isStaleWarnOffline
+                  ? '#f59e0b'
+                  : 'var(--text-muted)',
             fontSize: 12,
           }}
         >
           Products cached: {cachedCount}
           {syncedAt ? ` (${formatAgoShort(syncedAt)})` : ''}
-          {(isStale || syncStatus === 'failed') && (
+          {(isLongStale || syncStatus === 'failed') && (
             <span style={{ color: isLongStale ? '#ef4444' : '#f59e0b', marginLeft: 4 }}>
               {syncStatus === 'failed' ? ' - last sync failed' : ' - needs sync'}
             </span>
+          )}
+          {isStaleWarnOffline && !isLongStale && syncStatus !== 'failed' && (
+            <span style={{ color: '#f59e0b', marginLeft: 4 }}>- cached prices may be outdated</span>
           )}
         </span>
       ) : (
