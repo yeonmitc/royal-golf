@@ -1458,15 +1458,21 @@ export async function updateSalePrice({ saleGroupId, saleId, price, markExchange
     patch.free_gift = false;
   }
 
+  let updatedRows;
   try {
-    await sbUpdate('sales', patch, { filters, returning: 'minimal' });
+    updatedRows = await sbUpdate('sales', patch, { filters, returning: 'representation' });
   } catch (e) {
     const msg = String(e?.message || '').toLowerCase();
     if (patch.is_exchanged && (msg.includes('is_exchanged') || msg.includes('is exchanged'))) {
-      await sbUpdate('sales', { price: p }, { filters, returning: 'minimal' });
+      updatedRows = await sbUpdate('sales', { price: p }, { filters, returning: 'representation' });
     } else {
       throw e;
     }
+  }
+
+  if (!Array.isArray(updatedRows) || updatedRows.length === 0 ||
+      updatedRows.some((row) => row.price == null || Number(row.price) !== p)) {
+    throw new Error('Price update could not be confirmed. Refresh and try again.');
   }
 
   try {
@@ -1709,31 +1715,8 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     })
     .filter((r) => r.qty > 0);
 
-  try {
-    const toFix = normalized
-      .filter((n) => n.isPeter && !n.isRefunded)
-      .filter((n) => {
-        const listUnit = Number(n.listPricePhp || 0) || 0;
-        const unit =
-          Number(n.discountUnitPricePhp != null ? n.discountUnitPricePhp : n.unitPricePhp || 0) ||
-          0;
-        return listUnit > 1000 && unit === listUnit;
-      });
-    for (const n of toFix) {
-      const base = Number(n.listPricePhp || 0) || 0;
-      const next = Math.ceil((base * 0.8) / 100) * 100;
-      if (next && next !== base) {
-        await sbUpdate(
-          'sales',
-          { price: next, list_price: base },
-          { filters: [{ column: 'id', op: 'eq', value: n.saleId }], returning: 'minimal' }
-        );
-        n.discountUnitPricePhp = next;
-      }
-    }
-  } catch (e) {
-    console.warn('Auto-enforce Peter discount failed:', e?.message || e);
-  }
+  // History reads must preserve saved prices, including administrator overrides.
+  // Guide discounts are applied when selling or explicitly changing the guide.
 
   const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
   const withMeta = withMetaRaw.map((r) => ({
