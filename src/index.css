@@ -196,6 +196,7 @@ small { font-size: var(--font-sm); }
   border: 1px solid var(--border-soft);
   padding: var(--sp-lg) 18px;
   box-shadow: var(--shadow-lg);
+  min-width: 0;
 }
 
 /* 햄버거 버튼 기본: 항상 보임 (모바일) */
@@ -238,6 +239,21 @@ small { font-size: var(--font-sm); }
     width: 100%;
     margin: 0 auto;
     padding: var(--sp-md);
+    min-width: 0;
+  }
+
+  .scheduler-page-card,
+  .scheduler-page-card > .stack-mobile,
+  .scheduler-page-card > .stack-mobile > div {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  main[data-scroll-root='main'] {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   table {
     display: block;

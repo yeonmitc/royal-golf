@@ -493,7 +493,7 @@ export default function SchedulerPage() {
     } finally {
       setLoading(false);
     }
-  }, [monthStartKey, monthEndKey, showToast]);
+  }, [monthStartKey, monthEndKey, showToast, showToastTyped]);
 
   useEffect(() => {
     void loadMonth();
@@ -519,11 +519,6 @@ export default function SchedulerPage() {
   }, [rows]);
 
   const getDayList = (dateKey) => scheduleByDate.get(dateKey) || [];
-  const getDayCount = (dateKey) => getDayList(dateKey).length;
-  const getDayHasEmployee = (dateKey, employeeId) =>
-    getDayList(dateKey).some((r) => String(r.employee_id) === String(employeeId));
-  const getDayHasShift = (dateKey, shiftType) =>
-    getDayList(dateKey).some((r) => String(r.shift_type) === String(shiftType));
 
   const buildManualSchedulePayload = useCallback(() => {
     if (!manualScheduleAvailable) {
@@ -573,94 +568,6 @@ export default function SchedulerPage() {
     },
     [isAdmin, employeeKeyById, employees]
   );
-
-  const getDayCapacity = (dateKey) => {
-    const d = parseDateKey(dateKey);
-    if (!d) return 2;
-    return 2;
-  };
-
-  const validateShiftRules = ({ dateKey, shiftType, employeeId }) => {
-    const d = parseDateKey(dateKey);
-    if (!d) return { ok: false, message: 'Invalid date.' };
-
-    const empKey = employeeKeyById.get(employeeId);
-    if (shiftType === 'manual') {
-      return { ok: true };
-    }
-    if (shiftType === 'all_day') return { ok: true };
-
-    if (empKey === 'berlyn' || empKey === 'janice') {
-      const otherKey = (k) => (k === 'berlyn' ? 'janice' : 'berlyn');
-      const weekMonday = getWeekMonday(d);
-      const weekMorningKeys = new Set();
-      const weekEveningKeys = new Set();
-      for (let i = 0; i < 7; i += 1) {
-        const wk = toDateKey(addDays(weekMonday, i));
-        (scheduleByDate.get(wk) || []).forEach((r) => {
-          const k = employeeKeyById.get(r.employee_id);
-          if (k !== 'berlyn' && k !== 'janice') return;
-          if (r.shift_type === 'morning') weekMorningKeys.add(k);
-          if (r.shift_type === 'evening') weekEveningKeys.add(k);
-        });
-      }
-
-      const existingMorning = Array.from(weekMorningKeys);
-      const existingEvening = Array.from(weekEveningKeys);
-
-      if (existingMorning.length > 1) {
-        return {
-          ok: false,
-          message: '해당 주(월요일 기준)의 morning 배정이 이미 섞여있습니다. 먼저 정리해주세요.',
-        };
-      }
-      if (existingEvening.length > 1) {
-        return {
-          ok: false,
-          message: '해당 주(월요일 기준)의 evening 배정이 이미 섞여있습니다. 먼저 정리해주세요.',
-        };
-      }
-
-      let weekMorning = existingMorning[0] || null;
-      let weekEvening = existingEvening[0] || null;
-
-      if (!weekMorning && !weekEvening) {
-        if (shiftType === 'morning') {
-          weekMorning = empKey;
-          weekEvening = otherKey(empKey);
-        } else if (shiftType === 'evening') {
-          weekEvening = empKey;
-          weekMorning = otherKey(empKey);
-        }
-      } else if (weekMorning && !weekEvening) {
-        weekEvening = otherKey(weekMorning);
-      } else if (!weekMorning && weekEvening) {
-        weekMorning = otherKey(weekEvening);
-      }
-
-      if (weekMorning && weekEvening && weekMorning === weekEvening) {
-        return {
-          ok: false,
-          message: '해당 주(월요일 기준)의 morning/evening 규칙이 깨져있습니다. 먼저 정리해주세요.',
-        };
-      }
-
-      if (shiftType === 'morning' && weekMorning && weekMorning !== empKey) {
-        return { ok: false, message: '해당 주는 morning 담당이 고정입니다. (월요일 기준)' };
-      }
-      if (shiftType === 'evening' && weekEvening && weekEvening !== empKey) {
-        return { ok: false, message: '해당 주는 evening 담당이 고정입니다. (월요일 기준)' };
-      }
-      if (shiftType === 'morning' && weekEvening && weekEvening === empKey) {
-        return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
-      }
-      if (shiftType === 'evening' && weekMorning && weekMorning === empKey) {
-        return { ok: false, message: '해당 주에서 morning/evening 담당이 서로 바뀔 수 없습니다.' };
-      }
-    }
-
-    return { ok: true };
-  };
 
   const grid = useMemo(() => {
     const blanks = Array.from({ length: monthStart.getDay() }).map((_, i) => ({
@@ -833,7 +740,6 @@ export default function SchedulerPage() {
 
   const moveSchedule = async ({
     scheduleId,
-    fromDateKey,
     toDateKey: targetDateKey,
     employeeId,
     nextShift,
@@ -1679,10 +1585,10 @@ export default function SchedulerPage() {
         </div>
       </div>
 
-      <section className="page-card">
+      <section className="page-card scheduler-page-card">
         <div
           className="flex gap-4 stack-mobile"
-          style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}
+          style={{ display: 'flex', gap: 16, alignItems: 'stretch', minWidth: 0 }}
         >
           {isAdmin && !isMobile && (
             <div
@@ -1876,7 +1782,7 @@ export default function SchedulerPage() {
               {payrollCalculator}
             </div>
           )}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}>
             {isMobile && (
               <div
                 style={{

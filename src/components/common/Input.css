@@ -3,6 +3,7 @@
   flex-direction: column;
   gap: var(--sp-xs);
   width: 100%;
+  min-width: 0;
 }
 
 .input-label {
@@ -15,6 +16,9 @@
 
 .input-field {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 10px 16px;
 
   border-radius: var(--radius-full);
@@ -86,6 +90,13 @@
 .date-input-shell {
   position: relative;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.date-input-shell .input-field {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .date-input-control {
