@@ -251,9 +251,31 @@ small { font-size: var(--font-sm); }
 
   main[data-scroll-root='main'] {
     min-height: 0;
+    height: calc(100dvh - var(--header-height, 64px) - 47px) !important;
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .app-layout {
+    height: auto !important;
+    min-height: 100dvh;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .app-layout main[data-scroll-root='main'] {
+    flex: 0 0 auto;
+    height: auto !important;
+    min-height: calc(100dvh - var(--header-height, 64px) - 47px);
+    overflow: visible;
+    touch-action: auto;
   }
   table {
     display: block;

@@ -89,20 +89,38 @@
 
 .date-input-shell {
   position: relative;
-  width: 100%;
-  min-width: 0;
+  width: 0;
+  min-width: 100%;
   max-width: 100%;
 }
 
 .date-input-shell .input-field {
-  min-width: 0;
+  display: block;
+  width: 100% !important;
+  min-width: 100%;
   max-width: 100%;
+  inline-size: 100%;
 }
 
 .date-input-control {
   color-scheme: dark;
   padding-right: 48px !important;
   cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .date-input-shell,
+  .date-input-shell .input-field {
+    width: 0 !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    inline-size: 100% !important;
+  }
+
+  .date-input-shell .input-field {
+    appearance: none;
+    -webkit-appearance: none;
+  }
 }
 
 .date-input-control::-webkit-calendar-picker-indicator {

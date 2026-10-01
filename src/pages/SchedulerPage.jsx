@@ -2003,6 +2003,7 @@ export default function SchedulerPage() {
             )}
             {isMobile && payrollCalculator && (
               <div
+                className="scheduler-mobile-payroll"
                 style={{
                   marginTop: 12,
                   display: 'grid',
@@ -2011,6 +2012,7 @@ export default function SchedulerPage() {
                   borderRadius: 16,
                   border: '1px solid var(--border-soft)',
                   background: 'rgba(255,255,255,0.03)',
+                  overflow: 'visible',
                 }}
               >
                 {payrollCalculator}

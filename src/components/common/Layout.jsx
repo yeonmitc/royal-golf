@@ -6,7 +6,7 @@ import OfflineStatusBar from '../../features/offline/OfflineStatusBar';
 
 export default function Layout({ children }) {
   return (
-    <div className="flex flex-col h-screen bg-[var(--bg-main)] text-[var(--text-main)]">
+    <div className="app-layout flex flex-col h-screen bg-[var(--bg-main)] text-[var(--text-main)]">
       <Header />
       <OfflineStatusBar />
       <main
