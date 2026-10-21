@@ -249,6 +249,7 @@ export async function checkoutCart(payload) {
   let isMrMoon = false;
   let isPeter = false;
   let isKakaoFriend = false;
+  let isNowtravel = false;
 
   if (!Array.isArray(payload) && payload?.items) {
     cartItems = payload.items;
@@ -257,6 +258,7 @@ export async function checkoutCart(payload) {
     isMrMoon = payload.isMrMoon;
     isPeter = Boolean(payload.isPeter);
     isKakaoFriend = Boolean(payload.isKakaoFriend);
+    isNowtravel = Boolean(payload.isNowtravel);
   }
 
   if (guideId) {
@@ -393,6 +395,9 @@ export async function checkoutCart(payload) {
     } else if (isKakaoFriend && unitPriceOriginal > 1000) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
     }
+        if (isNowtravel && unitPriceOriginal > 1000) {
+          calculatedPrice = Math.ceil((unitPriceOriginal * 0.85) / 10) * 10;
+        }
 
     const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
     // If item.unitPricePhp matches original, we use calculatedPrice.
@@ -404,7 +409,7 @@ export async function checkoutCart(payload) {
 
     const unitPriceCharged = isExplicitlyFree
       ? 0
-      : isPeter || isMrMoon
+      : isPeter || isMrMoon || isNowtravel
         ? calculatedPrice
         : isKakaoFriend
           ? calculatedPrice
@@ -501,6 +506,7 @@ async function fallbackSaveOfflineCart(params) {
     isMrMoon,
     isPeter,
     isKakaoFriend,
+    isNowtravel,
     saleRows,
     totalAmount,
     totalQty,
@@ -517,6 +523,9 @@ async function fallbackSaveOfflineCart(params) {
     guideRateSnapshot = 0.1;
   } else if (isKakaoFriend) {
     guideNameSnapshot = 'Kakao Friend';
+    guideRateSnapshot = 0;
+  } else if (isNowtravel) {
+    guideNameSnapshot = 'nowtravel (15% Cash Discount)';
     guideRateSnapshot = 0;
   } else if (localGuideName) {
     guideNameSnapshot = String(localGuideName || '').trim();
@@ -610,6 +619,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
   let isMrMoon = false;
   let isPeter = false;
   let isKakaoFriend = false;
+  let isNowtravel = false;
 
   if (!Array.isArray(payload) && payload?.items) {
     cartItems = payload.items;
@@ -618,6 +628,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
     isMrMoon = payload.isMrMoon;
     isPeter = Boolean(payload.isPeter);
     isKakaoFriend = Boolean(payload.isKakaoFriend);
+    isNowtravel = Boolean(payload.isNowtravel);
   }
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -655,11 +666,14 @@ export async function checkoutCartWithOfflineFallback(payload) {
       } else if (isKakaoFriend && unitPriceOriginal > 1000) {
         calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
       }
+      if (isNowtravel && unitPriceOriginal > 1000) {
+        calculatedPrice = Math.ceil((unitPriceOriginal * 0.85) / 10) * 10;
+      }
       const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
       const isExplicitlyFree = item.unitPricePhp === 0 || Boolean(product.freeGift);
       const unitPriceCharged = isExplicitlyFree
         ? 0
-        : isPeter || isMrMoon
+        : isPeter || isMrMoon || isNowtravel
           ? calculatedPrice
           : isKakaoFriend
             ? calculatedPrice
@@ -746,6 +760,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
       isMrMoon,
       isPeter,
       isKakaoFriend,
+      isNowtravel,
       saleRows,
       totalAmount,
       totalQty,
@@ -834,6 +849,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
         isMrMoon,
         isPeter,
         isKakaoFriend,
+        isNowtravel,
         saleRows,
         totalAmount,
         totalQty,
@@ -1190,6 +1206,7 @@ export async function setSaleGroupGuide({
   const specialLocalGuideName = guide ? '' : String(localGuideName || '').trim();
   const isKakaoGuide =
     !guide && (Boolean(isKakaoFriend) || specialLocalGuideName === KAKAO_FRIEND_ID);
+  const isNowtravelGuide = !guide && specialLocalGuideName === '__NOWTRAVEL__';
 
   let guideNameNorm = '';
   if (guide) {
@@ -1272,6 +1289,7 @@ export async function setSaleGroupGuide({
         } else if ((isMrMoon || isKakaoGuide) && base > 1000) {
           nextPrice = Math.ceil((base * 0.9) / 100) * 100;
         }
+        if (isNowtravelGuide && base > 1000) nextPrice = Math.ceil((base * 0.85) / 10) * 10;
       }
 
       const patch = {};
@@ -2290,7 +2308,7 @@ export async function getAnalytics({
   const giftQty = giftRows.reduce((sum, r) => sum + (Number(r?.qty ?? 0) || 0), 0);
   const giftListAmount = giftRows.reduce((sum, r) => {
     const qty = Number(r?.qty ?? 0) || 0;
-    const unit = Number(r?.list_price ?? r?.price ?? 0) || 0;
+    const unit = Number(r?.price ?? 0) || 0;
     return sum + unit * qty;
   }, 0);
 

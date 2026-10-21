@@ -47,12 +47,14 @@ export async function checkoutCart(cartItems) {
   let isMrMoon = false;
   let isPeter = false;
   let isKakaoFriend = false;
+  let isNowtravel = false;
 
   if (!Array.isArray(cartItems) && cartItems?.items) {
     itemsPayload = cartItems.items;
     isMrMoon = Boolean(cartItems.isMrMoon);
     isPeter = Boolean(cartItems.isPeter);
     isKakaoFriend = Boolean(cartItems.isKakaoFriend);
+    isNowtravel = Boolean(cartItems.isNowtravel);
   }
 
   if (!Array.isArray(itemsPayload) || itemsPayload.length === 0) {
@@ -106,6 +108,8 @@ export async function checkoutCart(cartItems) {
           unitPriceCharged = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
         } else if (isMrMoon && unitPriceOriginal > 1000) {
           unitPriceCharged = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
+        } else if (isNowtravel && unitPriceOriginal > 1000) {
+          unitPriceCharged = Math.ceil((unitPriceOriginal * 0.85) / 10) * 10;
         } else if (isKakaoFriend && unitPriceOriginal > 1000) {
           unitPriceCharged = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
         }

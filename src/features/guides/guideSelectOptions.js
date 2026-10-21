@@ -1,4 +1,5 @@
 export const KAKAO_FRIEND_ID = '__KAKAO_FRIEND__';
+export const NOWTRAVEL_ID = '__NOWTRAVEL__';
 export const ONLINE_ID = '__ONLINE__';
 export const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
 
@@ -10,13 +11,14 @@ export function normalizeGuideName(name) {
 
 export function isSpecialLocalGuideName(name) {
   const value = String(name || '').trim();
-  return value === ONLINE_ID || value === KAKAO_FRIEND_ID;
+  return value === ONLINE_ID || value === KAKAO_FRIEND_ID || value === NOWTRAVEL_ID;
 }
 
 export function formatLocalGuideLabel(name) {
   const value = String(name || '').trim();
   if (value === ONLINE_ID) return 'Online';
   if (value === KAKAO_FRIEND_ID) return 'Kakao (10% Cash Discount)';
+  if (value === NOWTRAVEL_ID) return 'nowtravel (15% Cash Discount)';
   return value;
 }
 
@@ -76,9 +78,9 @@ export function getGuideSelectOptions(guides = []) {
       label: String(guide.name || ''),
     })),
     {
-      value: ONLINE_ID,
-      label: 'Online',
-      style: { backgroundColor: 'rgba(168,85,247,0.3)', color: 'var(--text-main)' },
+      value: NOWTRAVEL_ID,
+      label: 'nowtravel (15% Cash Discount)',
+      style: { backgroundColor: 'rgba(168,85,247,0.5)', color: 'var(--text-main)' },
     },
   ].filter(Boolean);
 }

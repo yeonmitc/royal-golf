@@ -15,6 +15,7 @@ import { getGuides } from '../features/guides/guideApi';
 import {
   getGuideSelectOptions,
   KAKAO_FRIEND_ID,
+  NOWTRAVEL_ID,
   LOCAL_GUIDE_ID,
   ONLINE_ID,
 } from '../features/guides/guideSelectOptions';
@@ -85,6 +86,7 @@ export default function SellPage() {
 
   const guideKey = String(guideId || '');
   const isKakaoFriendSelected = guideKey === KAKAO_FRIEND_ID;
+  const isNowtravelSelected = guideKey === NOWTRAVEL_ID;
   const isOnlineSelected = guideKey === ONLINE_ID;
   const isLocalGuideSelected = guideKey === LOCAL_GUIDE_ID;
   const selectedGuide =
@@ -115,7 +117,7 @@ export default function SellPage() {
   const [selectedLocalGuideId, setSelectedLocalGuideId] = useState(''); // existing local guide ID
 
   // Calculate item price with cash discount logic
-  // Mr.Moon: 10%, Sir Peter: 20%, Kakao: 10%
+  // Mr.Moon: 10%, Sir Peter: 20%, Kakao: 10%, nowtravel: 15%
   // 정상가 1,000 PHP 이하: 할인 없음
   // 정상가 1,000 PHP 초과: 할인 적용 후 100 PHP 단위 올림
   const calculateItemPrice = (price) => {
@@ -123,6 +125,9 @@ export default function SellPage() {
     if (p <= 1000) return p;
     if (isPeterSelected) {
       return Math.ceil((p * 0.8) / 100) * 100;
+    }
+    if (isNowtravelSelected && p > 1000) {
+      return Math.ceil((p * 0.85) / 10) * 10;
     }
     if (isMrMoonSelected || isKakaoFriendSelected) {
       return Math.ceil((p * 0.9) / 100) * 100;
@@ -176,6 +181,7 @@ export default function SellPage() {
         guideId:
           currentGuideKey === LOCAL_GUIDE_ID ||
           currentGuideKey === KAKAO_FRIEND_ID ||
+          currentGuideKey === NOWTRAVEL_ID ||
           currentGuideKey === ONLINE_ID
             ? null
             : currentGuideId,
@@ -184,12 +190,15 @@ export default function SellPage() {
             ? String(currentLocalGuideName || '').trim()
             : currentGuideKey === KAKAO_FRIEND_ID
               ? KAKAO_FRIEND_ID
-              : currentGuideKey === ONLINE_ID
-                ? ONLINE_ID
-                : '',
+              : currentGuideKey === NOWTRAVEL_ID
+                ? NOWTRAVEL_ID
+                : currentGuideKey === ONLINE_ID
+                  ? ONLINE_ID
+                  : '',
         isMrMoon: isMrMoonSelected,
         isPeter: isPeterSelected,
         isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
+        isNowtravel: currentGuideKey === NOWTRAVEL_ID,
       });
 
       const receiptItems = currentItems.map((item) => {
@@ -615,6 +624,11 @@ export default function SellPage() {
                       }
                       if (v === KAKAO_FRIEND_ID) {
                         setGuideId(KAKAO_FRIEND_ID);
+                        setLocalGuideName('');
+                        return;
+                      }
+                      if (v === NOWTRAVEL_ID) {
+                        setGuideId(NOWTRAVEL_ID);
                         setLocalGuideName('');
                         return;
                       }
