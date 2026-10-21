@@ -127,7 +127,7 @@ export default function SellPage() {
       return Math.ceil((p * 0.8) / 100) * 100;
     }
     if (isNowtravelSelected && p > 1000) {
-      return Math.ceil((p * 0.85) / 10) * 10;
+      return Math.ceil((p * 0.85) / 100) * 100;
     }
     if (isMrMoonSelected || isKakaoFriendSelected) {
       return Math.ceil((p * 0.9) / 100) * 100;

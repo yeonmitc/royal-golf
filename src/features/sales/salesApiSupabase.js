@@ -392,7 +392,7 @@ export async function checkoutCart(payload) {
       calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
     }
         if (isNowtravel && unitPriceOriginal > 1000) {
-          calculatedPrice = Math.ceil((unitPriceOriginal * 0.85) / 10) * 10;
+          calculatedPrice = Math.ceil((unitPriceOriginal * 0.85) / 100) * 100;
         }
 
     const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
@@ -663,7 +663,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
         calculatedPrice = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
       }
       if (isNowtravel && unitPriceOriginal > 1000) {
-        calculatedPrice = Math.ceil((unitPriceOriginal * 0.85) / 10) * 10;
+        calculatedPrice = Math.ceil((unitPriceOriginal * 0.85) / 100) * 100;
       }
       const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
       const isExplicitlyFree = item.unitPricePhp === 0 || Boolean(product.freeGift);
@@ -1285,7 +1285,7 @@ export async function setSaleGroupGuide({
         } else if ((isMrMoon || isKakaoGuide) && base > 1000) {
           nextPrice = Math.ceil((base * 0.9) / 100) * 100;
         }
-        if (isNowtravelGuide && base > 1000) nextPrice = Math.ceil((base * 0.85) / 10) * 10;
+        if (isNowtravelGuide && base > 1000) nextPrice = Math.ceil((base * 0.85) / 100) * 100;
       }
 
       const patch = {};

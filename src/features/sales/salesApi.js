@@ -109,7 +109,7 @@ export async function checkoutCart(cartItems) {
         } else if (isMrMoon && unitPriceOriginal > 1000) {
           unitPriceCharged = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
         } else if (isNowtravel && unitPriceOriginal > 1000) {
-          unitPriceCharged = Math.ceil((unitPriceOriginal * 0.85) / 10) * 10;
+          unitPriceCharged = Math.ceil((unitPriceOriginal * 0.85) / 100) * 100;
         } else if (isKakaoFriend && unitPriceOriginal > 1000) {
           unitPriceCharged = Math.ceil((unitPriceOriginal * 0.9) / 100) * 100;
         }
