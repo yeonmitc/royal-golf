@@ -1,6 +1,7 @@
 // src/features/offline/OfflineStatusBar.jsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '../../context/ToastContext';
+import { normalizeAppError } from '../../utils/errorHandler';
 import {
   countPendingOfflineSales,
   getProductsSyncStatus,

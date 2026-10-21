@@ -73,11 +73,6 @@ function offlineSalesToNormalized(rows) {
 /**
  * Get today's date key (YYYY-MM-DD) in local time.
  */
-function todayDateKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 /**
  * Merge server rows with unsynced offline_sales, avoiding duplicates.
  * An offline sale is considered duplicate if its offline_group_id matches
@@ -92,7 +87,6 @@ async function mergeWithOfflineSales(serverResult, fromDate, toDate) {
     // Filter offline sales to the requested date range
     const fromKey = String(fromDate || '').trim();
     const toKey = String(toDate || '').trim();
-    const todayKey = todayDateKey();
 
     const filtered = pending.filter((r) => {
       const soldAt = String(r.sold_at || '');

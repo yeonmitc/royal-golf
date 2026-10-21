@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 
 const containerVariants = {
   hidden: {},
@@ -17,25 +17,25 @@ const itemVariants = {
 
 export function StaggerContainer({ children, className }) {
   return (
-    <motion.div
+    <Motion.div
       initial="hidden"
       animate="visible"
       variants={containerVariants}
       className={className}
     >
       {children}
-    </motion.div>
+    </Motion.div>
   );
 }
 
 export function StaggerItem({ children, className }) {
   return (
-    <motion.div
+    <Motion.div
       variants={itemVariants}
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className={className}
     >
       {children}
-    </motion.div>
+    </Motion.div>
   );
 }

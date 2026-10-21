@@ -219,11 +219,7 @@ async function attachLocalProductMeta(items) {
     const product = productMap.get(i.code);
     const qtyN = Number(i.qty || 0) || 0;
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
-    const isExchanged = Boolean(i.isExchanged);
-    const isFreeGift = !isExchanged && (Boolean(i.freeGift ?? false) || i.unitPricePhp === 0);
     const localGuideName = String(i.localGuideName || '').trim();
-    const isOnline = localGuideName === '__ONLINE__';
-    const hasAnyGuide = (Boolean(i.guideId) || Boolean(localGuideName)) && !isOnline;
     const commission = 0; // commission comes from sale_groups.guide_commission via DB
     const unitForTotal = Number(i.discountUnitPricePhp ?? i.unitPricePhp ?? 0) || 0;
     return {
@@ -1195,7 +1191,7 @@ export async function setSaleGroupGuide({
   guideId,
   localGuideName = '',
   isKakaoFriend = false,
-  guideRate = 0.1,
+  guideRate: _guideRate = 0.1,
   scope = 'group',
 } = {}) {
   requireAdminOrThrow();
@@ -1694,15 +1690,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const isExchanged = Boolean(r.is_exchanged ?? false);
       const isFreeGift = !isExchanged && (Boolean(r.free_gift ?? false) || unit === 0);
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
-      const isOnline = !guideId && localGuideName === '__ONLINE__';
       const isKakaoGuide = !guideId && localGuideName === KAKAO_FRIEND_ID;
-      const isNowtravelDiscount = !guideId && localGuideName === '__NOWTRAVEL__';
-      const isLocalGuide =
-        !guideId &&
-        !!localGuideName &&
-        !isOnline &&
-        !isKakaoGuide &&
-        !isNowtravelDiscount;
 
       return {
         saleId: r.id,
@@ -2143,13 +2131,8 @@ export async function getAnalytics({
   rows = rowsWithCommission;
 
   const totalRevenue = rows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
-  const totalCommission = [...new Set(rows.map((r) => String(r.saleGroupId || '').trim()))]
-    .filter(Boolean)
-    .reduce((sum, gid) => sum + (Number(groupCommissionMap.get(gid) || 0) || 0), 0);
-  let mrMoonCommission = 0;
   let mrMoonRevenue = 0;
   let mrMoonDiscountAmount = 0;
-  let ellaCommission = 0;
   let kakaoRevenue = 0;
   let kakaoDiscountAmount = 0;
   let peterRevenue = 0;
@@ -2162,7 +2145,6 @@ export async function getAnalytics({
       const discountRow = listP > 0 && priceP > 0 ? Math.max(listP - priceP, 0) * qtyN : 0;
 
       if (r.isMrMoon) {
-        mrMoonCommission += Number(r.commission || 0) || 0;
         mrMoonRevenue += Number(r.lineTotalPhp || 0) || 0;
         mrMoonDiscountAmount += discountRow;
       }
@@ -2176,10 +2158,8 @@ export async function getAnalytics({
       }
     });
   } catch {
-    mrMoonCommission = 0;
     mrMoonRevenue = 0;
     mrMoonDiscountAmount = 0;
-    ellaCommission = 0;
     kakaoRevenue = 0;
     kakaoDiscountAmount = 0;
     peterRevenue = 0;
@@ -2213,8 +2193,6 @@ export async function getAnalytics({
   // Subtract Mr.Moon, employee, Peter commissions from total
   // Use guide_type from groupMap if available, fallback to name matching
   let displayedGuideCommission = 0;
-  let mrMoonCommissionTotal = 0;
-  let employeeCommissionTotal = 0;
   const commissionGroupIds = [
     ...new Set(rows.map((r) => String(r.saleGroupId || '').trim())),
   ].filter(Boolean);
@@ -2226,11 +2204,7 @@ export async function getAnalytics({
     if (!guideId) continue;
     const raw = String(guideMap.get(String(guideId)) || '');
     const norm = raw.toLowerCase().replace(/[\s.]/g, '');
-    if (norm.includes('mrmoon')) {
-      mrMoonCommissionTotal += gcomm;
-    } else if (norm.includes('ella') || norm.includes('peter')) {
-      employeeCommissionTotal += gcomm;
-    } else {
+    if (!norm.includes('mrmoon') && !norm.includes('ella') && !norm.includes('peter')) {
       displayedGuideCommission += gcomm;
     }
   }
@@ -2238,8 +2212,6 @@ export async function getAnalytics({
   const netAmount = realTotalSales - profitCommissionExpense;
 
   const aov = transactionCount ? realTotalSales / transactionCount : 0;
-
-  const discountRate = 0.1;
 
   const codesForCost = [...new Set(rows.map((r) => String(r.code || '').trim()))].filter(Boolean);
   let kpriceByCode = new Map();

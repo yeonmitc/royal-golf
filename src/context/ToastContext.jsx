@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { sanitizeText } from '../utils/errorHandler';
 
 const ToastContext = createContext(null);
@@ -128,7 +128,7 @@ export function ToastProvider({ children }) {
               const typeStyle = TYPE_STYLES[toast.type] || TYPE_STYLES.warning;
               const isError = toast.type === 'error';
               return (
-                <motion.div
+                <Motion.div
                     key={toast.id}
                     layout
                     variants={toastVariants}
@@ -185,7 +185,7 @@ export function ToastProvider({ children }) {
                         Copy
                       </button>
                     )}
-                  </motion.div>
+                  </Motion.div>
               );
             })}
           </AnimatePresence>

@@ -174,7 +174,7 @@ export default function SalesTable({
   const guideNameById = new Map(
     (guides || []).map((g) => [String(g.id), String(g.name || '').trim()])
   );
-  const guideOptions = useMemo(() => getGuideSelectOptions(guides), [guides]);
+  const guideOptions = getGuideSelectOptions(guides);
 
   useEffect(() => {
     if (!isAdmin || !ellaGuideId || autoEllaRunningRef.current) return;

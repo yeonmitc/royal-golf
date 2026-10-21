@@ -1,5 +1,5 @@
 // src/components/common/Header.jsx
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
@@ -36,7 +36,6 @@ export default function Header() {
       try {
         const s = await getProductsSyncStatus();
         if (!active) return;
-        const stamp = s?.syncedAt ? Date.parse(String(s.syncedAt)) : 0;
         const ready = (s?.cachedCount || 0) > 0;
         setSyncStatus({ syncedAt: s?.syncedAt || null, cachedCount: s?.cachedCount || 0, ready });
       } catch {
@@ -505,7 +504,7 @@ export default function Header() {
               background: 'rgba(0,0,0,0.55)',
             }}
           >
-            <motion.aside
+            <Motion.aside
               id="mobile-navigation"
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
@@ -669,7 +668,7 @@ export default function Header() {
                   📦 Check Stock
                 </NavLink>
               </nav>
-            </motion.aside>
+            </Motion.aside>
           </div>,
           document.body
         )}

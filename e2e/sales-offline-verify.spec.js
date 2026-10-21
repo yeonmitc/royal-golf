@@ -2,7 +2,7 @@
 // Production E2E: Real offline sale via Sell Product UI → Sync → Supabase verify
 // Uses actual checkoutCartWithOfflineFallback path (no IDB direct insertion)
 
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 const BASE = 'https://yeonmitc.github.io/royal-golf/';
 const TIMEOUT = 60000;
@@ -257,7 +257,9 @@ test.describe('Real Offline Sale via UI', () => {
         await receiptClose.click();
         await page.waitForTimeout(1000);
       }
-    } catch {}
+    } catch {
+      // The receipt modal may not be open.
+    }
 
     await page.goto(BASE + 'sales', { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
     await page.waitForTimeout(5000);

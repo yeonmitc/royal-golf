@@ -1,10 +1,10 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 
 export default function LoadingOverlay({ visible = false }) {
   if (!visible) return null;
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -20,7 +20,7 @@ export default function LoadingOverlay({ visible = false }) {
         zIndex: 'var(--z-modal, 300)',
       }}
     >
-      <motion.div
+      <Motion.div
         animate={{ rotate: 360 }}
         transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
         style={{
@@ -31,6 +31,6 @@ export default function LoadingOverlay({ visible = false }) {
           borderTopColor: 'var(--gold-soft, #f3d47a)',
         }}
       />
-    </motion.div>
+    </Motion.div>
   );
 }

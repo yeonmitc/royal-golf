@@ -25,7 +25,7 @@ let _syncProductsInFlight = null;
  * and fully replace the IndexedDB cache.
  * Duplicate-safe: if a sync is already running, returns the same promise.
  */
-export async function syncProductsToCache({ onInfo, force = false } = {}) {
+export async function syncProductsToCache({ onInfo, force: _force = false } = {}) {
   if (_syncProductsInFlight) {
     if (onInfo) onInfo('Sync already in progress, waiting...');
     return _syncProductsInFlight;
@@ -216,8 +216,6 @@ let _scheduleIntervalId = null;
  */
 function getLastScheduledTimeMs() {
   const now = new Date();
-  const h = now.getHours();
-  const m = now.getMinutes();
   const todayBase = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
   // Find the latest scheduled time that has passed today

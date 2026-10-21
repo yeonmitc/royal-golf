@@ -1,8 +1,8 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 
 export default function Card({ title, subtitle, actions, children, className = '' }) {
   return (
-    <motion.section
+    <Motion.section
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
@@ -39,6 +39,6 @@ export default function Card({ title, subtitle, actions, children, className = '
         </div>
       )}
       {children}
-    </motion.section>
+    </Motion.section>
   );
 }

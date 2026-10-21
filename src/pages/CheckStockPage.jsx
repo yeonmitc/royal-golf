@@ -225,7 +225,7 @@ export default function CheckStockPage() {
           // Offline: save to IndexedDB
           try {
             const checkDate = soldDate || toLocalDateKey(new Date());
-            const count = await saveOfflineStockChecks(checkDate, pendingChanges, pendingMemos);
+            await saveOfflineStockChecks(checkDate, pendingChanges, pendingMemos);
             // Refresh IDB map so merged view updates immediately
             const freshMap = await getOfflineStockChecksMap(checkDate);
             setIdbCheckMap(freshMap);
