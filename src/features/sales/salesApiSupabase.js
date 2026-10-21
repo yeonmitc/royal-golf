@@ -1696,7 +1696,13 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const finalUnit = isRefunded || isFreeGift ? 0 : unit;
       const isOnline = !guideId && localGuideName === '__ONLINE__';
       const isKakaoGuide = !guideId && localGuideName === KAKAO_FRIEND_ID;
-      const isLocalGuide = !guideId && !!localGuideName && !isOnline && !isKakaoGuide;
+      const isNowtravelDiscount = !guideId && localGuideName === '__NOWTRAVEL__';
+      const isLocalGuide =
+        !guideId &&
+        !!localGuideName &&
+        !isOnline &&
+        !isKakaoGuide &&
+        !isNowtravelDiscount;
 
       return {
         saleId: r.id,
