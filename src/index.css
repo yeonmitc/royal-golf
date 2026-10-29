@@ -268,6 +268,7 @@ small { font-size: var(--font-sm); }
   #root {
     height: auto;
     min-height: 100dvh;
+    overflow: visible;
   }
 
   .app-layout main[data-scroll-root='main'] {
@@ -619,6 +620,50 @@ select:focus {
 main[data-scroll-root='main'] {
   overflow: auto;
   scrollbar-gutter: stable both-edges;
+}
+
+.scheduler-fullscreen-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scheduler-fullscreen-day {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scheduler-fullscreen-date {
+  margin-bottom: 6px;
+  font-weight: 900;
+}
+
+.scheduler-fullscreen-shift {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 6px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.scheduler-fullscreen-shift span {
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .scheduler-fullscreen {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 @media (max-width: 640px) {

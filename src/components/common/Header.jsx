@@ -12,6 +12,15 @@ import ChecklistEmployeePickerModal from '../checklist/ChecklistEmployeePickerMo
 import ChecklistModal from '../checklist/ChecklistModal';
 import Modal from './Modal';
 
+function detectMobile() {
+  const ua = navigator.userAgent;
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet|Kindle|Silk|PlayBook/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+    window.matchMedia('(max-width: 640px)').matches
+  );
+}
+
 export default function Header() {
   const isAdmin = useAdminStore((s) => s.isAuthorized());
   const loginModalOpen = useAdminStore((s) => s.loginModalOpen);
@@ -28,6 +37,13 @@ export default function Header() {
   const [checkStockDone, setCheckStockDone] = useState(false);
   const [stockReminderOpen, setStockReminderOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ syncedAt: null, cachedCount: 0, ready: false });
+  const [isMobile, setIsMobile] = useState(detectMobile);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(detectMobile());
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Poll sync status every 30s (lightweight read from IndexedDB)
   useEffect(() => {
@@ -97,6 +113,10 @@ export default function Header() {
 
     const maybeRemind = () => {
       const { y, done } = refresh();
+      if (isMobile || isAdmin) {
+        if (stockReminderOpen) setStockReminderOpen(false);
+        return;
+      }
       if (done) return;
       if (stockReminderOpen) return;
       const lastKey = `checkstock_reminder_last_v1:${y}`;
@@ -131,7 +151,7 @@ export default function Header() {
       clearInterval(timer);
       window.removeEventListener('storage', onStorage);
     };
-  }, [getYesterdayKey, stockReminderOpen]);
+  }, [getYesterdayKey, stockReminderOpen, isMobile, isAdmin]);
 
   const navItems = [
     { to: '/inventory', label: 'product list', adminOnly: false },
@@ -151,23 +171,6 @@ export default function Header() {
   const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin);
   const adminItems = visibleNavItems.filter((item) => item.adminOnly);
   const publicItems = visibleNavItems.filter((item) => !item.adminOnly);
-
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      const ua = navigator.userAgent;
-      const isMobileUA =
-        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet|Kindle|Silk|PlayBook/i.test(
-          ua
-        );
-      const isIOSDesktop = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-      setIsMobile(isMobileUA || isIOSDesktop);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   useEffect(() => {
     const el = document.querySelector('main[data-scroll-root="main"]');
@@ -689,7 +692,7 @@ export default function Header() {
         employeeNames={checklistEmployeeNames}
       />
       <Modal
-        open={stockReminderOpen}
+        open={stockReminderOpen && !isMobile && !isAdmin}
         title="Stock Check Reminder"
         onClose={() => setStockReminderOpen(false)}
         size="content"

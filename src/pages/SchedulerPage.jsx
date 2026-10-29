@@ -112,6 +112,7 @@ export default function SchedulerPage() {
   };
 
   const [isMobile, setIsMobile] = useState(false);
+  const [monthFullscreenOpen, setMonthFullscreenOpen] = useState(false);
   useEffect(() => {
     const checkMobile = () => {
       const ua = navigator.userAgent;
@@ -1582,6 +1583,25 @@ export default function SchedulerPage() {
           >
             &gt;
           </button>
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setMonthFullscreenOpen(true)}
+              aria-label="스케줄 크게 보기"
+              style={{
+                border: '1px solid var(--border-soft)',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.06)',
+                color: 'var(--text-main)',
+                padding: '7px 9px',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              크게 보기
+            </button>
+          )}
         </div>
       </div>
 
@@ -2021,6 +2041,48 @@ export default function SchedulerPage() {
           </div>
         </div>
       </section>
+
+      <Modal
+        open={isMobile && monthFullscreenOpen}
+        onClose={() => setMonthFullscreenOpen(false)}
+        title={`${monthLabel} 스케줄`}
+        fullScreen
+        className="scheduler-fullscreen"
+      >
+        {loading ? (
+          <div>Loading…</div>
+        ) : (
+          <div className="scheduler-fullscreen-grid">
+            {grid.filter((cell) => cell.kind !== 'blank').map((cell) => {
+              const list = filterVisibleSchedules(getDayList(cell.dateKey));
+              return (
+                <div key={cell.key} className="scheduler-fullscreen-day">
+                  <div className="scheduler-fullscreen-date">
+                    {cell.dayNum} {dowLabels[cell.date.getDay()]}
+                  </div>
+                  {list.length === 0 ? (
+                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>-</div>
+                  ) : (
+                    list.map((row) => {
+                      const { bg, border } = badgeStyle(String(row.shift_type || ''), row.employee_id);
+                      return (
+                        <div
+                          key={row.id}
+                          className="scheduler-fullscreen-shift"
+                          style={{ background: bg, borderColor: border }}
+                        >
+                          <strong>{employeeNameById.get(row.employee_id) || row.employee_id}</strong>
+                          <span>{getScheduleMetaLabel(cell.date, row)}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={detailOpen}
