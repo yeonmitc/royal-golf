@@ -379,8 +379,12 @@ export async function checkoutCart(payload) {
     const product = productMap.get(code);
     if (!product) throw new Error(`No product: ${code}`);
 
+    // The cart displays the current unit price. A saved promo price is only
+    // relevant while the item is still explicitly free.
     const unitPriceOriginal =
-      Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
+      Number(item.unitPricePhp === 0
+        ? (item.originalUnitPricePhp ?? 0)
+        : (item.unitPricePhp ?? product.salePrice ?? 0)) || 0;
 
     // Apply Mr. Moon/Peter discount logic (Ceiling to nearest 100) if applicable
     let calculatedPrice = unitPriceOriginal;
@@ -652,8 +656,12 @@ export async function checkoutCartWithOfflineFallback(payload) {
       const product = productMapIn.get(code);
       if (!product) throw new Error(`No product: ${code}`);
 
+      // Match the price shown in SellPage; a stale promo snapshot must not
+      // override the current cart price after the promo is removed.
       const unitPriceOriginal =
-        Number(item.originalUnitPricePhp ?? item.unitPricePhp ?? product.salePrice ?? 0) || 0;
+        Number(item.unitPricePhp === 0
+          ? (item.originalUnitPricePhp ?? 0)
+          : (item.unitPricePhp ?? product.salePrice ?? 0)) || 0;
       let calculatedPrice = unitPriceOriginal;
       if (isPeter && unitPriceOriginal > 1000) {
         calculatedPrice = Math.ceil((unitPriceOriginal * 0.8) / 100) * 100;
