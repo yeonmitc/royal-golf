@@ -777,21 +777,18 @@ export async function checkoutCartWithOfflineFallback(payload) {
   // 4a. Optional guide re-normalization (only online; offline uses the
   //     booleans already passed in)
   if (guideId) {
-    try {
-      const gids = await sbSelect('guides', {
-        select: 'id,name',
-        filters: [{ column: 'id', op: 'eq', value: guideId }],
-        limit: 1,
-      });
-      const g = Array.isArray(gids) && gids.length ? gids[0] : null;
-      const norm = String(g?.name || '')
-        .toLowerCase()
-        .replace(/[\s.]/g, '');
-      if (norm.includes('mrmoon')) isMrMoon = true;
-      if (norm.includes('peter')) isPeter = true;
-    } catch {
-      // ignore; keep caller's booleans
-    }
+    const gids = await sbSelect('guides', {
+      select: 'id,name',
+      filters: [{ column: 'id', op: 'eq', value: guideId }],
+      limit: 1,
+    });
+    const g = Array.isArray(gids) && gids.length ? gids[0] : null;
+    if (!g) throw new Error('Selected guide could not be verified. Please try again.');
+    const norm = String(g.name || '')
+      .toLowerCase()
+      .replace(/[\s.]/g, '');
+    if (norm.includes('mrmoon')) isMrMoon = true;
+    if (norm.includes('peter')) isPeter = true;
   }
 
   // 4b. Product map from server
@@ -1214,19 +1211,16 @@ export async function setSaleGroupGuide({
 
   let guideNameNorm = '';
   if (guide) {
-    try {
-      const rows = await sbSelect('guides', {
-        select: 'id,name',
-        filters: [{ column: 'id', op: 'eq', value: guide }],
-        limit: 1,
-      });
-      const g = Array.isArray(rows) && rows.length ? rows[0] : null;
-      guideNameNorm = String(g?.name || '')
-        .toLowerCase()
-        .replace(/[\s.]/g, '');
-    } catch {
-      guideNameNorm = '';
-    }
+    const rows = await sbSelect('guides', {
+      select: 'id,name',
+      filters: [{ column: 'id', op: 'eq', value: guide }],
+      limit: 1,
+    });
+    const g = Array.isArray(rows) && rows.length ? rows[0] : null;
+    if (!g) throw new Error('Selected guide could not be verified. Please try again.');
+    guideNameNorm = String(g.name || '')
+      .toLowerCase()
+      .replace(/[\s.]/g, '');
   }
 
   const isPeter = guideNameNorm.includes('peter');
@@ -1386,18 +1380,14 @@ export async function setSaleGroupGuide({
     local_guide_name: guide ? null : specialLocalGuideName || null,
   });
 
-  try {
-    const sales = await sbSelect('sales', {
-      select: 'id,price,list_price,free_gift',
-      filters: [{ column: 'sale_group_id', op: 'eq', value: gid }],
-      order: { column: 'id', ascending: true },
-      limit: 1000,
-    });
+  const sales = await sbSelect('sales', {
+    select: 'id,price,list_price,free_gift',
+    filters: [{ column: 'sale_group_id', op: 'eq', value: gid }],
+    order: { column: 'id', ascending: true },
+    limit: 1000,
+  });
 
-    await applyGuidePricingToSalesRows(sales || []);
-  } catch {
-    // ignore
-  }
+  await applyGuidePricingToSalesRows(sales || []);
 
   await finalizeGroup(gid);
   return { ok: true };
