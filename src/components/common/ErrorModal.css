@@ -1,0 +1,79 @@
+.error-modal-inner {
+  text-align: center;
+}
+
+.error-modal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(225, 29, 72, 0.12);
+  border: 2px solid rgba(248, 113, 113, 0.4);
+  margin-bottom: 16px;
+  color: #f87171;
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.error-modal-code,
+.error-modal-raw-code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #fca5a5;
+  margin-bottom: 10px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.error-modal-raw-code {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.error-modal-code span,
+.error-modal-raw-code span {
+  color: #f87171;
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.error-modal-raw-code span {
+  color: #64748b;
+}
+
+.error-modal-message {
+  font-size: 13px;
+  color: #e2e8f0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.error-modal-close-btn {
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  padding: 10px 28px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.error-modal-close-btn:hover {
+  background: #991b1b;
+}

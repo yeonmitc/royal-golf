@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useMemo } fro
 import { createPortal } from 'react-dom';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { sanitizeText } from '../utils/errorHandler';
+import ErrorModal from '../components/common/ErrorModal';
 
 const ToastContext = createContext(null);
 
@@ -44,6 +45,7 @@ const toastVariants = {
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
+  const [errorModal, setErrorModal] = useState(null);
   const idCounter = useRef(0);
   const recentErrorsRef = useRef(new Map());
 
@@ -103,7 +105,15 @@ export function ToastProvider({ children }) {
     return id;
   }, []);
 
-  const contextValue = useMemo(() => ({ showToast, showToastTyped }), [showToast, showToastTyped]);
+  const showAppError = useCallback(({ code, rawCode, message }) => {
+    setErrorModal({
+      errorCode: code || 'UNKNOWN_ERROR',
+      rawCode: rawCode || null,
+      message: message || 'An unexpected error occurred.',
+    });
+  }, []);
+
+  const contextValue = useMemo(() => ({ showToast, showToastTyped, showAppError }), [showToast, showToastTyped, showAppError]);
 
   return (
     <ToastContext.Provider value={contextValue}>
@@ -192,6 +202,13 @@ export function ToastProvider({ children }) {
         </div>,
         document.body
       )}
+      <ErrorModal
+        open={Boolean(errorModal)}
+        onClose={() => setErrorModal(null)}
+        errorCode={errorModal?.errorCode}
+        rawCode={errorModal?.rawCode}
+        message={errorModal?.message}
+      />
     </ToastContext.Provider>
   );
 }

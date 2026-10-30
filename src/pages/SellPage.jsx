@@ -36,7 +36,7 @@ import { isBrowserOnline } from '../features/offline/offlineDB';
 export default function SellPage() {
   const [code, setCode] = useState('');
   const navigate = useNavigate();
-  const { showToast, showToastTyped } = useToast();
+  const { showToast, showToastTyped, showAppError } = useToast();
 
   const { data: guides } = useQuery({
     queryKey: ['guides'],
@@ -258,11 +258,15 @@ export default function SellPage() {
       }
     } catch (e) {
       console.error(e);
-      const { appCode, rawCode, message } = normalizeAppError(e, {
+      const {
+        code: errCode,
+        rawCode,
+        message,
+      } = normalizeAppError(e, {
         code: e?.isOffline ? 'OFFLINE_SAVE_FAILED' : 'SALE_INSERT_FAILED',
         fallbackMessage: 'The sale could not be saved. Please try again.',
       });
-      showToastTyped({ type: 'error', code: appCode, message, rawCode });
+      showAppError({ code: errCode, rawCode, message });
     }
   };
 
