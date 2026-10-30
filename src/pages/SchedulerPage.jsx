@@ -152,6 +152,7 @@ export default function SchedulerPage() {
   const [manualHours, setManualHours] = useState('9');
   const [manualScheduleAvailable, setManualScheduleAvailable] = useState(true);
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
+  const [copiedDay, setCopiedDay] = useState(null);
   const [dragOverDateKey, setDragOverDateKey] = useState(null);
   const [payrollStartDate, setPayrollStartDate] = useState('');
   const [janiceHolidayDays, setJaniceHolidayDays] = useState(0);
@@ -520,6 +521,65 @@ export default function SchedulerPage() {
   }, [rows]);
 
   const getDayList = (dateKey) => scheduleByDate.get(dateKey) || [];
+
+  const copyDay = (dateKey) => {
+    const dayRows = getDayList(dateKey);
+    if (!isAdmin || !dayRows.length) return;
+    setCopiedDay({
+      dateKey,
+      schedules: dayRows.map((row) => ({
+        employee_id: row.employee_id,
+        shift_type: row.shift_type,
+        manual_start_time: row.manual_start_time,
+        manual_hours: row.manual_hours,
+      })),
+    });
+    showToast(`${dateKey} 스케줄 ${dayRows.length}건을 복사했습니다.`);
+  };
+
+  const pasteDay = async (dateKey) => {
+    if (!isAdmin || !copiedDay || busy || loading) return;
+    if (getDayList(dateKey).length) {
+      showToast('스케줄이 없는 날짜에만 붙여넣을 수 있습니다.');
+      return;
+    }
+    try {
+      setBusy(true);
+      const existing = await sbSelect('employee_schedules', {
+        select: 'id',
+        filters: [{ column: 'work_date', op: 'eq', value: dateKey }],
+        limit: 1,
+      });
+      if (existing.length) {
+        showToast('해당 날짜에 이미 스케줄이 있습니다. 새로고침 후 확인해주세요.');
+        await loadMonth();
+        return;
+      }
+      const payload = copiedDay.schedules.map((row) => ({
+        employee_id: row.employee_id,
+        work_date: dateKey,
+        shift_type: row.shift_type,
+        ...(manualScheduleAvailable
+          ? { manual_start_time: row.manual_start_time, manual_hours: row.manual_hours }
+          : {}),
+      }));
+      await sbInsert('employee_schedules', payload, { returning: 'minimal' });
+      const saved = await sbSelect('employee_schedules', {
+        select: 'id',
+        filters: [{ column: 'work_date', op: 'eq', value: dateKey }],
+        limit: payload.length + 1,
+      });
+      if (saved.length !== payload.length) throw new Error('SCHEDULE_PASTE_VERIFY_FAILED');
+      await loadMonth();
+      showToast(`${dateKey}에 스케줄 ${payload.length}건을 붙여넣었습니다.`);
+    } catch (err) {
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'SCHEDULE_UPDATE_FAILED', fallbackMessage: 'Schedule paste failed.' }));
+      await loadMonth();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const buildManualSchedulePayload = useCallback(() => {
     if (!manualScheduleAvailable) {
@@ -1803,6 +1863,32 @@ export default function SchedulerPage() {
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}>
+            {isAdmin && !isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  선택한 날짜: {selectedDateKey}
+                </span>
+                <Button
+                  type="button"
+                  disabled={busy || loading || !getDayList(selectedDateKey).length}
+                  onClick={() => copyDay(selectedDateKey)}
+                >
+                  복사
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy || loading || !copiedDay || getDayList(selectedDateKey).length > 0}
+                  onClick={() => pasteDay(selectedDateKey)}
+                >
+                  붙여넣기
+                </Button>
+                {copiedDay && (
+                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    복사한 날짜: {copiedDay.dateKey}
+                  </span>
+                )}
+              </div>
+            )}
             {isMobile && (
               <div
                 style={{
@@ -2092,6 +2178,25 @@ export default function SchedulerPage() {
       >
         {isMobile ? (
           <div style={{ display: 'grid', gap: 10 }}>
+            {isAdmin && detailDateKey && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <Button
+                  type="button"
+                  disabled={busy || loading || !detailList.length}
+                  onClick={() => copyDay(detailDateKey)}
+                >
+                  복사
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy || loading || !copiedDay || detailList.length > 0}
+                  onClick={() => pasteDay(detailDateKey)}
+                >
+                  붙여넣기
+                </Button>
+                {copiedDay && <span className="text-xs">복사한 날짜: {copiedDay.dateKey}</span>}
+              </div>
+            )}
             {detailDate && (
               <div
                 style={{
