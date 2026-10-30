@@ -522,17 +522,48 @@ export default function SchedulerPage() {
 
   const getDayList = (dateKey) => scheduleByDate.get(dateKey) || [];
 
+  // Resolve any shift_type to concrete start time & hours for a given date
+  const resolveShiftToManual = (dateKey, shiftType) => {
+    const d = new Date(dateKey + 'T00:00:00');
+    const peak = isPeakDay(d);
+    const st = String(shiftType || '');
+    if (st === 'manual') return null; // already manual; caller uses row values
+    if (st === 'all_day') return { manual_start_time: '07:00', manual_hours: 9 };
+    if (st === 'morning') {
+      return peak
+        ? { manual_start_time: '06:00', manual_hours: 6.5 }
+        : { manual_start_time: '06:00', manual_hours: 6 };
+    }
+    if (st === 'evening') {
+      return peak
+        ? { manual_start_time: '10:30', manual_hours: 6.5 }
+        : { manual_start_time: '11:30', manual_hours: 5.5 };
+    }
+    return null;
+  };
+
   const copyDay = (dateKey) => {
     const dayRows = getDayList(dateKey);
     if (!isAdmin || !dayRows.length) return;
     setCopiedDay({
       dateKey,
-      schedules: dayRows.map((row) => ({
-        employee_id: row.employee_id,
-        shift_type: row.shift_type,
-        manual_start_time: row.manual_start_time,
-        manual_hours: row.manual_hours,
-      })),
+      schedules: dayRows.map((row) => {
+        if (manualScheduleAvailable) {
+          const resolved = resolveShiftToManual(dateKey, row.shift_type);
+          return {
+            employee_id: row.employee_id,
+            shift_type: resolved ? 'manual' : row.shift_type,
+            manual_start_time: resolved ? resolved.manual_start_time : row.manual_start_time,
+            manual_hours: resolved ? resolved.manual_hours : row.manual_hours,
+          };
+        }
+        return {
+          employee_id: row.employee_id,
+          shift_type: row.shift_type,
+          manual_start_time: row.manual_start_time,
+          manual_hours: row.manual_hours,
+        };
+      }),
     });
     showToast(`${dateKey} 스케줄 ${dayRows.length}건을 복사했습니다.`);
   };
@@ -580,6 +611,24 @@ export default function SchedulerPage() {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!isAdmin || busy || loading) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault();
+        copyDay(selectedDateKey);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        pasteDay(selectedDateKey);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAdmin, busy, loading, selectedDateKey, copiedDay]);
 
   const buildManualSchedulePayload = useCallback(() => {
     if (!manualScheduleAvailable) {
@@ -1863,32 +1912,6 @@ export default function SchedulerPage() {
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}>
-            {isAdmin && !isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  선택한 날짜: {selectedDateKey}
-                </span>
-                <Button
-                  type="button"
-                  disabled={busy || loading || !getDayList(selectedDateKey).length}
-                  onClick={() => copyDay(selectedDateKey)}
-                >
-                  복사
-                </Button>
-                <Button
-                  type="button"
-                  disabled={busy || loading || !copiedDay || getDayList(selectedDateKey).length > 0}
-                  onClick={() => pasteDay(selectedDateKey)}
-                >
-                  붙여넣기
-                </Button>
-                {copiedDay && (
-                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                    복사한 날짜: {copiedDay.dateKey}
-                  </span>
-                )}
-              </div>
-            )}
             {isMobile && (
               <div
                 style={{
@@ -2178,25 +2201,6 @@ export default function SchedulerPage() {
       >
         {isMobile ? (
           <div style={{ display: 'grid', gap: 10 }}>
-            {isAdmin && detailDateKey && (
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <Button
-                  type="button"
-                  disabled={busy || loading || !detailList.length}
-                  onClick={() => copyDay(detailDateKey)}
-                >
-                  복사
-                </Button>
-                <Button
-                  type="button"
-                  disabled={busy || loading || !copiedDay || detailList.length > 0}
-                  onClick={() => pasteDay(detailDateKey)}
-                >
-                  붙여넣기
-                </Button>
-                {copiedDay && <span className="text-xs">복사한 날짜: {copiedDay.dateKey}</span>}
-              </div>
-            )}
             {detailDate && (
               <div
                 style={{
