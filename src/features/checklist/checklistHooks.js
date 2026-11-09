@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchChecklistDaily,
+  fetchChecklistDailyMonth,
   fetchChecklistSummary,
   upsertChecklistDaily,
   upsertChecklistSummary,
@@ -26,6 +27,14 @@ export function useChecklistDaily(checkDate, options = {}) {
     queryFn: () => fetchChecklistDaily(checkDate),
     staleTime: 1000 * 15,
     ...options,
+  });
+}
+
+export function useChecklistDailyMonth(year, month) {
+  return useQuery({
+    queryKey: ['checklist', 'daily-month', year, month],
+    queryFn: () => fetchChecklistDailyMonth(year, month),
+    staleTime: 1000 * 15,
   });
 }
 

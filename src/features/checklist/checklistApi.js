@@ -61,6 +61,25 @@ export async function fetchChecklistDaily(checkDate) {
   }
 }
 
+export async function fetchChecklistDailyMonth(year, month) {
+  const start = `${year}-${String(month).padStart(2, '0')}-01`;
+  const end = new Date(year, month, 0).toISOString().slice(0, 10);
+  try {
+    const rows = await sbSelect('checklist_daily', {
+      select: '*',
+      filters: [
+        { column: 'check_date', op: 'gte', value: start },
+        { column: 'check_date', op: 'lte', value: end },
+      ],
+      limit: 100,
+    });
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    if (isMissingChecklistDailyTable(e)) return [];
+    throw e;
+  }
+}
+
 export async function upsertChecklistDaily({ checkDate, totalCount, employees }) {
   const row = {
     check_date: checkDate,
