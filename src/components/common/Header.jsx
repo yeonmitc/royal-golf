@@ -7,6 +7,7 @@ import logoUrl from '../../assets/logo-big.svg';
 import { useAdminStore } from '../../store/adminStore';
 import AdminLoginModal from '../admin/AdminLoginModal';
 import { getProductsSyncStatus } from '../../features/offline/offlineSync';
+import { useTodayAttendance } from '../../features/attendance/attendanceHooks';
 import AttendanceModal from '../attendance/AttendanceModal';
 import ChecklistEmployeePickerModal from '../checklist/ChecklistEmployeePickerModal';
 import ChecklistModal from '../checklist/ChecklistModal';
@@ -15,7 +16,9 @@ import Modal from './Modal';
 function detectMobile() {
   const ua = navigator.userAgent;
   return (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet|Kindle|Silk|PlayBook/i.test(ua) ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet|Kindle|Silk|PlayBook/i.test(
+      ua
+    ) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
     window.matchMedia('(max-width: 640px)').matches
   );
@@ -27,6 +30,7 @@ export default function Header() {
   const openLoginModal = useAdminStore((s) => s.openLoginModal);
   const closeLoginModal = useAdminStore((s) => s.closeLoginModal);
   const logout = useAdminStore((s) => s.logout);
+  const { data: todayLogs } = useTodayAttendance();
   const [scrolled, setScrolled] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,6 +48,18 @@ export default function Header() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Auto-open attendance modal if no morning stamp today (desktop only)
+  useEffect(() => {
+    if (isMobile) return;
+    if (!todayLogs || attendanceModalOpen) return;
+    const hasMorning = todayLogs.some((l) => l.shift_type === 'morning');
+    // Only auto-open once per session
+    if (!hasMorning && !sessionStorage.getItem('stamp_auto_opened')) {
+      sessionStorage.setItem('stamp_auto_opened', '1');
+      setAttendanceModalOpen(true);
+    }
+  }, [todayLogs, attendanceModalOpen, isMobile]);
 
   // Poll sync status every 30s (lightweight read from IndexedDB)
   useEffect(() => {
@@ -601,29 +617,6 @@ export default function Header() {
                   </NavLink>
                 ))}
                 <div style={{ borderTop: '1px solid var(--border-soft)', margin: '12px 0 4px' }} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setAttendanceModalOpen(true);
-                  }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '12px 14px',
-                    fontSize: 16,
-                    fontWeight: 600,
-                    borderRadius: 10,
-                    color: 'var(--text-main)',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  ⏰ Stamp
-                </button>
                 <button
                   type="button"
                   onClick={() => {
