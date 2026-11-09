@@ -1573,6 +1573,36 @@ export default function SchedulerPage() {
             size="sm"
             onClick={async () => {
               try {
+                const salaryCategories = await sbSelect('expense_categories', {
+                  select: 'id,name',
+                  filters: [{ column: 'name', op: 'eq', value: '직원 월급' }],
+                  limit: 1,
+                });
+                const salaryCategory = Array.isArray(salaryCategories) ? salaryCategories[0] : null;
+                if (!salaryCategory?.id) {
+                  throw new Error('Salary expense category is not configured.');
+                }
+
+                const totalPayroll = Object.values(payrollResult.employees).reduce(
+                  (sum, employee) => sum + (Number(employee?.totalPay) || 0),
+                  0
+                );
+                await sbInsert(
+                  'expenses',
+                  [
+                    {
+                      category_id: salaryCategory.id,
+                      title: `${payrollResult.startDate.slice(5).replace('-', '/')} - ${payrollResult.endDate.slice(5).replace('-', '/')}`,
+                      amount_php: totalPayroll,
+                      amount_krw: 0,
+                      amount_cny: 0,
+                      method: 'Cash',
+                      expense_date: payrollResult.payDate,
+                      note: `Payroll: ${payrollResult.periodLabel}`,
+                    },
+                  ],
+                  { returning: 'minimal' }
+                );
                 await sbInsert(
                   'payroll_paid_periods',
                   [
