@@ -5,7 +5,7 @@ export function useEmployees(options = {}) {
   return useQuery({
     queryKey: ['employees'],
     queryFn: fetchEmployees,
-    staleTime: 1000 * 60 * 5,
+    staleTime: Infinity,
     ...options,
   });
 }

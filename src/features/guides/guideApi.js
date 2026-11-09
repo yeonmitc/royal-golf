@@ -4,9 +4,19 @@ const GUIDE_CACHE_KEY = 'rg_guides_cache';
 
 /**
  * Get all active guides (with guide_type, fixed_commission_rate, employee_id)
- * Caches to localStorage for offline fallback.
+ * Reads from localStorage until an administrator explicitly refreshes the list.
  */
-export async function getGuides() {
+export async function getGuides({ refresh = false } = {}) {
+  let cached = null;
+  try {
+    const raw = localStorage.getItem(GUIDE_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) cached = parsed;
+  } catch {
+    // Ignore unavailable or invalid cache and fetch the source list.
+  }
+  if (!refresh && cached) return cached;
+
   try {
     const guides = await sbSelect('guides', {
       select: 'id, name, is_active, guide_type, normalized_name, commission_enabled, fixed_commission_rate, employee_id',
@@ -20,15 +30,7 @@ export async function getGuides() {
     }
     return guides;
   } catch (err) {
-    // Offline or network error — try localStorage cache
-    try {
-      const cached = localStorage.getItem(GUIDE_CACHE_KEY);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch {
-      // corrupted cache — non-fatal
-    }
+    if (!refresh && cached) return cached;
     throw err;
   }
 }

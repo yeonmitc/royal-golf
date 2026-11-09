@@ -69,7 +69,7 @@ export default function SalesTable({
   const { data: guides = [] } = useQuery({
     queryKey: ['guides', 'active'],
     queryFn: getGuides,
-    staleTime: 1000 * 60 * 5,
+    staleTime: Infinity,
   });
   const { mutateAsync: setGroupGuide, isPending: settingGuide } = useSetSaleGroupGuideMutation();
   const { mutateAsync: updateColor } = useUpdateSaleItemColorMutation();

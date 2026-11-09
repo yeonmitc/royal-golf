@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import { useToast } from '../context/ToastContext';
 import { getSupabaseConfigSummary, sbDelete, sbInsert, sbSelect } from '../db/supabaseRest';
 import { useEmployees } from '../features/employees/employeesHooks';
+import { fetchEmployees } from '../features/employees/employeesApi';
+import { getGuides } from '../features/guides/guideApi';
 import { getProductInventoryList } from '../features/products/productApi';
 import * as csvExport from '../utils/csvExport';
 import { normalizeAppError } from '../utils/errorHandler';
 
 export default function SettingsPage() {
   const { showToast, showToastTyped } = useToast();
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const cfg = getSupabaseConfigSummary();
   const { data: employees = [] } = useEmployees();
@@ -129,6 +133,38 @@ export default function SettingsPage() {
         console.error(e);
         showToastTyped(normalizeAppError(e, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: 'Supabase connection test failed.' }));
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRefreshEmployees = async () => {
+    try {
+      setBusy(true);
+      const refreshed = await fetchEmployees({ refresh: true });
+      queryClient.setQueryData(['employees'], refreshed);
+      showToast(`직원 목록 재연동 완료 (${refreshed.length}명)`);
+    } catch (err) {
+      console.error(err);
+      showToastTyped(
+        normalizeAppError(err, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: '직원 재연동에 실패했습니다.' })
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRefreshGuides = async () => {
+    try {
+      setBusy(true);
+      const refreshed = await getGuides({ refresh: true });
+      queryClient.setQueryData(['guides', 'active'], refreshed);
+      showToast(`가이드 목록 재연동 완료 (${refreshed.length}명)`);
+    } catch (err) {
+      console.error(err);
+      showToastTyped(
+        normalizeAppError(err, { code: 'ADMIN_SAVE_FAILED', fallbackMessage: '가이드 재연동에 실패했습니다.' })
+      );
     } finally {
       setBusy(false);
     }
@@ -308,6 +344,18 @@ export default function SettingsPage() {
           <Button variant="outline" size="sm" onClick={handleExportSalesBackup} disabled={busy}>
             Download sales backup JSON
           </Button>
+        </section>
+
+        <section className="page-card space-y-3 md:col-span-2">
+          <div className="font-semibold text-sm text-[var(--gold-soft)]">목록 동기화</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Button variant="outline" size="sm" onClick={handleRefreshEmployees} disabled={busy}>
+              직원 재연동 (DB에서 새로 받기)
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleRefreshGuides} disabled={busy}>
+              가이드 재연동 (DB에서 새로 받기)
+            </Button>
+          </div>
         </section>
 
         <section className="page-card space-y-3 md:col-span-2">

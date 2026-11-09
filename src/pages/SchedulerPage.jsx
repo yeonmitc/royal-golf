@@ -57,12 +57,12 @@ export default function SchedulerPage() {
     return base;
   };
 
-  const getWeekParity = (monday) => {
+  const getWeekIndex = (monday, employeeCount) => {
     const epochMonday = new Date(1970, 0, 5);
     const a = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).getTime();
     const b = epochMonday.getTime();
     const weeks = Math.floor((a - b) / (7 * 24 * 60 * 60 * 1000));
-    return Math.abs(weeks) % 2;
+    return Math.abs(weeks) % employeeCount;
   };
 
   const isPeakDay = (d) => {
@@ -694,27 +694,19 @@ export default function SchedulerPage() {
   }, [monthStart, monthEnd]);
 
   const autoGenerateMonthForRange = async ({ startDate, endDate, startMorningKey }) => {
-    const byName = new Map();
-    (employees || []).forEach((e) => {
-      const n = normalizeName(e?.english_name);
-      if (!n) return;
-      if (!byName.has(n)) byName.set(n, e);
-    });
-
-    const berlyn = byName.get(normalizeName('Berlyn'));
-    const janice = byName.get(normalizeName('Janice'));
-
-    if (!berlyn || !janice) {
-      const missing = [!berlyn ? 'Berlyn' : null, !janice ? 'Janice' : null].filter(Boolean);
-      showToast(`employees 테이블에 영어 이름이 없습니다: ${missing.join(', ')}`);
+    const staff = employeeOptions.filter((employee) => employee?.id && employee?.english_name);
+    if (staff.length === 0) {
+      showToast('employees 테이블에 등록된 직원이 없습니다.');
       return;
     }
 
     const startKey = toDateKey(startDate);
     const endKey = toDateKey(endDate);
 
-    const otherEmp = (emp) => (String(emp?.id) === String(berlyn.id) ? janice : berlyn);
-    const defaultMorningForWeek = (monday) => (getWeekParity(monday) === 0 ? berlyn : janice);
+    const employeeIndex = (employee) =>
+      Math.max(0, staff.findIndex((item) => String(item.id) === String(employee?.id)));
+    const nextEmployee = (employee) => staff[(employeeIndex(employee) + 1) % staff.length];
+    const defaultMorningForWeek = (monday) => staff[getWeekIndex(monday, staff.length)];
 
     const firstWeekMonday = getWeekMonday(startDate);
     const prevWeekMonday = addDays(firstWeekMonday, -7);
@@ -722,8 +714,7 @@ export default function SchedulerPage() {
     const prevWeekEndKey = toDateKey(addDays(prevWeekMonday, 6));
 
     let firstWeekMorning = null;
-    if (startMorningKey === 'berlyn') firstWeekMorning = berlyn;
-    if (startMorningKey === 'janice') firstWeekMorning = janice;
+    firstWeekMorning = staff.find((employee) => String(employee.id) === String(startMorningKey)) || null;
     try {
       const prevRows = await sbSelect('employee_schedules', {
         select: 'employee_id,work_date,shift_type',
@@ -736,14 +727,13 @@ export default function SchedulerPage() {
         limit: 50,
       });
       const hit = (Array.isArray(prevRows) ? prevRows : []).find(
-        (r) =>
-          String(r.employee_id) === String(berlyn.id) || String(r.employee_id) === String(janice.id)
+          (r) => staff.some((employee) => String(r.employee_id) === String(employee.id))
       );
       if (hit) {
-        const isBerlyn = String(hit.employee_id) === String(berlyn.id);
-        const isJanice = String(hit.employee_id) === String(janice.id);
-        if (isBerlyn) firstWeekMorning = otherEmp(berlyn);
-        if (isJanice) firstWeekMorning = otherEmp(janice);
+        const previousMorning = staff.find(
+          (employee) => String(employee.id) === String(hit.employee_id)
+        );
+        if (previousMorning) firstWeekMorning = nextEmployee(previousMorning);
       }
     } catch {
       firstWeekMorning = null;
@@ -779,7 +769,7 @@ export default function SchedulerPage() {
         if (weekMorningByMondayKey.has(prevMondayKey)) {
           weekMorningByMondayKey.set(
             weekMondayKey,
-            otherEmp(weekMorningByMondayKey.get(prevMondayKey))
+            nextEmployee(weekMorningByMondayKey.get(prevMondayKey))
           );
         } else if (weekMondayKey === toDateKey(firstWeekMonday)) {
           weekMorningByMondayKey.set(weekMondayKey, firstWeekMorning);
@@ -788,7 +778,7 @@ export default function SchedulerPage() {
         }
       }
       const weekMorning = weekMorningByMondayKey.get(weekMondayKey);
-      const weekEvening = otherEmp(weekMorning);
+      const weekEvening = staff.length > 1 ? nextEmployee(weekMorning) : null;
 
       if (dow === 3) {
         continue;
@@ -802,7 +792,7 @@ export default function SchedulerPage() {
         if (!isExisting(dateKey, weekMorning.id)) {
           rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '06:00', manual_hours: 9 });
         }
-        if (!isExisting(dateKey, weekEvening.id)) {
+        if (weekEvening && !isExisting(dateKey, weekEvening.id)) {
           rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '08:00', manual_hours: 9 });
         }
         continue;
@@ -811,7 +801,7 @@ export default function SchedulerPage() {
       if (!isExisting(dateKey, weekMorning.id)) {
         rowsToInsert.push({ employee_id: weekMorning.id, work_date: dateKey, shift_type: 'morning', manual_start_time: null, manual_hours: null });
       }
-      if (!isExisting(dateKey, weekEvening.id)) {
+      if (weekEvening && !isExisting(dateKey, weekEvening.id)) {
         rowsToInsert.push({ employee_id: weekEvening.id, work_date: dateKey, shift_type: 'evening', manual_start_time: null, manual_hours: null });
       }
     }
@@ -1213,7 +1203,7 @@ export default function SchedulerPage() {
     if (isMobile || !isAdmin) setDetailOpen(true);
   };
 
-  const [autoMonthStartMorning, setAutoMonthStartMorning] = useState('berlyn');
+  const [autoMonthStartMorning, setAutoMonthStartMorning] = useState('');
 
   const [resetMonthOpen, setResetMonthOpen] = useState(false);
   const handleResetMonth = async () => {
@@ -1244,7 +1234,7 @@ export default function SchedulerPage() {
       await autoGenerateMonthForRange({
         startDate: monthStart,
         endDate: monthEnd,
-        startMorningKey: autoMonthStartMorning,
+        startMorningKey: autoMonthStartMorning || employeeOptions[0]?.id,
       });
       await loadMonth();
     } catch (err) {
@@ -1817,21 +1807,19 @@ export default function SchedulerPage() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
                   gap: 10,
                 }}
               >
-                {[
-                  { key: 'berlyn', label: 'Berlyn' },
-                  { key: 'janice', label: 'Janice' },
-                ].map((opt) => {
-                  const active = autoMonthStartMorning === opt.key;
+                {employeeOptions.map((employee, index) => {
+                  const active =
+                    (autoMonthStartMorning || employeeOptions[0]?.id) === employee.id;
                   return (
                     <button
-                      key={opt.key}
+                      key={employee.id}
                       type="button"
-                      onClick={() => setAutoMonthStartMorning(opt.key)}
-                      disabled={busy || loading}
+                      onClick={() => setAutoMonthStartMorning(employee.id)}
+                      disabled={busy || loading || employeeOptions.length === 0}
                       style={{
                         width: '100%',
                         height: 44,
@@ -1856,7 +1844,7 @@ export default function SchedulerPage() {
                       <span style={{ width: 14, textAlign: 'center', opacity: active ? 1 : 0.25 }}>
                         ✓
                       </span>
-                      <span>{opt.label}</span>
+                      <span>{employee.english_name || `직원 ${index + 1}`}</span>
                     </button>
                   );
                 })}

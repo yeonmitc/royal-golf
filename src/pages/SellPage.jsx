@@ -8,7 +8,6 @@ import Card from '../components/common/Card';
 import DataTable from '../components/common/DataTable';
 import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
-import ReceiptModal from '../components/sales/ReceiptModal';
 import { useToast } from '../context/ToastContext';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
@@ -36,7 +35,7 @@ import { isBrowserOnline } from '../features/offline/offlineDB';
 export default function SellPage() {
   const [code, setCode] = useState('');
   const navigate = useNavigate();
-  const { showToast, showToastTyped, showAppError } = useToast();
+  const { showToast, showAppError } = useToast();
 
   const { data: guides } = useQuery({
     queryKey: ['guides'],
@@ -142,9 +141,6 @@ export default function SellPage() {
 
   const { mutateAsync: checkoutCart, isPending: isCheckoutPending } = useCheckoutCartMutation();
 
-  const [receiptOpen, setReceiptOpen] = useState(false);
-  const [receiptData, setReceiptData] = useState(null);
-
   const handleCheckout = async () => {
     const currentItems = useCartStore.getState().items;
     const currentGuideId = useCartStore.getState().guideId;
@@ -213,7 +209,6 @@ export default function SellPage() {
         };
       });
 
-      const receiptTotal = receiptItems.reduce((sum, i) => sum + i.price * i.qty, 0);
       const rentalEntries = receiptItems
         .filter((i) => i.code === RENTAL_CODE)
         .map((i) => {
@@ -238,16 +233,6 @@ export default function SellPage() {
         saveRentalMetaForSoldAt(result.soldAt, rentalEntries);
       }
 
-      setReceiptData({
-        id: result.saleId.toString(),
-        soldAt: result.soldAt || new Date().toISOString(),
-        items: receiptItems,
-        totalAmount: receiptTotal,
-        totalQty: result.itemCount,
-        guideId: currentGuideId,
-      });
-      setReceiptOpen(true);
-
       clearCart();
       if (result && result.isOffline) {
         showToast(
@@ -256,6 +241,7 @@ export default function SellPage() {
       } else {
         showToast('Sale completed successfully.');
       }
+      navigate('/sales');
     } catch (e) {
       console.error(e);
       const {
@@ -268,12 +254,6 @@ export default function SellPage() {
       });
       showAppError({ code: errCode, rawCode, message });
     }
-  };
-
-  const handleReceiptClose = () => {
-    setReceiptOpen(false);
-    setReceiptData(null);
-    navigate('/sales');
   };
 
   const openLocalGuideModal = () => {
@@ -742,7 +722,6 @@ export default function SellPage() {
           </Card>
         </div>
       </div>
-      <ReceiptModal open={receiptOpen} receiptData={receiptData} onClose={handleReceiptClose} />
       <Modal
         open={localGuideModalOpen}
         onClose={() => {
