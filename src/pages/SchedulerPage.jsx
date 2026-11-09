@@ -164,6 +164,8 @@ export default function SchedulerPage() {
   const [thirdCopyText, setThirdCopyText] = useState('');
   const [paidPeriods, setPaidPeriods] = useState([]);
   const [paidPeriodsLoaded, setPaidPeriodsLoaded] = useState(false);
+  const [payrollExpenseExists, setPayrollExpenseExists] = useState(false);
+  const [payrollExpenseChecking, setPayrollExpenseChecking] = useState(false);
 
   useEffect(() => {
     if (paidPeriodsLoaded) return;
@@ -1484,10 +1486,37 @@ export default function SchedulerPage() {
         onClick={async () => {
           const result = await calculatePayroll(payrollStartDate);
           if (result) {
+            setPayrollExpenseExists(false);
+            setPayrollExpenseChecking(true);
             setPayrollResult(result);
             setJaniceCopyText(result.janiceDetail);
             setBerlynCopyText(result.berlynDetail);
             setThirdCopyText(result.thirdDetail || '');
+            try {
+              const categories = await sbSelect('expense_categories', {
+                select: 'id',
+                filters: [{ column: 'name', op: 'eq', value: '직원 월급' }],
+                limit: 1,
+              });
+              const categoryId = Array.isArray(categories) ? categories[0]?.id : null;
+              if (categoryId) {
+                const expenseTitle = `${result.startDate.slice(5).replace('-', '/')} - ${result.endDate.slice(5).replace('-', '/')}`;
+                const expenses = await sbSelect('expenses', {
+                  select: 'id',
+                  filters: [
+                    { column: 'category_id', op: 'eq', value: categoryId },
+                    { column: 'expense_date', op: 'eq', value: result.startDate },
+                    { column: 'title', op: 'eq', value: expenseTitle },
+                  ],
+                  limit: 1,
+                });
+                setPayrollExpenseExists(Array.isArray(expenses) && expenses.length > 0);
+              }
+            } catch (error) {
+              console.error('Failed to check payroll expense:', error);
+            } finally {
+              setPayrollExpenseChecking(false);
+            }
           }
         }}
         disabled={!payrollStartDate || busy || loading}
@@ -1732,6 +1761,7 @@ export default function SchedulerPage() {
                   ],
                   { returning: 'minimal' }
                 );
+                setPayrollExpenseExists(true);
                 await sbInsert(
                   'payroll_paid_periods',
                   [
@@ -1761,10 +1791,10 @@ export default function SchedulerPage() {
                 showToastTyped(normalizeAppError(e, { code: 'PAYROLL_SAVE_FAILED', fallbackMessage: 'Payroll save failed.' }));
               }
             }}
-            disabled={paidPeriods.some((p) => p.payDate === payrollResult.payDate)}
+            disabled={payrollExpenseExists || payrollExpenseChecking}
             style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
           >
-            {paidPeriods.some((p) => p.payDate === payrollResult.payDate)
+            {payrollExpenseExists
               ? 'Already Paid'
               : 'Mark as Paid'}
           </Button>
