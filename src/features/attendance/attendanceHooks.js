@@ -3,6 +3,7 @@ import {
   checkDailyAttendance,
   deleteAttendanceLog,
   fetchMonthlyAttendance,
+  fetchTodayAttendance,
   recordAttendance,
   updateAttendanceLog,
 } from './attendanceApi';
@@ -14,6 +15,14 @@ export function useCheckDailyAttendance(employeeName) {
     enabled: !!employeeName,
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+export function useTodayAttendance() {
+  return useQuery({
+    queryKey: ['attendance', 'today'],
+    queryFn: fetchTodayAttendance,
+    staleTime: 1000 * 60 * 2,
   });
 }
 

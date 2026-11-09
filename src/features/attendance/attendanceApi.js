@@ -75,6 +75,21 @@ export async function deleteAttendanceLog({ id }) {
   return { ok: true };
 }
 
+// Get today's attendance logs (any shift)
+export async function fetchTodayAttendance() {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const startIso = getLocalAsUtcISOString(start);
+
+  const logs = await sbSelect('attendance_logs', {
+    select: '*',
+    filters: [{ column: 'attendance_time', op: 'gte', value: startIso }],
+    order: { column: 'attendance_time', ascending: true },
+  });
+  return logs || [];
+}
+
 // 3. Fetch monthly attendance for all employees
 export async function fetchMonthlyAttendance(year, month) {
   // Start of month

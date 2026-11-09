@@ -15,6 +15,33 @@ import DateInput from '../common/DateInput';
 import Modal from '../common/Modal';
 import { normalizeAppError } from '../../utils/errorHandler';
 
+// Default checklist items (same as ChecklistModal - DO NOT CHANGE)
+const DEFAULT_ITEMS = [
+  'Open the door for 2 hours and check attendance stamp (MUST FIRST)',
+  'Mop the floor (opening cleaning)',
+  "Count products from yesterday's sales using the system (stock check)",
+  'Clean glass surfaces (entrance, shelves, mirrors, display)',
+  'Check clothes condition (steam wrinkles / cut loose threads / check inside)',
+  'Organize displays by color and brand (restock sold products if needed)',
+  'Record sales in the system, receipts, and Google Sheet and send a screenshot to KakaoTalk',
+  'Count cash and verify with the system (₱5000 original: 100×15, 500×7)',
+  'Sweep the floor and remove trash if full (closing cleaning)',
+];
+
+// Short labels for attendance modal display summary
+const SHORT_LABELS = [
+  'Attendance Check',
+  'Update Sheet',
+  'Opening Cleaning - Broom',
+  'Stock Check',
+  'Glass Cleaning',
+  'Product Inspection',
+  'Display Organization',
+  'Sales Reporting',
+  'Cash Verification',
+  'Closing Cleaning - Mop & Trash',
+];
+
 // Helper to get score based on time diff with discrete buckets
 // Rules:
 // - <=3 mins late: 100
@@ -97,9 +124,17 @@ const ChecklistDayDetailsModal = ({ dateStr, attendanceDetails, onClose }) => {
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('checklist_items_v1') || 'null');
-      setItems(Array.isArray(stored) && stored.length > 0 ? stored : []);
+      if (
+        Array.isArray(stored) &&
+        stored.length > 0 &&
+        stored.every((x) => typeof x === 'string')
+      ) {
+        setItems(stored.map((s) => String(s).trim()).filter(Boolean));
+      } else {
+        setItems(DEFAULT_ITEMS);
+      }
     } catch {
-      setItems([]);
+      setItems(DEFAULT_ITEMS);
     }
   }, []);
 
@@ -112,7 +147,8 @@ const ChecklistDayDetailsModal = ({ dateStr, attendanceDetails, onClose }) => {
         const detail = shared.times?.[String(index)] || {};
         return {
           index,
-          label: items[index] || `Todo #${index + 1}`,
+          label: items[index] || `Task #${index + 1}`,
+          shortLabel: SHORT_LABELS[index] || items[index] || `Task #${index + 1}`,
           by: detail.by || 'Unknown',
           time: detail.time || '-',
         };
@@ -135,59 +171,40 @@ const ChecklistDayDetailsModal = ({ dateStr, attendanceDetails, onClose }) => {
       <div className="space-y-5 text-white" style={{ minWidth: 320, maxWidth: 440 }}>
         {/* Attendance Section */}
         <section>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-sm">👤</div>
-            <h3 className="font-bold text-base text-white/90 tracking-wide">Attendance</h3>
-          </div>
           {attendanceDetails.length > 0 ? (
-            <div className="space-y-2">
-              {attendanceDetails.map((detail) => (
-                <div
-                  key={`${detail.id}-${detail.name}`}
-                  className="flex items-center justify-between rounded-xl px-4 py-3"
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black"
-                      style={{
-                        background: detail.shiftType === 'morning' ? '#fbbf24' : '#818cf8',
-                        color: detail.shiftType === 'morning' ? '#000' : '#fff',
-                      }}
-                    >
-                      {detail.name?.charAt(0)?.toUpperCase() || '?'}
-                    </div>
-                    <div>
-                      <div className="font-bold text-sm">{detail.name || 'Unknown'}</div>
-                      <div className="text-xs text-white/50 capitalize">{detail.shiftType}</div>
-                    </div>
+            <div className="space-y-1">
+              {attendanceDetails.map((detail) => {
+                const shiftInitial = detail.shiftType === 'morning' ? 'M' : 'E';
+                // Swap "PM 05:54" → "05:54 PM"
+                const displayTime = detail.time
+                  ? (() => {
+                      const p = detail.time.split(' ');
+                      return p.length === 2 ? `${p[1]} ${p[0]}` : detail.time;
+                    })()
+                  : '-';
+                return (
+                  <div key={`${detail.id}-${detail.name}`} className="text-sm px-3 py-1.5">
+                    <span className="font-semibold text-white/90">{detail.name || 'Unknown'}</span>
+                    <span className="text-white/40">({shiftInitial}) </span>
+                    <span className="font-mono text-white/70">{displayTime}</span>
                   </div>
-                  <div className="text-sm font-mono font-bold text-white/80 bg-white/10 rounded-lg px-3 py-1">
-                    {detail.time}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <div
-              className="text-center py-6 rounded-xl text-sm text-white/40"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.12)' }}
-            >
-              No attendance records
-            </div>
+            <div className="text-sm text-white/40 px-3 py-2">No attendance records</div>
           )}
         </section>
 
         {/* Divider */}
         <div className="border-t border-white/10" />
 
-        {/* Checklist Section */}
+        {/* Checklist Section - grouped by employee */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-sm">✅</div>
+            <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-sm">
+              ✅
+            </div>
             <h3 className="font-bold text-base text-white/90 tracking-wide">Checklist</h3>
             {!isLoading && checkedItems.length > 0 && (
               <span className="ml-auto text-xs font-bold bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">
@@ -198,35 +215,53 @@ const ChecklistDayDetailsModal = ({ dateStr, attendanceDetails, onClose }) => {
           {isLoading ? (
             <div className="text-center py-6 text-sm text-white/40">Loading...</div>
           ) : checkedItems.length > 0 ? (
-            <div className="space-y-1.5">
-              {checkedItems.map((item) => (
-                <div
-                  key={item.index}
-                  className="flex items-center gap-3 rounded-xl px-4 py-2.5"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <div className="w-5 h-5 rounded-full bg-green-500/30 flex items-center justify-center flex-shrink-0">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+            <div className="space-y-3">
+              {(() => {
+                // Group items by employee
+                const grouped = {};
+                checkedItems.forEach((item) => {
+                  const name = item.by || 'Unknown';
+                  if (!grouped[name]) grouped[name] = [];
+                  grouped[name].push(item);
+                });
+                return Object.entries(grouped).map(([employee, items]) => (
+                  <div key={employee}>
+                    {/* Employee header */}
+                    <div className="flex items-center gap-2 mb-1.5 px-1">
+                      <div className="w-2 h-2 rounded-full bg-green-400" />
+                      <span className="text-xs font-bold text-green-300">{employee}</span>
+                      <span className="text-[10px] text-white/30">({items.length})</span>
+                    </div>
+                    {/* Items list */}
+                    <div className="space-y-1">
+                      {items.map((item) => (
+                        <div
+                          key={item.index}
+                          className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+                          style={{
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                          }}
+                        >
+                          <span className="text-xs text-white/80 flex-1 truncate">
+                            <span className="font-mono text-white/50">{item.time}</span>
+                            <span className="text-white/30 mx-1.5">-</span>
+                            <span>{item.shortLabel}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{item.label}</div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-white/40 font-semibold">{item.by}</span>
-                    <span className="text-xs text-white/30 font-mono">{item.time}</span>
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           ) : (
             <div
               className="text-center py-6 rounded-xl text-sm text-white/40"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.12)' }}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px dashed rgba(255,255,255,0.12)',
+              }}
             >
               No checklist items completed
             </div>
@@ -267,19 +302,15 @@ const AttendanceCalendar = () => {
     const targetDate = new Date(year, month - 1, day);
     const dateStr = targetDate.toDateString();
 
-    // Check if future (strict > today)
     const now = new Date();
     const isFuture = targetDate.setHours(0, 0, 0, 0) > now.setHours(0, 0, 0, 0);
 
-    // Default return for rendering logic
     const result = { score: null, isFuture, hasLog: false, details: [], noAttendance: false };
 
     if (isFuture) return result;
 
     const dayLogs = logs.filter((l) => {
-      // Parse stored time (Local-as-UTC) to get the date string
       const stored = new Date(l.attendance_time);
-      // Use UTC methods because we stored local time as UTC
       const logDateStr = new Date(
         stored.getUTCFullYear(),
         stored.getUTCMonth(),
@@ -321,8 +352,7 @@ const AttendanceCalendar = () => {
       }
 
       const score = getPunctualityScore(target, checkTime);
-      const diffMs = checkTime - target;
-      const lateMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
+      const lateMins = Math.max(0, Math.floor((checkTime - target) / 1000 / 60));
       const timeStr = formatTimeForDisplay(checkTime);
 
       return {
@@ -428,40 +458,16 @@ const AttendanceCalendar = () => {
             year === new Date().getFullYear();
 
           const isSelected = selectedDateLogs?.dateStr === `${year}-${month}-${day}`;
-          const percentColorClass = checklistPercent < 30
-            ? 'text-red-400'
-            : checklistPercent < 60
-              ? 'text-orange-400'
-              : 'text-green-400';
-          const segmentColor = checklistPercent < 30
-            ? '#f87171'
-            : checklistPercent < 60
-              ? '#fb923c'
-              : '#4ade80';
-          const filledSegments = Math.min(10, Math.floor(checklistPercent / 10));
-          const segmentStops = Array.from({ length: 10 }, (_, index) => {
-            const start = index * 36;
-            const color = index < filledSegments ? segmentColor : '#d1d5db';
-            return `${color} ${start}deg ${start + 33}deg, transparent ${start + 33}deg ${start + 36}deg`;
-          }).join(', ');
-          const faceContent = (
-            <button
-              type="button"
-              aria-label={`${day}일 체크리스트 ${checklistPercent}%, 상세 보기`}
-              className={`relative flex h-12 w-12 items-center justify-center rounded-full ${percentColorClass} hover:text-black focus-visible:text-black transition-all duration-150 ${isSelected ? 'scale-110 ring-2 ring-white' : 'hover:scale-110 hover:shadow-lg'}`}
-              style={{ background: `conic-gradient(${segmentStops})`, cursor: 'pointer' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedDateLogs(isSelected ? null : {
-                  dateStr: `${year}-${month}-${day}`,
-                  details,
-                });
-              }}
-            >
-              <span className="absolute inset-[5px] rounded-full bg-white" aria-hidden="true" />
-              <span className="relative text-[19px] font-black">{checklistPercent}%</span>
-            </button>
-          );
+          const dotColor =
+            checklistPercent >= 80
+              ? '#4ade80'
+              : checklistPercent >= 50
+                ? '#fbbf24'
+                : checklistPercent >= 20
+                  ? '#fb923c'
+                  : checklistPercent > 0
+                    ? '#f87171'
+                    : 'rgba(255,255,255,0.15)';
 
           return (
             <div
@@ -475,12 +481,101 @@ const AttendanceCalendar = () => {
                 {day}
               </span>
 
-              <div className="relative rounded-full flex items-center justify-center">
-                <div className="rounded-full flex items-center justify-center">
-                  {' '}
-                  {/* Spacer/Background for ring */}
-                  {faceContent}
-                </div>
+              {/* Circular progress ring */}
+              <div style={{ position: 'relative', width: 46, height: 46 }}>
+                <button
+                  type="button"
+                  aria-label={`${day}일 체크리스트 ${checklistPercent}%, 상세 보기`}
+                  className={`hover:scale-110 focus-visible:scale-110 transition-all duration-200 ${isSelected ? 'scale-110' : ''}`}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    cursor: 'pointer',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    display: 'block',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedDateLogs(
+                      isSelected ? null : { dateStr: `${year}-${month}-${day}`, details }
+                    );
+                  }}
+                >
+                  {checklistPercent === 100 ? (
+                    /* 100%: filled circle + heart emoji */
+                    <svg width="46" height="46" viewBox="0 0 46 46">
+                      <circle
+                        cx="23"
+                        cy="23"
+                        r="20"
+                        fill="#4ade80"
+                        stroke="#4ade80"
+                        strokeWidth="2"
+                        style={{ transition: 'fill 0.4s ease' }}
+                      />
+                      <text
+                        x="23"
+                        y="24"
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fontSize="18"
+                      >
+                        {'\u2764\uFE0F'}
+                      </text>
+                    </svg>
+                  ) : (
+                    /* Normal: progress ring */
+                    <svg width="46" height="46" viewBox="0 0 46 46">
+                      <circle
+                        cx="23"
+                        cy="23"
+                        r="20"
+                        fill="rgba(255,255,255,0.06)"
+                        stroke="rgba(255,255,255,0.2)"
+                        strokeWidth="2"
+                      />
+                      {checklistPercent > 0 &&
+                        (() => {
+                          const r = 20;
+                          const c = 2 * Math.PI * r;
+                          const progressOffset = c - (checklistPercent / 100) * c;
+                          return (
+                            <circle
+                              cx="23"
+                              cy="23"
+                              r={r}
+                              fill="none"
+                              stroke={dotColor}
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${c}`}
+                              strokeDashoffset={progressOffset}
+                              transform="rotate(-90 23 23)"
+                              style={{
+                                transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease',
+                              }}
+                            />
+                          );
+                        })()}
+                      <text
+                        x="23"
+                        y="23"
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fill={checklistPercent > 0 ? dotColor : 'rgba(255,255,255,0.25)'}
+                        fontSize="11"
+                        fontWeight="900"
+                        fontFamily="inherit"
+                      >
+                        {checklistPercent}%
+                      </text>
+                    </svg>
+                  )}
+                </button>
               </div>
             </div>
           );
@@ -610,9 +705,7 @@ export default function AttendanceModal({ open, onClose }) {
 
   const staffOptions = useMemo(() => {
     if ((employees || []).length > 0) {
-      return (employees || [])
-        .map((e) => String(e?.english_name || '').trim())
-        .filter(Boolean);
+      return (employees || []).map((e) => String(e?.english_name || '').trim()).filter(Boolean);
     }
     return Array.from(
       new Set((monthLogs || []).map((l) => String(l?.employee_name || '').trim()).filter(Boolean))
@@ -813,7 +906,12 @@ export default function AttendanceModal({ open, onClose }) {
               setAlertOpen(true);
             } else {
               console.error(err);
-              showToastTyped(normalizeAppError(err, { code: 'ATTENDANCE_SAVE_FAILED', fallbackMessage: 'Failed to check in.' }));
+              showToastTyped(
+                normalizeAppError(err, {
+                  code: 'ATTENDANCE_SAVE_FAILED',
+                  fallbackMessage: 'Failed to check in.',
+                })
+              );
             }
           },
         }
@@ -936,12 +1034,17 @@ export default function AttendanceModal({ open, onClose }) {
           if (isCompact) {
             setAlertTone('error');
             setAlertTitle('Admin Edit Failed');
-              setAlertMessage(msg);
-              setAlertOpen(true);
-            } else {
-              console.error(err);
-              showToastTyped(normalizeAppError(err, { code: 'ATTENDANCE_UPDATE_FAILED', fallbackMessage: 'Failed to update attendance.' }));
-            }
+            setAlertMessage(msg);
+            setAlertOpen(true);
+          } else {
+            console.error(err);
+            showToastTyped(
+              normalizeAppError(err, {
+                code: 'ATTENDANCE_UPDATE_FAILED',
+                fallbackMessage: 'Failed to update attendance.',
+              })
+            );
+          }
         },
       }
     );
@@ -987,7 +1090,12 @@ export default function AttendanceModal({ open, onClose }) {
             setAlertOpen(true);
           } else {
             console.error(err);
-            showToastTyped(normalizeAppError(err, { code: 'ATTENDANCE_DELETE_FAILED', fallbackMessage: 'Failed to delete attendance.' }));
+            showToastTyped(
+              normalizeAppError(err, {
+                code: 'ATTENDANCE_DELETE_FAILED',
+                fallbackMessage: 'Failed to delete attendance.',
+              })
+            );
           }
         },
       }
@@ -1043,9 +1151,11 @@ export default function AttendanceModal({ open, onClose }) {
                 onClick={() => handleShiftChange('morning')}
                 className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
-                ${selectedShift === 'morning' && !isShiftDisabled('morning')
-                  ? 'scale-105 ring-4 ring-pink-200 translate-y-[-4px] shadow-[0_10px_20px_rgba(251,207,232,0.45)]'
-                  : 'hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'}
+                ${
+                  selectedShift === 'morning' && !isShiftDisabled('morning')
+                    ? 'scale-105 ring-4 ring-pink-200 translate-y-[-4px] shadow-[0_10px_20px_rgba(251,207,232,0.45)]'
+                    : 'hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
+                }
               `}
                 style={{
                   height: '60px',
@@ -1054,10 +1164,9 @@ export default function AttendanceModal({ open, onClose }) {
                   color: isShiftDisabled('morning') ? '#fff' : '#000',
                   backdropFilter: 'blur(10px)',
                   width: '100%',
-                  border:
-                    isShiftDisabled('morning')
-                      ? '1px solid rgba(255,255,255,0.22)'
-                      : '1px solid rgba(0,0,0,0.18)',
+                  border: isShiftDisabled('morning')
+                    ? '1px solid rgba(255,255,255,0.22)'
+                    : '1px solid rgba(0,0,0,0.18)',
                   borderRadius: '30px',
                   cursor: isShiftDisabled('morning') ? 'not-allowed' : 'pointer',
                   opacity: isPending ? 0.65 : isShiftDisabled('morning') ? 0.55 : 1,
@@ -1084,31 +1193,27 @@ export default function AttendanceModal({ open, onClose }) {
                 onClick={() => handleShiftChange('evening')}
                 className={`
                 flex items-center justify-center font-black transition-all duration-300 transform
-                ${selectedShift === 'evening' && !isShiftDisabled('evening')
-                  ? 'scale-105 ring-4 ring-pink-200 translate-y-[-4px] shadow-[0_10px_20px_rgba(251,207,232,0.45)]'
-                  : 'hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'}
+                ${
+                  selectedShift === 'evening' && !isShiftDisabled('evening')
+                    ? 'scale-105 ring-4 ring-pink-200 translate-y-[-4px] shadow-[0_10px_20px_rgba(251,207,232,0.45)]'
+                    : 'hover:bg-white/20 hover:scale-105 shadow-[0_4px_6px_rgba(0,0,0,0.3)]'
+                }
               `}
                 style={{
                   height: '60px',
                   fontSize: '1.5rem',
-                  backgroundColor:
-                    isShiftDisabled('evening') ? '#4c1d95' : '#fbcfe8',
+                  backgroundColor: isShiftDisabled('evening') ? '#4c1d95' : '#fbcfe8',
                   color: isShiftDisabled('evening') ? '#fff' : '#000',
                   backdropFilter: 'blur(10px)',
                   width: '100%',
-                  border:
-                    isShiftDisabled('evening')
-                      ? '1px solid rgba(255,255,255,0.22)'
-                      : '1px solid rgba(0,0,0,0.18)',
+                  border: isShiftDisabled('evening')
+                    ? '1px solid rgba(255,255,255,0.22)'
+                    : '1px solid rgba(0,0,0,0.18)',
                   borderRadius: '30px',
-                  cursor:
-                    isShiftDisabled('evening')
-                      ? 'not-allowed'
-                      : 'pointer',
+                  cursor: isShiftDisabled('evening') ? 'not-allowed' : 'pointer',
                   opacity: isPending ? 0.65 : isShiftDisabled('evening') ? 0.55 : 1,
                   marginBottom: 4,
-                  ...(hoverKey === 'shift:evening' &&
-                  !isShiftDisabled('evening')
+                  ...(hoverKey === 'shift:evening' && !isShiftDisabled('evening')
                     ? { backgroundColor: '#fb923c', borderColor: '#fb923c', color: '#fff' }
                     : {}),
                 }}
@@ -1166,8 +1271,7 @@ export default function AttendanceModal({ open, onClose }) {
                         padding: '0 14px',
                         whiteSpace: 'nowrap',
                         flex: '0 0 auto',
-                        boxShadow:
-                          isSelected ? '0 0 0 3px rgba(255,255,255,0.35)' : 'none',
+                        boxShadow: isSelected ? '0 0 0 3px rgba(255,255,255,0.35)' : 'none',
                         marginBottom: 2,
                         ...(hoverKey === `staff:${name}` && !disabled
                           ? { background: '#fb923c', color: '#fff', borderColor: '#fb923c' }
@@ -1183,14 +1287,12 @@ export default function AttendanceModal({ open, onClose }) {
               )}
             </div>
 
-
-          <div className="flex flex-col items-center gap-3">
-            <AttendanceCalendar />
-          </div>
+            <div className="flex flex-col items-center gap-3">
+              <AttendanceCalendar />
+            </div>
             <div className="text-red-300 text-lg font-bold bg-red-900/40 px-6 py-2 rounded-full border border-red-500/30 text-center w-fit mx-auto shadow-lg">
               ⚠️ Attendance score will be 0 if late by more than 15 minutes.
             </div>
-
 
             {isPending && <div className="text-white/80 text-sm font-bold mt-2">Saving…</div>}
 
