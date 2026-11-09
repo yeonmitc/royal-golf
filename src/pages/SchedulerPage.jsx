@@ -157,9 +157,11 @@ export default function SchedulerPage() {
   const [payrollStartDate, setPayrollStartDate] = useState('');
   const [janiceHolidayDays, setJaniceHolidayDays] = useState(0);
   const [berlynHolidayDays, setBerlynHolidayDays] = useState(0);
+  const [thirdHolidayDays, setThirdHolidayDays] = useState(0);
   const [payrollResult, setPayrollResult] = useState(null);
   const [janiceCopyText, setJaniceCopyText] = useState('');
   const [berlynCopyText, setBerlynCopyText] = useState('');
+  const [thirdCopyText, setThirdCopyText] = useState('');
   const [paidPeriods, setPaidPeriods] = useState([]);
   const [paidPeriodsLoaded, setPaidPeriodsLoaded] = useState(false);
 
@@ -231,10 +233,12 @@ export default function SchedulerPage() {
 
     let berlynEmp = null;
     let janiceEmp = null;
+    let thirdEmp = null;
     (employees || []).forEach((e) => {
       const key = normalizeName(e?.english_name || '');
       if (key === 'berlyn') berlynEmp = e;
       if (key === 'janice') janiceEmp = e;
+      if (!thirdEmp && key !== 'berlyn' && key !== 'janice' && e?.id) thirdEmp = e;
     });
 
     if (!berlynEmp || !janiceEmp) return null;
@@ -277,6 +281,8 @@ export default function SchedulerPage() {
     let janiceSoloUnits = 0;
     let berlynSharedUnits = 0;
     let janiceSharedUnits = 0;
+    let thirdSoloUnits = 0;
+    let thirdSharedUnits = 0;
 
     for (let i = 0; i < 14; i++) {
       const d = addDays(startDate, i);
@@ -285,6 +291,9 @@ export default function SchedulerPage() {
       const dayList = payrollRows.filter((r) => r.work_date === dateKey);
       const berlynEntries = dayList.filter((r) => String(r.employee_id) === String(berlynEmp.id));
       const janiceEntries = dayList.filter((r) => String(r.employee_id) === String(janiceEmp.id));
+      const thirdEntries = thirdEmp
+        ? dayList.filter((r) => String(r.employee_id) === String(thirdEmp.id))
+        : [];
 
       // 8시간 미만 = shared (₱500), 8시간 이상 = solo (₱650)
       berlynEntries.forEach((r) => {
@@ -297,6 +306,11 @@ export default function SchedulerPage() {
         if (h >= 8) janiceSoloUnits++;
         else if (h > 0) janiceSharedUnits++;
       });
+      thirdEntries.forEach((r) => {
+        const h = getEntryHours(r, d);
+        if (h >= 8) thirdSoloUnits++;
+        else if (h > 0) thirdSharedUnits++;
+      });
     }
 
     const SHARED_RATE = 500;
@@ -305,6 +319,7 @@ export default function SchedulerPage() {
 
     const jHoliday = Number(janiceHolidayDays);
     const bHoliday = Number(berlynHolidayDays);
+    const tHoliday = Number(thirdHolidayDays);
 
     const janiceSharedPay = janiceSharedUnits * SHARED_RATE;
     const janiceSoloPay = janiceSoloUnits * SOLO_RATE;
@@ -315,6 +330,10 @@ export default function SchedulerPage() {
     const berlynSoloPay = berlynSoloUnits * SOLO_RATE;
     const berlynHolidayPay = bHoliday * HOLIDAY_RATE;
     const berlynTotal = berlynSharedPay + berlynSoloPay + berlynHolidayPay;
+    const thirdSharedPay = thirdSharedUnits * SHARED_RATE;
+    const thirdSoloPay = thirdSoloUnits * SOLO_RATE;
+    const thirdHolidayPay = tHoliday * HOLIDAY_RATE;
+    const thirdTotal = thirdSharedPay + thirdSoloPay + thirdHolidayPay;
 
     const endDate = toDateKey(addDays(startDate, 13));
     const payDate = toDateKey(addDays(startDate, 14));
@@ -339,7 +358,7 @@ export default function SchedulerPage() {
       totalPayAmt
     ) => {
       const lines = [empName, ''];
-      if (sharedUnits > 0 || soloUnits > 0) {
+      if (sharedUnits > 0 || soloUnits > 0 || hDays > 0) {
         if (sharedUnits > 0) {
           lines.push(`₱500 × ${sharedUnits} = ₱${sharedPayAmt.toLocaleString()}`);
         }
@@ -380,6 +399,19 @@ export default function SchedulerPage() {
       berlynHolidayPay,
       berlynTotal
     );
+    const thirdName = thirdEmp?.english_name || 'Employee 3';
+    const thirdDetail = thirdEmp
+      ? buildDetailText(
+          thirdName,
+          thirdSharedUnits,
+          thirdSoloUnits,
+          tHoliday,
+          thirdSharedPay,
+          thirdSoloPay,
+          thirdHolidayPay,
+          thirdTotal
+        )
+      : '';
 
     return {
       employees: {
@@ -401,6 +433,19 @@ export default function SchedulerPage() {
           holidayPay: berlynHolidayPay,
           totalPay: berlynTotal,
         },
+        ...(thirdEmp
+          ? {
+              [thirdName]: {
+                sharedDays: thirdSharedUnits,
+                soloDays: thirdSoloUnits,
+                holidayDays: tHoliday,
+                sharedPay: thirdSharedPay,
+                soloPay: thirdSoloPay,
+                holidayPay: thirdHolidayPay,
+                totalPay: thirdTotal,
+              },
+            }
+          : {}),
       },
       sharedDays: Math.max(janiceSharedUnits, berlynSharedUnits),
       startDate: startDateStr,
@@ -409,6 +454,8 @@ export default function SchedulerPage() {
       periodLabel,
       janiceDetail,
       berlynDetail,
+      thirdDetail,
+      thirdName,
     };
   };
 
@@ -423,6 +470,16 @@ export default function SchedulerPage() {
       .slice()
       .sort((a, b) => String(a?.english_name || '').localeCompare(String(b?.english_name || '')));
   }, [employees]);
+
+  const thirdEmployee = useMemo(
+    () =>
+      (employees || []).find((employee) => {
+        const name = normalizeName(employee?.english_name || '');
+        return employee?.id && name !== 'janice' && name !== 'berlyn';
+      }),
+    [employees]
+  );
+  const thirdEmployeeName = thirdEmployee?.english_name || 'Employee 3';
 
   const employeeNameById = useMemo(() => {
     const m = new Map();
@@ -1308,7 +1365,7 @@ export default function SchedulerPage() {
       <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
         Holiday days (₱150/day)
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
         <div>
           <label
             style={{
@@ -1383,6 +1440,43 @@ export default function SchedulerPage() {
             ))}
           </select>
         </div>
+        <div>
+          <label
+            style={{
+              color: 'white',
+              fontWeight: 900,
+              fontSize: 12,
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
+            {thirdEmployeeName}
+          </label>
+          <select
+            value={thirdHolidayDays}
+            onChange={(e) => setThirdHolidayDays(Number(e.target.value))}
+            style={{
+              width: '100%',
+              height: 44,
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.16)',
+              background: 'rgba(255,255,255,0.06)',
+              color: 'white',
+              fontWeight: 900,
+              padding: '0 14px',
+            }}
+          >
+            {HOLIDAY_DAY_OPTIONS.map((opt) => (
+              <option
+                key={opt.value}
+                value={opt.value}
+                style={{ background: '#1a1a2e', color: 'white' }}
+              >
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <Button
         variant="primary"
@@ -1393,6 +1487,7 @@ export default function SchedulerPage() {
             setPayrollResult(result);
             setJaniceCopyText(result.janiceDetail);
             setBerlynCopyText(result.berlynDetail);
+            setThirdCopyText(result.thirdDetail || '');
           }
         }}
         disabled={!payrollStartDate || busy || loading}
@@ -1471,7 +1566,7 @@ export default function SchedulerPage() {
                 </tr>
               </thead>
               <tbody>
-                {['Janice', 'Berlyn'].map((name) => {
+                {Object.keys(payrollResult.employees).map((name) => {
                   const r = payrollResult.employees[name];
                   return (
                     <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1553,12 +1648,46 @@ export default function SchedulerPage() {
                 }}
               />
             </div>
+            {payrollResult.thirdName && (
+              <div>
+                <label
+                  style={{
+                    color: 'white',
+                    fontWeight: 900,
+                    fontSize: 12,
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  {payrollResult.thirdName}
+                </label>
+                <textarea
+                  readOnly
+                  value={thirdCopyText}
+                  onClick={(e) => e.target.select()}
+                  style={{
+                    width: '100%',
+                    height: 160,
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.04)',
+                    color: 'white',
+                    fontWeight: 800,
+                    padding: 10,
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            )}
           </div>
           <Button
             variant="primary"
             size="sm"
             onClick={() => {
-              const allText = `Payroll: ${payrollResult.periodLabel}\n\n${janiceCopyText}\n\n${berlynCopyText}`;
+              const allText = `Payroll: ${payrollResult.periodLabel}\n\n${janiceCopyText}\n\n${berlynCopyText}\n\n${thirdCopyText}`;
               navigator.clipboard
                 .writeText(allText)
                 .then(() => showToast('All text copied!'))
