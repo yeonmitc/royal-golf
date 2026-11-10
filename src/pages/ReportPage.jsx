@@ -237,6 +237,7 @@ function CostBreakdownChart({ summary }) {
     { key: 'operation_cost', label: '운영비', color: '#f97316' },
     { key: 'logistics_cost', label: '물류비', color: '#fb7185' },
     { key: 'supplies_cost', label: '부자재', color: '#f59e0b' },
+    { key: 'other_cost', label: '기타 지출', color: '#a78bfa' },
     { key: 'inventory_purchase_cost', label: '의류사입비', color: 'rgba(239,68,68,0.38)' },
   ];
   const maxVal = Math.max(1, ...items.map((i) => Number(summary?.[i.key] || 0) || 0));
@@ -280,12 +281,14 @@ async function fetchProductCostMap(codes, onProgress) {
     const inList = buildInList(chunk);
     if (inList === '()') continue;
     const rows = await sbSelect('products', {
-      select: 'code,p1price',
+      select: 'code,p1price,kprice',
       filters: [{ column: 'code', op: 'in', value: inList }],
     });
     (rows || []).forEach((row) => {
       const code = String(row?.code || '').trim();
-      if (code) costMap.set(code, Number(row?.p1price || 0) || 0);
+      const p1price = Number(row?.p1price || 0) || 0;
+      const kprice = Number(row?.kprice || 0) || 0;
+      if (code) costMap.set(code, p1price > 0 ? p1price : kprice / 25);
     });
     if (typeof onProgress === 'function') {
       onProgress({
@@ -307,17 +310,23 @@ function clampProgress(value) {
 }
 
 async function fetchExpensesRaw(range) {
-  return (
-    (await sbSelect('expenses', {
+  const expenses = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await sbSelect('expenses', {
       select: 'id,category_id,title,amount_php,amount_krw,amount_cny,expense_date',
       filters: [
         { column: 'expense_date', op: 'gte', value: range.from },
         { column: 'expense_date', op: 'lte', value: range.to },
       ],
       order: { column: 'expense_date', ascending: false },
-      limit: 5000,
-    })) || []
-  );
+      limit: pageSize,
+      offset,
+    });
+    expenses.push(...(page || []));
+    if (!Array.isArray(page) || page.length < pageSize) break;
+  }
+  return expenses;
 }
 
 async function buildMonthlyReport(year, onProgress) {
@@ -386,6 +395,7 @@ async function buildMonthlyReport(year, onProgress) {
       operation_cost: 0,
       logistics_cost: 0,
       supplies_cost: 0,
+      other_cost: 0,
       operating_cost_total: 0,
       inventory_purchase_cost: 0,
       total_expense_php: 0,
@@ -424,7 +434,8 @@ async function buildMonthlyReport(year, onProgress) {
     ).trim();
     const kind = classifyExpenseCategory(categoryName);
     const expensePhp =
-      (Number(expense?.amount_php || 0) || 0) + (Number(expense?.amount_krw || 0) || 0) / 25;
+      (Number(expense?.amount_php || 0) || 0) +
+      Math.ceil(Math.max(0, Number(expense?.amount_krw || 0) || 0) / 25);
 
     bucket.total_expense_php += expensePhp;
     bucket.expense_category_php = bucket.expense_category_php
@@ -436,15 +447,16 @@ async function buildMonthlyReport(year, onProgress) {
     else if (kind === 'logistics_cost') bucket.logistics_cost += expensePhp;
     else if (kind === 'supplies_cost') bucket.supplies_cost += expensePhp;
     else if (kind === 'inventory_purchase_cost') bucket.inventory_purchase_cost += expensePhp;
+    else bucket.other_cost += expensePhp;
   }
   reportProgress(95, '최종 수익 계산 중...');
 
   const result = [...monthMap.values()].map((bucket) => {
     const sales_profit =
-      bucket.total_sales - bucket.product_cost - bucket.gift_cost - bucket.guide_commission;
+      bucket.total_sales - bucket.product_cost - bucket.gift_cost;
     const operating_cost_total =
-      bucket.salary_cost + bucket.operation_cost + bucket.logistics_cost + bucket.supplies_cost;
-    const net_profit = sales_profit - operating_cost_total;
+      bucket.salary_cost + bucket.operation_cost + bucket.logistics_cost + bucket.supplies_cost + bucket.other_cost;
+    const net_profit = sales_profit - bucket.guide_commission - operating_cost_total;
     const final_net_profit = net_profit - bucket.inventory_purchase_cost;
 
     return {
@@ -675,19 +687,19 @@ export default function ReportPage() {
               label="매출이익"
               value={formatPhp(selectedSummary?.sales_profit || 0)}
               tone="gold"
-              formula="매출이익 = 총매출 - 원가 - 선물원가 - 가이드커미션"
+              formula="매출이익 = 총매출 - 원가 - 선물원가"
             />
             <KpiCard
               label="운영비 합계"
               value={formatPhp(selectedSummary?.operating_cost_total || 0)}
               tone="red"
-              formula="운영비 합계 = 직원 월급 + 가게 운영비 + 물류비 + 부자재"
+              formula="운영비 합계 = 직원 월급 + 가게 운영비 + 물류비 + 부자재 + 기타 지출"
             />
             <KpiCard
               label="순수익"
               value={formatPhp(selectedSummary?.net_profit || 0)}
               tone="green"
-              formula="순수익 = 매출이익 - 운영비 합계"
+              formula="순수익 = 매출이익 - 가이드 커미션 - 운영비 합계"
             />
             <KpiCard
               label="최종순수익"

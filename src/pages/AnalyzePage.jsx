@@ -273,42 +273,48 @@ export default function AnalyzePage() {
               <div style={{ fontWeight: 700 }}>{data.summary.transactionCount}</div>
             </div>
             <div className="page-card">
-              <div>AOV</div>
+              <div>회사 가이드 커미션 합계</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.aov).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.companyGuideCommission || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>Mr. Moon Discount (10%)</div>
+              <div>로컬 가이드 커미션 합계</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.mrMoonDiscountAmount || 0).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.localGuideCommission || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>Peter Discount (20%)</div>
+              <div>Mr. Moon 현금 할인가 (10%)</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.peterDiscountAmount || 0).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.mrMoonRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>Kakao Discount (10%)</div>
+              <div>Peter 현금 할인가 (20%)</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.kakaoDiscountAmount || 0).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.peterRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>Total Commission</div>
+              <div>Kakao 현금 할인가 (10%)</div>
               <div style={{ fontWeight: 700 }}>
-                {Math.round(data.summary.displayedGuideCommission || data.summary.totalCommission || 0).toLocaleString('en-PH')} PHP
+                {Math.round(data.summary.kakaoRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
             </div>
             <div className="page-card">
-              <div>SoldAt Range</div>
+              <div>Nowtravel 현금 할인가 (15%)</div>
               <div style={{ fontWeight: 700 }}>
-                {String(data.summary.sourceSoldAtMin || data.summary.soldAtMin || '-').slice(0, 16)}
+                {Math.round(data.summary.nowtravelRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 2 }}>
-                {String(data.summary.sourceSoldAtMax || data.summary.soldAtMax || '-').slice(0, 16)}
+            </div>
+            <div className="page-card">
+              <div>Refund Amount</div>
+              <div style={{ fontWeight: 700 }}>
+                {Math.round(data.summary.refundAmount || 0).toLocaleString('en-PH')} PHP
+              </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                선택 기간 판매분 중 환불된 금액
               </div>
             </div>
           </div>

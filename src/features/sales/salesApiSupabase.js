@@ -1,7 +1,7 @@
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
-import { KAKAO_FRIEND_ID } from '../guides/guideSelectOptions';
+import { KAKAO_FRIEND_ID, NOWTRAVEL_ID } from '../guides/guideSelectOptions';
 import { addOfflineSales, getAllCachedProducts, isBrowserOnline } from '../offline/offlineDB';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
@@ -1832,6 +1832,7 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
   }
 
   let guideNameMap = new Map();
+  let commissionEligibleIds = new Set();
   const guideIds = [
     ...new Set(
       [...groupMap.values()]
@@ -1841,18 +1842,14 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
     ),
   ];
   if (guideIds.length) {
-    const guides = await sbSelect('guides', { select: 'id,name' });
+    const guides = await sbSelect('guides', { select: 'id,name,guide_type,commission_enabled' });
     guideNameMap = new Map((guides || []).map((row) => [String(row?.id), String(row?.name || '')]));
+    commissionEligibleIds = new Set((guides || [])
+      .filter((row) => ['regular', 'local'].includes(row?.guide_type) && row?.commission_enabled !== false)
+      .map((row) => String(row.id)));
   }
 
-  // Count sales per group for proportional commission distribution
-  const groupSalesCount = new Map();
-  for (const row of sales || []) {
-    const gid = String(row?.sale_group_id || '').trim();
-    if (gid) groupSalesCount.set(gid, (groupSalesCount.get(gid) || 0) + 1);
-  }
-
-  return (sales || [])
+  const eligibleRows = (sales || [])
     .map((row) => {
       const qty = Number(row?.qty || 0) || 0;
       const unit = Number(row?.price || 0) || 0;
@@ -1871,11 +1868,6 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const freeGift = !isExchanged && (Boolean(row?.free_gift ?? false) || unit === 0);
       const finalUnit = isRefunded || freeGift ? 0 : unit;
 
-      // Distribute group commission proportionally across sales rows
-      const groupCommission = ginfo?.guideCommission || 0;
-      const salesInGroup = groupId ? (groupSalesCount.get(groupId) || 1) : 1;
-      const rowCommission = groupCommission / salesInGroup;
-
       return {
         saleId: row?.id,
         soldAt: row?.sold_at,
@@ -1891,10 +1883,46 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
         isMrMoon,
         isElla,
         isPeter,
-        commission: rowCommission,
+        commission: 0,
       };
     })
-    .filter((row) => row.qty > 0 && !isExcludedRevenueSale(row));
+    .filter((row) => row.qty > 0 && !row.isRefunded && !isExcludedRevenueSale(row));
+
+  // Match /analyze: spread each eligible group's stored commission by paid sales.
+  const groupSubtotalMap = new Map();
+  for (const row of eligibleRows) {
+    const gid = String(row.saleGroupId || '').trim();
+    if (!gid || row.freeGift) continue;
+    groupSubtotalMap.set(gid, (groupSubtotalMap.get(gid) || 0) + row.lineTotalPhp);
+  }
+  return eligibleRows.map((row) => {
+    const gid = String(row.saleGroupId || '').trim();
+    const subtotal = groupSubtotalMap.get(gid) || 0;
+    if (!gid || !commissionEligibleIds.has(String(row.guideId)) || row.freeGift || !subtotal) return row;
+    const stored = groupMap.get(gid)?.guideCommission || 0;
+    const commission = (stored > 0 ? stored : subtotal * 0.1) * row.lineTotalPhp / subtotal;
+    return { ...row, commission };
+  });
+}
+
+async function getAnalyticsExpenseAmount(fromKey, toKey) {
+  const expenseFilters = [];
+  if (fromKey) expenseFilters.push({ column: 'expense_date', op: 'gte', value: fromKey });
+  if (toKey) expenseFilters.push({ column: 'expense_date', op: 'lte', value: toKey });
+  try {
+    const expenses = await sbSelectAll('expenses', {
+      select: 'amount_php,amount_krw,expense_date',
+      filters: expenseFilters,
+      order: { column: 'expense_date', ascending: false },
+    });
+    return (expenses || []).reduce((sum, e) => {
+      const php = Number(e?.amount_php || 0) || 0;
+      const krw = Number(e?.amount_krw || 0) || 0;
+      return sum + php + (krw > 0 ? Math.ceil(krw / 25) : 0);
+    }, 0);
+  } catch {
+    return 0;
+  }
 }
 
 export async function getAnalytics({
@@ -1966,7 +1994,7 @@ export async function getAnalytics({
       const inList = buildInList(chunk);
       if (inList === '()') continue;
       const page = await sbSelect('sale_groups', {
-        select: 'id,guide_id,guide_commission',
+        select: 'id,guide_id,local_guide_name,guide_commission',
         filters: [{ column: 'id', op: 'in', value: inList }],
       });
       if (Array.isArray(page) && page.length) groups.push(...page);
@@ -1974,6 +2002,7 @@ export async function getAnalytics({
     groups.forEach((g) =>
       groupMap.set(String(g.id), {
         guideId: g.guide_id ?? null,
+        localGuideName: String(g.local_guide_name || '').trim(),
         guideCommission: Number(g.guide_commission ?? 0) || 0,
       })
     );
@@ -2014,6 +2043,7 @@ export async function getAnalytics({
           freeGift: isFreeGift,
           nameKo: '',
           guideId: guideId,
+          localGuideName: g?.localGuideName || '',
           saleGroupId: r.sale_group_id,
           commission: guideId && !isFreeGift ? finalUnit * qtyN * 0.1 : 0,
         };
@@ -2022,6 +2052,21 @@ export async function getAnalytics({
   );
 
   if (!analyzedRows.length) {
+    const expenseAmount = await getAnalyticsExpenseAmount(fromKey, toKey);
+    const refundGuideIds = [...new Set(refundedRows
+      .map((r) => groupMap.get(String(r.sale_group_id))?.guideId)
+      .filter(Boolean)
+      .map(String))];
+    const refundGuides = refundGuideIds.length
+      ? await sbSelect('guides', { select: 'id,name' })
+      : [];
+    const refundGuideNames = new Map((refundGuides || []).map((g) => [String(g.id), String(g.name || '')]));
+    const includedRefunds = refundedRows.filter((r) => {
+      if (isExcludedRevenueSale(r)) return false;
+      const guideId = groupMap.get(String(r.sale_group_id))?.guideId;
+      const name = guideId ? refundGuideNames.get(String(guideId)) || '' : '';
+      return !name.toLowerCase().replace(/[\s.]/g, '').includes('ella');
+    });
     report(100, '완료');
     return {
       __partial: false,
@@ -2031,13 +2076,16 @@ export async function getAnalytics({
         costAmount: 0,
         grossProfit: 0,
         rentAmount: 0,
-        ownerProfit: 0,
+        ownerProfit: -expenseAmount,
+        expenseAmount,
         transactionCount: 0,
         aov: 0,
+        companyGuideCommission: 0,
+        localGuideCommission: 0,
         discountAmount: 0,
         discountRate: 0,
-        refundCount: refundedRows.length,
-        refundAmount: refundedRows.reduce(
+        refundCount: includedRefunds.length,
+        refundAmount: includedRefunds.reduce(
           (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
           0
         ),
@@ -2063,11 +2111,17 @@ export async function getAnalytics({
   // Fetch guide names for mapping
   report(60, '가이드 이름 매핑 중…');
   let guideMap = new Map();
+  let guideTypeMap = new Map();
+  let commissionEligibleIds = new Set();
   const guideIds = [...new Set(analyzedRows.map((r) => r.guideId).filter(Boolean))];
   if (guideIds.length > 0) {
     try {
-      const allGuides = await sbSelect('guides', { select: 'id,name' });
+      const allGuides = await sbSelect('guides', { select: 'id,name,guide_type,commission_enabled' });
       guideMap = new Map((allGuides || []).map((g) => [String(g.id), g.name]));
+      guideTypeMap = new Map((allGuides || []).map((g) => [String(g.id), g.guide_type]));
+      commissionEligibleIds = new Set((allGuides || [])
+        .filter((g) => ['regular', 'local'].includes(g?.guide_type) && g?.commission_enabled !== false)
+        .map((g) => String(g.id)));
     } catch (e) {
       console.error(e);
     }
@@ -2081,9 +2135,10 @@ export async function getAnalytics({
     const isElla = norm.includes('ella');
     const isPeter = norm.includes('peter');
     const isKakaoFriend = !r.guideId && String(r.localGuideName || '') === KAKAO_FRIEND_ID;
-    return { ...r, isMrMoon, isElla, isPeter, isKakaoFriend };
+    const isNowtravel = !r.guideId && String(r.localGuideName || '') === NOWTRAVEL_ID;
+    return { ...r, isMrMoon, isElla, isPeter, isKakaoFriend, isNowtravel };
   });
-  let rows = withGuideFlags.filter((r) => !isExcludedRevenueSale(r));
+  let rows = withGuideFlags.filter((r) => r.qty > 0 && !isExcludedRevenueSale(r));
   const rowSoldAts = (rows || []).map((r) => String(r?.soldAt || '').trim()).filter(Boolean);
   let soldAtMin = '';
   let soldAtMax = '';
@@ -2109,7 +2164,7 @@ export async function getAnalytics({
     const isMrMoon = norm.includes('mrmoon');
     const isPeter = norm.includes('peter');
     const isElla = norm.includes('ella');
-    if (!guideId || isMrMoon || isPeter || isElla) {
+    if (!guideId || !commissionEligibleIds.has(String(guideId)) || isMrMoon || isPeter || isElla) {
       groupCommissionMap.set(gid, 0);
       continue;
     }
@@ -2133,6 +2188,8 @@ export async function getAnalytics({
   let mrMoonDiscountAmount = 0;
   let kakaoRevenue = 0;
   let kakaoDiscountAmount = 0;
+  let nowtravelRevenue = 0;
+  let nowtravelDiscountAmount = 0;
   let peterRevenue = 0;
   let peterDiscountAmount = 0;
   try {
@@ -2150,6 +2207,10 @@ export async function getAnalytics({
         kakaoRevenue += Number(r.lineTotalPhp || 0) || 0;
         kakaoDiscountAmount += discountRow;
       }
+      if (r.isNowtravel) {
+        nowtravelRevenue += Number(r.lineTotalPhp || 0) || 0;
+        nowtravelDiscountAmount += discountRow;
+      }
       if (r.isPeter) {
         peterRevenue += Number(r.lineTotalPhp || 0) || 0;
         peterDiscountAmount += discountRow;
@@ -2160,6 +2221,8 @@ export async function getAnalytics({
     mrMoonDiscountAmount = 0;
     kakaoRevenue = 0;
     kakaoDiscountAmount = 0;
+    nowtravelRevenue = 0;
+    nowtravelDiscountAmount = 0;
     peterRevenue = 0;
     peterDiscountAmount = 0;
   }
@@ -2168,7 +2231,8 @@ export async function getAnalytics({
   const transactionKeys = new Set(rows.map((r) => r.saleGroupId || String(r.soldAt || '')));
   const transactionCount = transactionKeys.size;
 
-  const refundedNonElla = refundedRows.filter((r) => {
+  const includedRefunds = refundedRows.filter((r) => {
+    if (isExcludedRevenueSale(r)) return false;
     const gid = String(r.sale_group_id || '').trim();
     const info = gid ? groupMap.get(gid) : null;
     const guideId = info?.guideId ?? null;
@@ -2178,7 +2242,7 @@ export async function getAnalytics({
     return !norm.includes('ella');
   });
 
-  const refundAmount = refundedNonElla.reduce(
+  const refundAmount = includedRefunds.reduce(
     (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
     0
   );
@@ -2191,6 +2255,8 @@ export async function getAnalytics({
   // Subtract Mr.Moon, employee, Peter commissions from total
   // Use guide_type from groupMap if available, fallback to name matching
   let displayedGuideCommission = 0;
+  let companyGuideCommission = 0;
+  let localGuideCommission = 0;
   const commissionGroupIds = [
     ...new Set(rows.map((r) => String(r.saleGroupId || '').trim())),
   ].filter(Boolean);
@@ -2204,6 +2270,8 @@ export async function getAnalytics({
     const norm = raw.toLowerCase().replace(/[\s.]/g, '');
     if (!norm.includes('mrmoon') && !norm.includes('ella') && !norm.includes('peter')) {
       displayedGuideCommission += gcomm;
+      if (guideTypeMap.get(String(guideId)) === 'local') localGuideCommission += gcomm;
+      else if (guideTypeMap.get(String(guideId)) === 'regular') companyGuideCommission += gcomm;
     }
   }
   const profitCommissionExpense = displayedGuideCommission;
@@ -2254,26 +2322,7 @@ export async function getAnalytics({
   const grossProfit = realTotalSales - costAmount;
 
   report(70, '지출 합산 중…');
-  let expenseAmount = 0;
-  try {
-    const expenseFilters = [];
-    if (hasFrom) expenseFilters.push({ column: 'expense_date', op: 'gte', value: fromKey });
-    if (hasTo) expenseFilters.push({ column: 'expense_date', op: 'lte', value: toKey });
-    const expenses = await sbSelectAll('expenses', {
-      select: 'amount_php,amount_krw,expense_date',
-      filters: expenseFilters,
-      order: { column: 'expense_date', ascending: false },
-    });
-    expenseAmount =
-      (expenses || []).reduce((sum, e) => {
-        const php = Number(e?.amount_php || 0) || 0;
-        const krw = Number(e?.amount_krw || 0) || 0;
-        const krwPhp = krw > 0 ? Math.ceil(krw / 25) : 0;
-        return sum + php + krwPhp;
-      }, 0) || 0;
-  } catch {
-    expenseAmount = 0;
-  }
+  const expenseAmount = await getAnalyticsExpenseAmount(fromKey, toKey);
 
   const mrMoonDiscount = mrMoonDiscountAmount;
   const kakaoDiscount = kakaoDiscountAmount;
@@ -2297,6 +2346,8 @@ export async function getAnalytics({
     expenseAmount,
     ownerProfit,
     displayedGuideCommission,
+    companyGuideCommission,
+    localGuideCommission,
     profitCommissionExpense,
     totalCommission: displayedGuideCommission,
     transactionCount,
@@ -2306,8 +2357,10 @@ export async function getAnalytics({
     peterDiscountAmount: peterDiscount,
     peterRevenue,
     kakaoDiscountAmount: kakaoDiscount,
+    nowtravelDiscountAmount,
+    nowtravelRevenue,
     kakaoRevenue,
-    refundCount: refundedNonElla.length,
+    refundCount: includedRefunds.length,
     refundAmount,
     giftQty,
     giftListAmount,
