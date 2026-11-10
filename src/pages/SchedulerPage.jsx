@@ -1500,17 +1500,19 @@ export default function SchedulerPage() {
               });
               const categoryId = Array.isArray(categories) ? categories[0]?.id : null;
               if (categoryId) {
-                const expenseTitle = `${result.startDate.slice(5).replace('-', '/')} - ${result.endDate.slice(5).replace('-', '/')}`;
+                const expenseTitle = `${result.startDate.slice(5).replace('-', '/')}-${result.endDate.slice(5).replace('-', '/')} B:${result.employees.Berlyn.totalPay} J:${result.employees.Janice.totalPay}`;
                 const expenses = await sbSelect('expenses', {
-                  select: 'id',
+                  select: 'id,title',
                   filters: [
                     { column: 'category_id', op: 'eq', value: categoryId },
                     { column: 'expense_date', op: 'eq', value: result.startDate },
-                    { column: 'title', op: 'eq', value: expenseTitle },
                   ],
-                  limit: 1,
                 });
-                setPayrollExpenseExists(Array.isArray(expenses) && expenses.length > 0);
+                const legacyTitle = `${result.startDate.slice(5).replace('-', '/')} - ${result.endDate.slice(5).replace('-', '/')}`;
+                setPayrollExpenseExists(
+                  Array.isArray(expenses) &&
+                    expenses.some((expense) => expense.title === expenseTitle || expense.title === legacyTitle)
+                );
               }
             } catch (error) {
               console.error('Failed to check payroll expense:', error);
@@ -1745,12 +1747,16 @@ export default function SchedulerPage() {
                   (sum, employee) => sum + (Number(employee?.totalPay) || 0),
                   0
                 );
+                const payrollTitle =
+                  `${payrollResult.startDate.slice(5).replace('-', '/')}-${payrollResult.endDate.slice(5).replace('-', '/')} ` +
+                  `B:${payrollResult.employees.Berlyn.totalPay} ` +
+                  `J:${payrollResult.employees.Janice.totalPay}`;
                 await sbInsert(
                   'expenses',
                   [
                     {
                       category_id: salaryCategory.id,
-                      title: `${payrollResult.startDate.slice(5).replace('-', '/')} - ${payrollResult.endDate.slice(5).replace('-', '/')}`,
+                      title: payrollTitle,
                       amount_php: totalPayroll,
                       amount_krw: 0,
                       amount_cny: 0,
