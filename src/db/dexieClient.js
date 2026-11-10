@@ -105,6 +105,11 @@ function buildDbInstance() {
     today_sales: 'id,sale_date,sold_at',
   });
 
+  dexieDb.version(9).stores({
+    offline_attendance: '&local_id,sync_status,attendance_time,created_at',
+    offline_checklist: '&key,sync_status,check_date,created_at',
+  });
+
   // Lifecycle events (CRITICAL: never leave a DB open with a pending upgrade)
   dexieDb.on('blocked', () => {
     console.error('[Dexie] Database update is blocked. Please close other tabs and refresh.');

@@ -7,11 +7,18 @@ import {
   getProductsSyncStatus,
   startBackgroundProductSync,
   syncOfflineSalesToServer,
+  syncOfflineAttendanceToServer,
+  syncOfflineChecklistToServer,
   syncTodaySalesToCache,
   refreshAllData,
   syncStockChecksToServer,
 } from './offlineSync';
-import { isBrowserOnline, countUnsyncedStockChecks } from './offlineDB';
+import {
+  isBrowserOnline,
+  countUnsyncedStockChecks,
+  countUnsyncedOfflineAttendance,
+  countUnsyncedOfflineChecklist,
+} from './offlineDB';
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const STALE_WARN_MS = 12 * 60 * 60 * 1000; // 12 hours (offline warning threshold)
@@ -36,24 +43,31 @@ export default function OfflineStatusBar() {
   const [online, setOnline] = useState(() => isBrowserOnline());
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingChecks, setPendingChecks] = useState(0);
+  const [pendingAttendance, setPendingAttendance] = useState(0);
+  const [pendingChecklist, setPendingChecklist] = useState(0);
   const [syncedAt, setSyncedAt] = useState(null);
   const [syncStatus, setSyncStatus] = useState('unknown');
   const [cachedCount, setCachedCount] = useState(0);
   const [syncingProducts, setSyncingProducts] = useState(false);
   const [syncingSales, setSyncingSales] = useState(false);
   const [syncingChecks, setSyncingChecks] = useState(false);
+  const [syncingMisc, setSyncingMisc] = useState(false);
   const firstRun = useRef(true);
   const bgStarted = useRef(false);
 
   const refreshCounts = useCallback(async () => {
     try {
-      const [n, checks, status] = await Promise.all([
+      const [n, checks, status, att, chk] = await Promise.all([
         countPendingOfflineSales(),
         countUnsyncedStockChecks(),
         getProductsSyncStatus(),
+        countUnsyncedOfflineAttendance(),
+        countUnsyncedOfflineChecklist(),
       ]);
       setPendingCount(Number(n || 0));
       setPendingChecks(Number(checks || 0));
+      setPendingAttendance(Number(att || 0));
+      setPendingChecklist(Number(chk || 0));
       setSyncedAt(status.syncedAt);
       setSyncStatus(status.syncStatus || 'unknown');
       setCachedCount(status.cachedCount || 0);
@@ -86,6 +100,17 @@ export default function OfflineStatusBar() {
       setOnline(true);
       showToast('Internet connection restored.');
       refreshCounts();
+      // Auto-sync attendance & checklist queues in the background.
+      (async () => {
+        try {
+          await syncOfflineAttendanceToServer();
+          await syncOfflineChecklistToServer();
+        } catch (e) {
+          console.warn('[OfflineStatusBar] auto-sync attendance/checklist failed:', e);
+        } finally {
+          refreshCounts();
+        }
+      })();
     };
     const onOffline = () => {
       setOnline(false);
@@ -123,6 +148,14 @@ export default function OfflineStatusBar() {
     firstRun.current = false;
     if (!online) return;
     (async () => {
+      // Auto-sync any attendance/checklist records queued while offline.
+      try {
+        await syncOfflineAttendanceToServer();
+        await syncOfflineChecklistToServer();
+        await refreshCounts();
+      } catch (e) {
+        console.warn('[OfflineStatusBar] initial attendance/checklist sync skipped:', e);
+      }
       try {
         const status = await getProductsSyncStatus();
         const stamp = status?.syncedAt ? Date.parse(String(status.syncedAt)) : 0;
@@ -146,7 +179,7 @@ export default function OfflineStatusBar() {
         setSyncingProducts(false);
       }
     })();
-  }, [online]);
+  }, [online, refreshCounts]);
 
   const handleRefreshProducts = async () => {
     if (!online) {
@@ -262,6 +295,31 @@ export default function OfflineStatusBar() {
     } finally {
       await refreshCounts();
       setSyncingChecks(false);
+    }
+  };
+
+  const handleSyncMisc = async () => {
+    if (!online) {
+      showToast('You are offline. Connect to the internet first to sync.');
+      return;
+    }
+    if (syncingMisc) return;
+    setSyncingMisc(true);
+    try {
+      const att = await syncOfflineAttendanceToServer();
+      const chk = await syncOfflineChecklistToServer();
+      const failed = Number(att?.failed || 0) + Number(chk?.failed || 0);
+      showToast(
+        failed > 0
+          ? `${failed} record(s) could not be synced. Please try again.`
+          : 'Attendance and checklist synced successfully.'
+      );
+    } catch (e) {
+      console.error('[OfflineStatusBar] handleSyncMisc:', e);
+      showToast(`Sync failed: ${e?.message || String(e).slice(0, 80)}`);
+    } finally {
+      await refreshCounts();
+      setSyncingMisc(false);
     }
   };
 
@@ -433,6 +491,36 @@ export default function OfflineStatusBar() {
             {syncingChecks
               ? 'Syncing...'
               : `Sync ${pendingChecks} Check${pendingChecks === 1 ? '' : 's'}`}
+          </button>
+        </>
+      )}
+
+      {pendingAttendance + pendingChecklist > 0 && (
+        <>
+          <span style={{ color: '#f59e0b', fontSize: 12 }}>
+            Unsynced attendance: <strong>{pendingAttendance}</strong> / checklist:{' '}
+            <strong>{pendingChecklist}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={handleSyncMisc}
+            disabled={!online || syncingMisc}
+            style={{
+              padding: '4px 12px',
+              borderRadius: 999,
+              border: '1px solid #f59e0b',
+              background: '#3a2a10',
+              color: !online || syncingMisc ? 'var(--text-muted)' : '#fcd34d',
+              cursor: !online || syncingMisc ? 'not-allowed' : 'pointer',
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            }}
+            title="Sync offline attendance and checklist to server"
+          >
+            {syncingMisc
+              ? 'Syncing...'
+              : `Sync ${pendingAttendance + pendingChecklist} Record${pendingAttendance + pendingChecklist === 1 ? '' : 's'}`}
           </button>
         </>
       )}

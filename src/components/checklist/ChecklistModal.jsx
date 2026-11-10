@@ -7,15 +7,16 @@ import { useAdminStore } from '../../store/adminStore';
 import { normalizeAppError } from '../../utils/errorHandler';
 
 const DEFAULT_ITEMS = [
-  'Open the door for 2 hours and check attendance stamp (MUST FIRST)',
-  'Mop the floor (opening cleaning)',
-  "Count products from yesterday’s sales using the system (stock check)",
-  'Clean glass surfaces (entrance, shelves, mirrors, display)',
-  'Check clothes condition (steam wrinkles / cut loose threads / check inside)',
-  'Organize displays by color and brand (restock sold products if needed)',
-  'Record sales in the system, receipts, and Google Sheet and send a screenshot to KakaoTalk',
-  'Count cash and verify with the system (₱5000 original: 100×15, 500×7)',
-  'Sweep the floor and remove trash if full (closing cleaning)',
+  'Open the door and turn air fresh device and check attendance stamp (Priority)',
+  'Sweep the floor and wipe the shelves with a cloth',
+  'Check yesterday’s sales in the system, count the products, and update the Google Sheet',
+  'Clean the glass at the entrance, shelves, mirrors, and display',
+  'Check each item of clothing, steam out wrinkles, trim loose threads, and inspect the inside',
+  'Steam and arrange products by color and brand, and restock sold items if needed',
+  'Record sales in the system and Google Sheet, issue receipts, and send a screenshot to KakaoTalk',
+  'Count the cash and verify it in the system: ₱5,000 total (15 × ₱100 and 7 × ₱500)',
+  'Mop the floor using the mop from the toilet area, then turn off all electrical devices',
+  'Count all gloves and make sure the displayed quantity is correct',
 ];
 
 function dateKey(d) {
@@ -454,7 +455,7 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
                       }}
                     />
                   ) : (
-                    <div style={{ color: 'var(--text-main)', fontSize: 13 }}>{t}</div>
+                    <div style={{ color: 'var(--text-main)', fontSize: 13 }}>{idx + 1}. {t}</div>
                   )}
 
                   {editIdx === idx ? (
@@ -607,7 +608,7 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
                     textDecorationColor: checked ? 'rgba(255,255,255,0.6)' : undefined,
                   }}
                 >
-                  {text}
+                  {idx + 1}. {text}
                 </div>
 
                 <div

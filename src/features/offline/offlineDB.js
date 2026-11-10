@@ -461,3 +461,198 @@ export async function removeStockChecks(records) {
     console.warn('[offlineDB] removeStockChecks failed:', e);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Offline attendance queue
+// ---------------------------------------------------------------------------
+
+/**
+ * Queue an attendance record for later sync.
+ * Record: { local_id, employee_name, shift_type, location, is_tardy,
+ *           attendance_time, sync_status, sync_error, created_at }
+ */
+export async function addOfflineAttendance(record) {
+  const now = new Date().toISOString();
+  const row = {
+    ...record,
+    local_id: String(record?.local_id || crypto.randomUUID()),
+    sync_status: record?.sync_status || 'PENDING',
+    sync_error: record?.sync_error || null,
+    created_at: record?.created_at || now,
+  };
+  try {
+    await db.table('offline_attendance').put(row);
+    return row;
+  } catch (e) {
+    console.error('[offlineDB] addOfflineAttendance failed:', e);
+    throw e;
+  }
+}
+
+export async function getUnsyncedOfflineAttendance() {
+  try {
+    return await db
+      .table('offline_attendance')
+      .where('sync_status')
+      .anyOf(['PENDING', 'FAILED'])
+      .sortBy('created_at');
+  } catch (e) {
+    console.warn('[offlineDB] getUnsyncedOfflineAttendance failed:', e);
+    return [];
+  }
+}
+
+export async function countUnsyncedOfflineAttendance() {
+  try {
+    return await db
+      .table('offline_attendance')
+      .where('sync_status')
+      .anyOf(['PENDING', 'FAILED'])
+      .count();
+  } catch {
+    return 0;
+  }
+}
+
+export async function removeOfflineAttendance(localId) {
+  try {
+    await db.table('offline_attendance').delete(String(localId || ''));
+  } catch (e) {
+    console.warn('[offlineDB] removeOfflineAttendance failed:', e);
+  }
+}
+
+export async function markOfflineAttendanceFailed(localId, errorMessage) {
+  try {
+    await db.table('offline_attendance').update(String(localId || ''), {
+      sync_status: 'FAILED',
+      sync_error: String(errorMessage || 'Unknown error').slice(0, 500),
+    });
+  } catch (e) {
+    console.warn('[offlineDB] markOfflineAttendanceFailed failed:', e);
+  }
+}
+
+/**
+ * Get queued attendance records whose attendance_time is within [startIso, endIso].
+ * Returns records shaped like server rows (with id = local_id) for UI display.
+ */
+export async function getOfflineAttendanceInRange(startIso, endIso) {
+  try {
+    const rows = await db
+      .table('offline_attendance')
+      .where('attendance_time')
+      .between(String(startIso || ''), String(endIso || ''), true, true)
+      .toArray();
+    return (rows || []).map((r) => ({
+      id: r.local_id,
+      employee_name: r.employee_name,
+      shift_type: r.shift_type,
+      location: r.location || {},
+      is_tardy: Boolean(r.is_tardy),
+      attendance_time: r.attendance_time,
+      _offline: true,
+    }));
+  } catch (e) {
+    console.warn('[offlineDB] getOfflineAttendanceInRange failed:', e);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Offline checklist queue (daily upsert keyed by check_date)
+// ---------------------------------------------------------------------------
+
+export async function saveOfflineChecklistDaily({ checkDate, payload }) {
+  const key = `daily||${checkDate}`;
+  const row = {
+    key,
+    type: 'daily',
+    check_date: String(checkDate),
+    payload: payload || {},
+    sync_status: 'PENDING',
+    sync_error: null,
+    created_at: new Date().toISOString(),
+  };
+  try {
+    await db.table('offline_checklist').put(row);
+    return row;
+  } catch (e) {
+    console.error('[offlineDB] saveOfflineChecklistDaily failed:', e);
+    throw e;
+  }
+}
+
+export async function getUnsyncedOfflineChecklist() {
+  try {
+    return await db
+      .table('offline_checklist')
+      .where('sync_status')
+      .anyOf(['PENDING', 'FAILED'])
+      .sortBy('created_at');
+  } catch (e) {
+    console.warn('[offlineDB] getUnsyncedOfflineChecklist failed:', e);
+    return [];
+  }
+}
+
+export async function countUnsyncedOfflineChecklist() {
+  try {
+    return await db
+      .table('offline_checklist')
+      .where('sync_status')
+      .anyOf(['PENDING', 'FAILED'])
+      .count();
+  } catch {
+    return 0;
+  }
+}
+
+export async function removeOfflineChecklist(key) {
+  try {
+    await db.table('offline_checklist').delete(String(key || ''));
+  } catch (e) {
+    console.warn('[offlineDB] removeOfflineChecklist failed:', e);
+  }
+}
+
+export async function markOfflineChecklistFailed(key, errorMessage) {
+  try {
+    await db.table('offline_checklist').update(String(key || ''), {
+      sync_status: 'FAILED',
+      sync_error: String(errorMessage || 'Unknown error').slice(0, 500),
+    });
+  } catch (e) {
+    console.warn('[offlineDB] markOfflineChecklistFailed failed:', e);
+  }
+}
+
+/**
+ * Get the queued daily checklist payload for a date (if any).
+ */
+export async function getOfflineChecklistDaily(checkDate) {
+  try {
+    const row = await db.table('offline_checklist').get(`daily||${checkDate}`);
+    return row?.payload || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get queued daily checklist payloads for a month (YYYY-MM prefix).
+ */
+export async function getOfflineChecklistDailyMonth(year, month) {
+  const prefix = `${year}-${String(month).padStart(2, '0')}`;
+  try {
+    const rows = await db
+      .table('offline_checklist')
+      .where('check_date')
+      .startsWith(prefix)
+      .toArray();
+    return (rows || []).map((r) => r.payload).filter(Boolean);
+  } catch (e) {
+    console.warn('[offlineDB] getOfflineChecklistDailyMonth failed:', e);
+    return [];
+  }
+}

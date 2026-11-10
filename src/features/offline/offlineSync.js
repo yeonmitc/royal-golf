@@ -1,5 +1,5 @@
 // src/features/offline/offlineSync.js
-import { sbInsert, sbRpc, sbSelect } from '../../db/supabaseRest';
+import { sbInsert, sbRpc, sbSelect, sbUpsert } from '../../db/supabaseRest';
 import {
   countUnsyncedOfflineSales,
   getAllCachedProducts,
@@ -694,4 +694,120 @@ export async function syncStockChecksToServer({ onInfo } = {}) {
     failed: failCount,
     message,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Offline attendance -> server sync
+// ---------------------------------------------------------------------------
+
+export async function syncOfflineAttendanceToServer({ onInfo } = {}) {
+  const { getUnsyncedOfflineAttendance, removeOfflineAttendance, markOfflineAttendanceFailed } =
+    await import('./offlineDB');
+
+  const pending = await getUnsyncedOfflineAttendance();
+  if (!pending || pending.length === 0) {
+    return { ok: true, total: 0, success: 0, failed: 0 };
+  }
+
+  if (onInfo) onInfo(`Syncing attendance records... (${pending.length} items)`);
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const r of pending) {
+    try {
+      await sbInsert(
+        'attendance_logs',
+        [
+          {
+            employee_name: r.employee_name,
+            shift_type: r.shift_type,
+            location: r.location || {},
+            is_tardy: Boolean(r.is_tardy),
+            attendance_time: r.attendance_time,
+          },
+        ],
+        { returning: 'minimal' }
+      );
+      await removeOfflineAttendance(r.local_id);
+      successCount += 1;
+    } catch (e) {
+      const errMsg = String(e?.message || 'Unknown error');
+      console.error('[offlineSync] attendance INSERT failed:', {
+        localId: r.local_id,
+        error: errMsg,
+      });
+      await markOfflineAttendanceFailed(r.local_id, errMsg);
+      failCount += 1;
+    }
+  }
+
+  return { ok: failCount === 0, total: pending.length, success: successCount, failed: failCount };
+}
+
+// ---------------------------------------------------------------------------
+// Offline checklist -> server sync
+// ---------------------------------------------------------------------------
+
+export async function syncOfflineChecklistToServer({ onInfo } = {}) {
+  const { getUnsyncedOfflineChecklist, removeOfflineChecklist, markOfflineChecklistFailed } =
+    await import('./offlineDB');
+
+  const pending = await getUnsyncedOfflineChecklist();
+  if (!pending || pending.length === 0) {
+    return { ok: true, total: 0, success: 0, failed: 0 };
+  }
+
+  if (onInfo) onInfo(`Syncing checklists... (${pending.length} items)`);
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const r of pending) {
+    try {
+      if (r.type === 'daily') {
+        await sbUpsert('checklist_daily', [r.payload], {
+          onConflict: 'check_date',
+          returning: 'minimal',
+        });
+      }
+      await removeOfflineChecklist(r.key);
+      successCount += 1;
+    } catch (e) {
+      const errMsg = String(e?.message || 'Unknown error');
+      console.error('[offlineSync] checklist UPSERT failed:', { key: r.key, error: errMsg });
+      await markOfflineChecklistFailed(r.key, errMsg);
+      failCount += 1;
+    }
+  }
+
+  return { ok: failCount === 0, total: pending.length, success: successCount, failed: failCount };
+}
+
+/**
+ * Sync all offline queues (sales, stock checks, attendance, checklist).
+ */
+export async function syncAllOfflineToServer({ onInfo } = {}) {
+  const results = {};
+  try {
+    results.sales = await syncOfflineSalesToServer({ onInfo });
+  } catch (e) {
+    results.sales = { error: String(e?.message || e) };
+  }
+  try {
+    results.stockChecks = await syncStockChecksToServer({ onInfo });
+  } catch (e) {
+    results.stockChecks = { error: String(e?.message || e) };
+  }
+  try {
+    results.attendance = await syncOfflineAttendanceToServer({ onInfo });
+  } catch (e) {
+    results.attendance = { error: String(e?.message || e) };
+  }
+  try {
+    results.checklist = await syncOfflineChecklistToServer({ onInfo });
+  } catch (e) {
+    results.checklist = { error: String(e?.message || e) };
+  }
+  return results;
 }

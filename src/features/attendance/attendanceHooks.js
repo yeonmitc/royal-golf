@@ -41,6 +41,7 @@ export function useRecordAttendanceMutation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['attendance', 'daily', variables.employeeName] });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'monthly'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'today'] });
     },
   });
 }

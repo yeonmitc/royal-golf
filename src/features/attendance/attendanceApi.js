@@ -1,4 +1,9 @@
 import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../../db/supabaseRest';
+import {
+  addOfflineAttendance,
+  getOfflineAttendanceInRange,
+  isBrowserOnline,
+} from '../offline/offlineDB';
 
 // Helper: Convert a Date object to an ISO string representing the local time as UTC.
 // Example: If local time is 14:00 (UTC+8), this returns "...T14:00:00.000Z"
@@ -8,7 +13,21 @@ function getLocalAsUtcISOString(date) {
   return localDate.toISOString();
 }
 
-// 1. Check if employee already stamped today
+// Detect failures caused by lack of connectivity (vs. real server errors).
+function isNetworkError(err) {
+  if (!isBrowserOnline()) return true;
+  const msg = String(err?.message || err || '').toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('load failed') ||
+    msg.includes('timeout') ||
+    msg.includes('econnrefused')
+  );
+}
+
+// 1. Check if employee already stamped today (merges locally queued records)
 export async function checkDailyAttendance(employeeName) {
   if (!employeeName) return null;
 
@@ -16,23 +35,44 @@ export async function checkDailyAttendance(employeeName) {
   // Set start of day in local time
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
 
   // Use Local-as-UTC for query to match stored format
   const startIso = getLocalAsUtcISOString(start);
+  const endIso = getLocalAsUtcISOString(end);
 
-  const logs = await sbSelect('attendance_logs', {
-    select: '*',
-    filters: [
-      { column: 'employee_name', op: 'eq', value: employeeName },
-      { column: 'attendance_time', op: 'gte', value: startIso },
-    ],
-    order: { column: 'attendance_time', ascending: false },
-    limit: 1,
-  });
-  return logs && logs.length > 0 ? logs[0] : null;
+  let serverLogs = [];
+  try {
+    serverLogs =
+      (await sbSelect('attendance_logs', {
+        select: '*',
+        filters: [
+          { column: 'employee_name', op: 'eq', value: employeeName },
+          { column: 'attendance_time', op: 'gte', value: startIso },
+        ],
+        order: { column: 'attendance_time', ascending: false },
+        limit: 1,
+      })) || [];
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+  }
+
+  let offlineLogs = [];
+  try {
+    const all = await getOfflineAttendanceInRange(startIso, endIso);
+    offlineLogs = all.filter((l) => String(l.employee_name || '').trim() === String(employeeName).trim());
+  } catch {
+    /* ignore */
+  }
+
+  const merged = [...serverLogs, ...offlineLogs];
+  if (merged.length === 0) return null;
+  merged.sort((a, b) => new Date(b.attendance_time).getTime() - new Date(a.attendance_time).getTime());
+  return merged[0];
 }
 
-// 2. Record attendance
+// 2. Record attendance (offline-aware: queues locally when offline)
 export async function recordAttendance({ employeeName, shiftType, location, isTardy, attendanceTime }) {
   const at = attendanceTime instanceof Date ? attendanceTime : new Date();
   const attendanceTimeIso = getLocalAsUtcISOString(at);
@@ -45,8 +85,25 @@ export async function recordAttendance({ employeeName, shiftType, location, isTa
     attendance_time: attendanceTimeIso,
   };
 
-  const result = await sbInsert('attendance_logs', [payload]);
-  return result;
+  const queueLocally = async () => {
+    const localId = `local-${crypto.randomUUID()}`;
+    await addOfflineAttendance({ local_id: localId, ...payload });
+    // Return shape compatible with the online insert path (id + flag).
+    return { id: localId, offline: true, ...payload };
+  };
+
+  if (!isBrowserOnline()) {
+    return queueLocally();
+  }
+
+  try {
+    return await sbInsert('attendance_logs', [payload]);
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return queueLocally();
+    }
+    throw e;
+  }
 }
 
 export async function updateAttendanceLog({ id, employeeName, shiftType, attendanceTime }) {
@@ -75,22 +132,38 @@ export async function deleteAttendanceLog({ id }) {
   return { ok: true };
 }
 
-// Get today's attendance logs (any shift)
+// Get today's attendance logs (any shift) — merges locally queued records.
 export async function fetchTodayAttendance() {
   const now = new Date();
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
   const startIso = getLocalAsUtcISOString(start);
+  const endIso = getLocalAsUtcISOString(end);
 
-  const logs = await sbSelect('attendance_logs', {
-    select: '*',
-    filters: [{ column: 'attendance_time', op: 'gte', value: startIso }],
-    order: { column: 'attendance_time', ascending: true },
-  });
-  return logs || [];
+  let serverLogs = [];
+  try {
+    serverLogs =
+      (await sbSelect('attendance_logs', {
+        select: '*',
+        filters: [{ column: 'attendance_time', op: 'gte', value: startIso }],
+        order: { column: 'attendance_time', ascending: true },
+      })) || [];
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+  }
+
+  let offlineLogs = [];
+  try {
+    offlineLogs = await getOfflineAttendanceInRange(startIso, endIso);
+  } catch {
+    /* ignore */
+  }
+  return [...serverLogs, ...offlineLogs];
 }
 
-// 3. Fetch monthly attendance for all employees
+// 3. Fetch monthly attendance for all employees — merges locally queued records.
 export async function fetchMonthlyAttendance(year, month) {
   // Start of month
   const start = new Date(year, month - 1, 1);
@@ -104,14 +177,27 @@ export async function fetchMonthlyAttendance(year, month) {
   const startIso = getLocalAsUtcISOString(start);
   const endIso = getLocalAsUtcISOString(end);
 
-  const logs = await sbSelect('attendance_logs', {
-    select: '*',
-    filters: [
-      { column: 'attendance_time', op: 'gte', value: startIso },
-      { column: 'attendance_time', op: 'lte', value: endIso },
-    ],
-    limit: 1000, 
-  });
-  
-  return logs || [];
+  let serverLogs = [];
+  try {
+    serverLogs =
+      (await sbSelect('attendance_logs', {
+        select: '*',
+        filters: [
+          { column: 'attendance_time', op: 'gte', value: startIso },
+          { column: 'attendance_time', op: 'lte', value: endIso },
+        ],
+        limit: 1000,
+      })) || [];
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+  }
+
+  let offlineLogs = [];
+  try {
+    offlineLogs = await getOfflineAttendanceInRange(startIso, endIso);
+  } catch {
+    /* ignore */
+  }
+
+  return [...serverLogs, ...offlineLogs];
 }

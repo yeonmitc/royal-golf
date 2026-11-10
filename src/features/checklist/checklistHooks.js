@@ -44,6 +44,7 @@ export function useUpsertChecklistDailyMutation() {
     mutationFn: upsertChecklistDaily,
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['checklist', 'daily', variables?.checkDate] });
+      queryClient.invalidateQueries({ queryKey: ['checklist', 'daily-month'] });
     },
   });
 }
