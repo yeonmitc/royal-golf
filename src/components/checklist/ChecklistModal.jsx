@@ -5,6 +5,7 @@ import { useChecklistDaily, useUpsertChecklistDailyMutation } from '../../featur
 import { useToast } from '../../context/ToastContext';
 import { useAdminStore } from '../../store/adminStore';
 import { normalizeAppError } from '../../utils/errorHandler';
+import { isBrowserOnline } from '../../features/offline/offlineDB';
 
 const DEFAULT_ITEMS = [
   'Open the door and turn air fresh device and check attendance stamp (Priority)',
@@ -97,7 +98,7 @@ function toSharedRecord(dayRow, maxItems) {
 }
 
 export default function ChecklistModal({ open, onClose, employeeNames }) {
-  const { mutate: upsertChecklist, isPending } = useUpsertChecklistDailyMutation();
+  const { mutateAsync: upsertChecklist, isPending } = useUpsertChecklistDailyMutation();
   const { showToast, showToastTyped } = useToast();
   const isAdmin = useAdminStore((s) => s.isAuthorized());
 
@@ -135,12 +136,16 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const { data: dayRow } = useChecklistDaily(dateStr, { enabled: open });
+  const { data: dayRow, isLoading: isDayRowLoading, isFetching: isDayRowFetching } = useChecklistDaily(
+    dateStr,
+    { enabled: open, refetchOnMount: 'always' }
+  );
 
   const [items, setItems] = useState(DEFAULT_ITEMS);
   const [checkedMap, setCheckedMap] = useState({}); // {index: true/false}
   const [metaMap, setMetaMap] = useState({}); // {index: { by, time }}
   const restoredRef = useRef({ key: '', source: '' });
+  const saveQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
     if (!open) return;
@@ -160,6 +165,12 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
       setItems(DEFAULT_ITEMS);
     }
     const key = storageKey(dateStr);
+    if (isBrowserOnline()) {
+      setCheckedMap({});
+      setMetaMap({});
+      restoredRef.current = { key: dateStr, source: 'waiting-db' };
+      return;
+    }
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
@@ -197,16 +208,15 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
 
   useEffect(() => {
     if (!open) return;
-    if (!dayRow || !dayRow.employees) return;
     if (restoredRef.current.key !== dateStr) return;
-    if (restoredRef.current.source !== 'none') return;
+    if (restoredRef.current.source !== 'waiting-db' || isDayRowLoading || isDayRowFetching) return;
 
     const { checkedMap: nextChecked, metaMap: nextMeta } = toSharedRecord(dayRow, items.length);
     setCheckedMap(nextChecked);
     setMetaMap(nextMeta);
     localStorage.setItem(storageKey(dateStr), JSON.stringify({ checkedMap: nextChecked, metaMap: nextMeta }));
     restoredRef.current = { key: dateStr, source: 'db' };
-  }, [open, dateStr, dayRow, items.length]);
+  }, [open, dateStr, dayRow, isDayRowLoading, isDayRowFetching, items.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -258,6 +268,7 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
 
   useEffect(() => {
     if (!open) return;
+    if (restoredRef.current.key !== dateStr || restoredRef.current.source === 'waiting-db') return;
     const key = storageKey(dateStr);
     localStorage.setItem(key, JSON.stringify({ checkedMap, metaMap }));
   }, [open, dateStr, checkedMap, metaMap]);
@@ -268,6 +279,38 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
     [checkedMap]
   );
   const percent = Math.round((checkedCount / totalCount) * 100);
+
+  const persistChecklistState = (nextCheckedMap, nextMetaMap, { closeOnSuccess = false, notify = false } = {}) => {
+    const baseEmployees =
+      dayRow && dayRow.employees && typeof dayRow.employees === 'object' ? { ...dayRow.employees } : {};
+    const checkedItems = [];
+    const times = {};
+    Object.keys(nextCheckedMap || {}).forEach((key) => {
+      const index = Number(key);
+      if (!nextCheckedMap[key] || !Number.isInteger(index) || index < 0 || index >= totalCount) return;
+      const by = String(nextMetaMap?.[index]?.by || '').trim();
+      const time = String(nextMetaMap?.[index]?.time || '').trim();
+      checkedItems.push(index);
+      if (by || time) times[String(index)] = { by: by || actorName, time };
+    });
+    checkedItems.sort((a, b) => a - b);
+    baseEmployees._shared = { checked_items: checkedItems, times };
+
+    const save = () => upsertChecklist({ checkDate: dateStr, totalCount, employees: baseEmployees });
+    saveQueueRef.current = saveQueueRef.current.catch(() => {}).then(save);
+    saveQueueRef.current.then(() => {
+      if (notify) showToast('Checklist saved.');
+      if (closeOnSuccess) onClose?.();
+    }).catch((err) => {
+      const msg = String(err?.message || '');
+      if (msg === 'CHECKLIST_DAILY_TABLE_MISSING' || msg.startsWith('SUPABASE_HTTP_404') || msg.includes('404')) {
+        showToast('DB에 checklist_daily 테이블이 없습니다. SQL 실행 후 다시 저장하세요.');
+        return;
+      }
+      console.error(err);
+      showToastTyped(normalizeAppError(err, { code: 'CHECKLIST_SAVE_FAILED', fallbackMessage: 'Checklist save failed.' }));
+    });
+  };
 
   const CheckIcon = ({ checked }) => (
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -283,23 +326,17 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
       showToast('Select employee first.');
       return;
     }
-    setCheckedMap((prev) => {
-      const timeStr = formatHHSS(new Date());
-      const isChecked = Boolean(prev[idx]);
-      const currentBy = String(metaMap?.[idx]?.by || '').trim();
-      const transferOwner = isChecked && currentBy && currentBy !== actorName;
-      const next = { ...prev };
-      if (!isChecked) next[idx] = true;
-      else if (transferOwner) next[idx] = true;
-      else next[idx] = false;
-      setMetaMap((t) => {
-        const copy = { ...t };
-        if (next[idx]) copy[idx] = { by: actorName, time: timeStr };
-        else delete copy[idx];
-        return copy;
-      });
-      return next;
-    });
+    const timeStr = formatHHSS(new Date());
+    const isChecked = Boolean(checkedMap[idx]);
+    const currentBy = String(metaMap?.[idx]?.by || '').trim();
+    const transferOwner = isChecked && currentBy && currentBy !== actorName;
+    const nextChecked = { ...checkedMap, [idx]: !isChecked || transferOwner };
+    const nextMeta = { ...metaMap };
+    if (nextChecked[idx]) nextMeta[idx] = { by: actorName, time: timeStr };
+    else delete nextMeta[idx];
+    setCheckedMap(nextChecked);
+    setMetaMap(nextMeta);
+    persistChecklistState(nextChecked, nextMeta);
   };
 
 
@@ -309,51 +346,7 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
       return;
     }
 
-    const baseEmployees =
-      dayRow && dayRow.employees && typeof dayRow.employees === 'object' ? { ...dayRow.employees } : {};
-
-    const shared = { checked_items: [], times: {} };
-    Object.keys(checkedMap || {}).forEach((k) => {
-      const idx = Number(k);
-      if (!checkedMap[k]) return;
-      const by = String(metaMap?.[idx]?.by || '').trim();
-      const time = String(metaMap?.[idx]?.time || '').trim();
-      shared.checked_items.push(idx);
-      if (time || by) shared.times[String(idx)] = { by: by || actorName, time };
-    });
-
-    const unique = Array.from(
-      new Set((shared.checked_items || []).map((n) => Number(n)).filter((n) => Number.isFinite(n)))
-    );
-    unique.sort((a, b) => a - b);
-    baseEmployees._shared = { checked_items: unique, times: shared.times || {} };
-
-    upsertChecklist(
-      { checkDate: dateStr, totalCount, employees: baseEmployees },
-      {
-        onSuccess: () => {
-          localStorage.setItem(
-            storageKey(dateStr),
-            JSON.stringify({ checkedMap, metaMap })
-          );
-          showToast('Checklist saved.');
-          onClose?.();
-        },
-        onError: (err) => {
-          const msg = String(err?.message || '');
-          if (msg === 'CHECKLIST_DAILY_TABLE_MISSING') {
-            showToast('DB에 checklist_daily 테이블이 없습니다. SQL 실행 후 다시 저장하세요.');
-            return;
-          }
-          if (msg.startsWith('SUPABASE_HTTP_404') || msg.includes('404')) {
-            showToast('DB에 checklist_daily 테이블이 없습니다. SQL 실행 후 다시 저장하세요.');
-            return;
-          }
-          console.error(err);
-          showToastTyped(normalizeAppError(err, { code: 'CHECKLIST_SAVE_FAILED', fallbackMessage: 'Checklist save failed.' }));
-        },
-      }
-    );
+    persistChecklistState(checkedMap, metaMap, { closeOnSuccess: true, notify: true });
   };
 
   const [adminOpen, setAdminOpen] = useState(false);
