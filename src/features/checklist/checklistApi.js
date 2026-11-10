@@ -3,6 +3,7 @@ import {
   getOfflineChecklistDaily,
   getOfflineChecklistDailyMonth,
   isBrowserOnline,
+  removeOfflineChecklist,
   saveOfflineChecklistDaily,
 } from '../offline/offlineDB';
 
@@ -68,13 +69,15 @@ export async function fetchChecklistSummary({ year, month }) {
 }
 
 export async function fetchChecklistDaily(checkDate) {
-  let offlineRow = null;
-  try {
-    offlineRow = await getOfflineChecklistDaily(checkDate);
-  } catch {
-    /* ignore */
-  }
-  if (offlineRow) return offlineRow;
+  const fetchOfflineRow = async () => {
+    try {
+      return await getOfflineChecklistDaily(checkDate);
+    } catch {
+      return null;
+    }
+  };
+
+  if (!isBrowserOnline()) return fetchOfflineRow();
 
   try {
     const rows = await sbSelect('checklist_daily', {
@@ -85,7 +88,7 @@ export async function fetchChecklistDaily(checkDate) {
     return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   } catch (e) {
     if (isMissingChecklistDailyTable(e)) return null;
-    if (isNetworkError(e)) return null;
+    if (isNetworkError(e)) return fetchOfflineRow();
     throw e;
   }
 }
@@ -95,7 +98,9 @@ export async function fetchChecklistDailyMonth(year, month) {
   const end = new Date(year, month, 0).toISOString().slice(0, 10);
 
   let serverRows = [];
+  let serverAvailable = isBrowserOnline();
   try {
+    if (!serverAvailable) throw new Error('OFFLINE');
     const rows = await sbSelect('checklist_daily', {
       select: '*',
       filters: [
@@ -106,8 +111,14 @@ export async function fetchChecklistDailyMonth(year, month) {
     });
     serverRows = Array.isArray(rows) ? rows : [];
   } catch (e) {
-    if (!isMissingChecklistDailyTable(e) && !isNetworkError(e)) throw e;
+    if (isMissingChecklistDailyTable(e) || isNetworkError(e) || String(e?.message) === 'OFFLINE') {
+      serverAvailable = false;
+    } else {
+      throw e;
+    }
   }
+
+  if (serverAvailable) return serverRows;
 
   let offlineRows = [];
   try {
@@ -116,7 +127,6 @@ export async function fetchChecklistDailyMonth(year, month) {
     /* ignore */
   }
 
-  // Offline (unsynced) rows take priority for the same check_date.
   const byDate = new Map();
   for (const r of serverRows) byDate.set(r.check_date, r);
   for (const r of offlineRows) byDate.set(r.check_date, r);
@@ -144,6 +154,7 @@ export async function upsertChecklistDaily({ checkDate, totalCount, employees })
       onConflict: 'check_date',
       returning: 'representation',
     });
+    await removeOfflineChecklist(`daily||${checkDate}`);
     return Array.isArray(res) ? res[0] : res;
   } catch (e) {
     if (isMissingChecklistDailyTable(e)) throw new Error('CHECKLIST_DAILY_TABLE_MISSING');
