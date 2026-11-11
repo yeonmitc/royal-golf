@@ -154,7 +154,11 @@ const ChecklistDayDetailsModal = ({ dateStr, attendanceDetails, onClose }) => {
           time: detail.time || '-',
         };
       })
-      .sort((a, b) => a.index - b.index);
+      .sort((a, b) => {
+        if (a.time === '-') return b.time === '-' ? a.index - b.index : 1;
+        if (b.time === '-') return -1;
+        return a.time.localeCompare(b.time) || a.index - b.index;
+      });
   }, [dayRow, items]);
 
   // Format date nicely
