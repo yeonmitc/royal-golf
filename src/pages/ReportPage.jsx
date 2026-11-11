@@ -711,9 +711,9 @@ export default function ReportPage() {
             />
             <KpiCard
               label="월 판매 요약"
-              value={`${formatNumber(selectedSummary?.total_sales_qty || 0)}개`}
+              value={`${formatNumber(selectedSummary?.total_sales_qty || 0)}개 / ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.final_net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}%`}
               tone="blue"
-              formula={`총매출 ${formatPhp(selectedSummary?.total_sales || 0)} · 최종순수익률 ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.final_net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}% (총매출을 100%로 계산)`}
+              formula={`총매출 ${formatPhp(selectedSummary?.total_sales || 0)} 기준 · 의류 사입비 포함`}
             />
           </div>
 
