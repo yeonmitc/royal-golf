@@ -211,10 +211,10 @@ export default function AnalyzePage() {
         </div>
       ) : null}
 
-      <Card title={`Sales Summary (${titleFrom} ~ ${titleTo})`}>
+      <Card title={`매출 요약 (${titleFrom} ~ ${titleTo})`}>
         {!data ? (
           <div className="text-sm text-[var(--text-muted)]">
-            Please select a period and click Analyze.
+            기간을 선택한 뒤 분석을 눌러 주세요.
           </div>
         ) : (
           <div
@@ -225,16 +225,17 @@ export default function AnalyzePage() {
             }}
           >
             <div className="page-card">
-              <div>Total Sales</div>
+              <div>총매출</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(data.summary.realTotalSales || data.summary.grossAmount).toLocaleString(
                   'en-PH'
                 )}{' '}
                 PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>선택 기간의 판매 금액 합계</div>
             </div>
             <div className="page-card">
-              <div>Total Sales - Guide Comm</div>
+              <div>가이드 커미션 차감 매출</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(
                   data.summary.netAmount != null
@@ -243,83 +244,138 @@ export default function AnalyzePage() {
                 ).toLocaleString('en-PH')}{' '}
                 PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>총매출에서 가이드 커미션을 뺀 금액</div>
             </div>
             <div className="page-card">
-              <div>Cost</div>
+              <div>상품 원가</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.costAmount || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>판매 수량 × 상품별 원가 합계</div>
             </div>
             <div className="page-card">
-              <div>Gross Profit</div>
+              <div>매출이익</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(data.summary.grossProfit || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>총매출 − 상품 원가</div>
             </div>
             <div className="page-card">
-              <div>Total Expense</div>
+              <div>운영비</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.expenseAmount || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>선택 기간에 기록된 지출 합계</div>
             </div>
             <div className="page-card">
-              <div>Net Profit</div>
+              <div>순이익</div>
               <div style={{ fontWeight: 700, color: 'var(--gold-soft)' }}>
                 {Math.round(data.summary.ownerProfit || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>총매출 − 원가 − 가이드 커미션 − 운영비</div>
             </div>
             <div className="page-card">
-              <div>Transactions</div>
+              <div>거래 건수</div>
               <div style={{ fontWeight: 700 }}>{data.summary.transactionCount}</div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>판매 그룹 기준 건수</div>
             </div>
             <div className="page-card">
-              <div>회사 가이드 커미션 합계</div>
+              <div>회사 소속 가이드 커미션</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.companyGuideCommission || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>회사 소속 가이드에게 계산된 커미션 합계</div>
             </div>
             <div className="page-card">
-              <div>로컬 가이드 커미션 합계</div>
+              <div>현지 가이드 커미션</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.localGuideCommission || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>현지 가이드에게 계산된 커미션 합계</div>
             </div>
             <div className="page-card">
-              <div>Mr. Moon 현금 할인가 (10%)</div>
+              <div>Mr. Moon 적용 매출 (10% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.mrMoonRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>Mr. Moon 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
-              <div>Peter 현금 할인가 (20%)</div>
+              <div>Peter 적용 매출 (20% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.peterRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>Peter 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
-              <div>Kakao 현금 할인가 (10%)</div>
+              <div>카카오 적용 매출 (10% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.kakaoRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>카카오 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
-              <div>Nowtravel 현금 할인가 (15%)</div>
+              <div>나우트래블 적용 매출 (15% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.nowtravelRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>나우트래블 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
-              <div>Refund Amount</div>
+              <div>환불액</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.refundAmount || 0).toLocaleString('en-PH')} PHP
               </div>
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-                선택 기간 판매분 중 환불된 금액
+                선택 기간 판매분 중 환불된 금액 합계
               </div>
             </div>
           </div>
         )}
       </Card>
+
+      {data && !data.__partial ? (
+        <Card
+          title="기간별 회사 가이드 커미션"
+          subtitle="선택 기간의 커미션 발생액 기준이며, 정산 완료 여부와 관계없이 표시합니다."
+          actions={[
+            <ExportActions
+              key="company-guide-commission"
+              label="회사 가이드 커미션"
+              columns={[
+                { key: 'label', header: '회사 가이드' },
+                { key: 'commission', header: '커미션 (PHP)' },
+              ]}
+              rows={(data.summary.companyGuideCommissionByGuide || []).map((row) => ({
+                label: row.label,
+                commission: Math.round(row.commission).toLocaleString('en-PH'),
+              }))}
+              filename="company-guide-commission.csv"
+              gdriveName="company-guide-commission.csv"
+              csvLabel="커미션 CSV"
+              driveLabel="커미션 Drive"
+            />,
+          ]}
+        >
+          <DataTable
+            columns={[
+              { key: 'label', header: '회사 가이드' },
+              {
+                key: 'commission',
+                header: '커미션 (PHP)',
+                className: 'text-right',
+                tdClassName: 'text-right',
+              },
+            ]}
+            rows={(data.summary.companyGuideCommissionByGuide || []).map((row) => ({
+              id: row.guideId,
+              label: row.label,
+              commission: Math.round(row.commission).toLocaleString('en-PH'),
+            }))}
+            emptyMessage="선택 기간에 발생한 회사 가이드 커미션이 없습니다."
+          />
+        </Card>
+      ) : null}
 
       {data && data.__partial ? (
         <Card title="Detail Analysis">

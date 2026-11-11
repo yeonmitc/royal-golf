@@ -387,6 +387,7 @@ async function buildMonthlyReport(year, onProgress) {
     monthMap.set(monthKey, {
       month: monthKey,
       total_sales: 0,
+      total_sales_qty: 0,
       product_cost: 0,
       gift_cost: 0,
       guide_commission: 0,
@@ -418,6 +419,7 @@ async function buildMonthlyReport(year, onProgress) {
     const isGift = Boolean(row?.freeGift);
 
     bucket.total_sales += isGift ? 0 : salesAmount;
+    if (!isGift) bucket.total_sales_qty += qty;
     if (isGift) bucket.gift_cost += unitCost * qty;
     else bucket.product_cost += unitCost * qty;
 
@@ -706,6 +708,12 @@ export default function ReportPage() {
               value={formatPhp(selectedSummary?.final_net_profit || 0)}
               tone="green"
               formula="최종순수익 = 순수익 - 의류 사입비"
+            />
+            <KpiCard
+              label="월 판매 요약"
+              value={`${formatNumber(selectedSummary?.total_sales_qty || 0)}개`}
+              tone="blue"
+              formula={`총매출 ${formatPhp(selectedSummary?.total_sales || 0)} · 최종순수익률 ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.final_net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}% (총매출을 100%로 계산)`}
             />
           </div>
 

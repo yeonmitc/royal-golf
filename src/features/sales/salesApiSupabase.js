@@ -2257,6 +2257,7 @@ export async function getAnalytics({
   let displayedGuideCommission = 0;
   let companyGuideCommission = 0;
   let localGuideCommission = 0;
+  const companyGuideCommissionByGuide = new Map();
   const commissionGroupIds = [
     ...new Set(rows.map((r) => String(r.saleGroupId || '').trim())),
   ].filter(Boolean);
@@ -2271,7 +2272,17 @@ export async function getAnalytics({
     if (!norm.includes('mrmoon') && !norm.includes('ella') && !norm.includes('peter')) {
       displayedGuideCommission += gcomm;
       if (guideTypeMap.get(String(guideId)) === 'local') localGuideCommission += gcomm;
-      else if (guideTypeMap.get(String(guideId)) === 'regular') companyGuideCommission += gcomm;
+      else if (guideTypeMap.get(String(guideId)) === 'regular') {
+        companyGuideCommission += gcomm;
+        const key = String(guideId);
+        const entry = companyGuideCommissionByGuide.get(key) || {
+          guideId: key,
+          label: guideMap.get(key) || '가이드 정보 없음',
+          commission: 0,
+        };
+        entry.commission += gcomm;
+        companyGuideCommissionByGuide.set(key, entry);
+      }
     }
   }
   const profitCommissionExpense = displayedGuideCommission;
@@ -2347,6 +2358,9 @@ export async function getAnalytics({
     ownerProfit,
     displayedGuideCommission,
     companyGuideCommission,
+    companyGuideCommissionByGuide: [...companyGuideCommissionByGuide.values()].sort(
+      (a, b) => b.commission - a.commission
+    ),
     localGuideCommission,
     profitCommissionExpense,
     totalCommission: displayedGuideCommission,
