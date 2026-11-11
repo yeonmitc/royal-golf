@@ -127,14 +127,16 @@ const ChecklistDayDetailsModal = ({ dateStr, attendanceDetails, onClose }) => {
       const stored = JSON.parse(localStorage.getItem('checklist_items_v1') || 'null');
       if (
         Array.isArray(stored) &&
-        stored.length > 0 &&
-        stored.every((x) => typeof x === 'string')
+        stored.length === DEFAULT_ITEMS.length &&
+        stored.every((x) => typeof x === 'string' && x.trim())
       ) {
         setItems(stored.map((s) => String(s).trim()).filter(Boolean));
       } else {
+        localStorage.removeItem('checklist_items_v1');
         setItems(DEFAULT_ITEMS);
       }
     } catch {
+      localStorage.removeItem('checklist_items_v1');
       setItems(DEFAULT_ITEMS);
     }
   }, []);

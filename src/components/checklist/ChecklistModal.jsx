@@ -153,15 +153,21 @@ export default function ChecklistModal({ open, onClose, employeeNames }) {
       const raw = localStorage.getItem('checklist_items_v1');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') && parsed.length > 0) {
+        if (
+          Array.isArray(parsed) &&
+          parsed.length === DEFAULT_ITEMS.length &&
+          parsed.every((x) => typeof x === 'string' && x.trim())
+        ) {
           setItems(parsed.map((s) => String(s).trim()).filter(Boolean));
         } else {
+          localStorage.removeItem('checklist_items_v1');
           setItems(DEFAULT_ITEMS);
         }
       } else {
         setItems(DEFAULT_ITEMS);
       }
     } catch {
+      localStorage.removeItem('checklist_items_v1');
       setItems(DEFAULT_ITEMS);
     }
     const key = storageKey(dateStr);
