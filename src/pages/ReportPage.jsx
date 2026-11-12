@@ -127,9 +127,8 @@ function ComboTrendChart({ data = [] }) {
   const innerH = height - padding.top - padding.bottom;
   const salesVals = data.map((d) => Number(d.total_sales || 0) || 0);
   const netVals = data.map((d) => Number(d.net_profit || 0) || 0);
-  const finalVals = data.map((d) => Number(d.final_net_profit || 0) || 0);
-  const maxVal = Math.max(1, ...salesVals, ...netVals, ...finalVals);
-  const minVal = Math.min(0, ...salesVals, ...netVals, ...finalVals);
+  const maxVal = Math.max(1, ...salesVals, ...netVals);
+  const minVal = Math.min(0, ...salesVals, ...netVals);
   const range = Math.max(1, maxVal - minVal);
   const zeroY = padding.top + ((maxVal - 0) / range) * innerH;
   const stepX = data.length > 1 ? innerW / data.length : innerW;
@@ -192,22 +191,13 @@ function ComboTrendChart({ data = [] }) {
         })}
 
         <path d={linePath(netVals)} fill="none" stroke="#22c55e" strokeWidth="3" />
-        <path
-          d={linePath(finalVals)}
-          fill="none"
-          stroke="#86efac"
-          strokeWidth="3"
-          strokeDasharray="8 6"
-        />
 
         {data.map((row, i) => {
           const x = padding.left + stepX * i + stepX / 2;
           const netY = yPos(Number(row.net_profit || 0));
-          const finalY = yPos(Number(row.final_net_profit || 0));
           return (
             <g key={`${row.month}-dots`}>
               <circle cx={x} cy={netY} r="4" fill="#22c55e" />
-              <circle cx={x} cy={finalY} r="4" fill="#86efac" />
             </g>
           );
         })}
@@ -221,10 +211,6 @@ function ComboTrendChart({ data = [] }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 18, height: 0, borderTop: '3px solid #22c55e' }} />
           순수익
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 18, height: 0, borderTop: '3px dashed #86efac' }} />
-          최종순수익
         </div>
       </div>
     </div>
@@ -391,18 +377,15 @@ async function buildMonthlyReport(year, onProgress) {
       product_cost: 0,
       gift_cost: 0,
       guide_commission: 0,
-      sales_profit: 0,
       salary_cost: 0,
       operation_cost: 0,
       logistics_cost: 0,
       supplies_cost: 0,
       other_cost: 0,
-      operating_cost_total: 0,
       inventory_purchase_cost: 0,
       total_expense_php: 0,
       expense_category_php: '',
       net_profit: 0,
-      final_net_profit: 0,
     });
   }
   reportProgress(78, '월별 판매 집계 중...');
@@ -454,19 +437,17 @@ async function buildMonthlyReport(year, onProgress) {
   reportProgress(95, '최종 수익 계산 중...');
 
   const result = [...monthMap.values()].map((bucket) => {
-    const sales_profit =
-      bucket.total_sales - bucket.product_cost - bucket.gift_cost;
-    const operating_cost_total =
-      bucket.salary_cost + bucket.operation_cost + bucket.logistics_cost + bucket.supplies_cost;
-    const net_profit = sales_profit - bucket.guide_commission - operating_cost_total;
-    const final_net_profit = net_profit - bucket.inventory_purchase_cost;
+    const total_expense =
+      bucket.salary_cost + bucket.operation_cost + bucket.supplies_cost + bucket.other_cost;
+    const purchase_expense = bucket.inventory_purchase_cost + bucket.logistics_cost;
+    const net_profit =
+      bucket.total_sales - bucket.guide_commission - total_expense - purchase_expense;
 
     return {
       ...bucket,
-      sales_profit,
-      operating_cost_total,
+      total_expense,
+      purchase_expense,
       net_profit,
-      final_net_profit,
     };
   });
   reportProgress(100, '리포트 로딩 완료');
@@ -531,8 +512,8 @@ export default function ReportPage() {
 
   const allMonthSummary = useMemo(() => {
     const keys = [
-      'total_sales', 'product_cost', 'gift_cost', 'guide_commission',
-      'sales_profit', 'operating_cost_total', 'net_profit', 'final_net_profit',
+      'total_sales', 'guide_commission', 'total_expense',
+      'purchase_expense', 'net_profit',
     ];
     const isAllZero = (row) => keys.every((k) => !Number(row[k]));
     const activeRows = rows.filter((r) => !isAllZero(r));
@@ -547,13 +528,10 @@ export default function ReportPage() {
       rows.map((row) => ({
         month: row.month,
         total_sales: formatPhp(row.total_sales),
-        product_cost: formatPhp(row.product_cost),
-        gift_cost: formatPhp(row.gift_cost),
         guide_commission: formatPhp(row.guide_commission),
-        sales_profit: formatPhp(row.sales_profit),
-        operating_cost_total: formatPhp(row.operating_cost_total),
+        total_expense: formatPhp(row.total_expense),
+        purchase_expense: formatPhp(row.purchase_expense),
         net_profit: formatPhp(row.net_profit),
-        final_net_profit: formatPhp(row.final_net_profit),
       })),
     [rows]
   );
@@ -561,13 +539,10 @@ export default function ReportPage() {
   const columns = [
     { key: 'month', header: '월' },
     { key: 'total_sales', header: '총매출' },
-    { key: 'product_cost', header: '상품원가' },
-    { key: 'gift_cost', header: '선물원가' },
     { key: 'guide_commission', header: '가이드 커미션' },
-    { key: 'sales_profit', header: '매출이익' },
-    { key: 'operating_cost_total', header: '지출(월별 통합)' },
+    { key: 'total_expense', header: '총지출' },
+    { key: 'purchase_expense', header: '사입지출' },
     { key: 'net_profit', header: '순수익' },
-    { key: 'final_net_profit', header: '최종순수익' },
   ];
 
   return (
@@ -686,34 +661,34 @@ export default function ReportPage() {
               formula="총매출 = 일반 판매금액 합계 (환불 제외, 선물 제외)"
             />
             <KpiCard
-              label="매출이익"
-              value={formatPhp(selectedSummary?.sales_profit || 0)}
+              label="가이드 커미션"
+              value={formatPhp(selectedSummary?.guide_commission || 0)}
               tone="gold"
-              formula="매출이익 = 총매출 - 원가 - 선물원가"
+              formula="가이드 커미션 = 해당 월의 가이드(회사 + 로컬) 커미션 합계"
             />
             <KpiCard
-              label="운영비 합계"
-              value={formatPhp(selectedSummary?.operating_cost_total || 0)}
+              label="총지출"
+              value={formatPhp(selectedSummary?.total_expense || 0)}
               tone="red"
-              formula="운영비 합계 = 직원 월급 + 가게 운영비 + 물류비 + 부자재"
+              formula="총지출 = 직원 월급 + 가게 운영비 + 부자재 + 기타 지출"
+            />
+            <KpiCard
+              label="사입지출"
+              value={formatPhp(selectedSummary?.purchase_expense || 0)}
+              tone="red"
+              formula="사입지출 = 의류 사입비 + 물류비"
             />
             <KpiCard
               label="순수익"
               value={formatPhp(selectedSummary?.net_profit || 0)}
               tone="green"
-              formula="순수익 = 매출이익 - 가이드 커미션 - 운영비 합계"
-            />
-            <KpiCard
-              label="최종순수익"
-              value={formatPhp(selectedSummary?.final_net_profit || 0)}
-              tone="green"
-              formula="최종순수익 = 순수익 - 의류 사입비"
+              formula="순수익 = 총매출 - 가이드 커미션 - 총지출 - 사입지출"
             />
             <KpiCard
               label="월 판매 요약"
-              value={`${formatNumber(selectedSummary?.total_sales_qty || 0)}개 / ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}% / ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.final_net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}%`}
+              value={`${formatNumber(selectedSummary?.total_sales_qty || 0)}개 / ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}%`}
               tone="blue"
-              formula={`총매출 ${formatPhp(selectedSummary?.total_sales || 0)} 기준 · 사입비 차감 전 / 차감 후`}
+              formula={`총매출 ${formatPhp(selectedSummary?.total_sales || 0)} 기준 · 판매갯수 / 수익 퍼센트`}
             />
           </div>
 
@@ -793,13 +768,10 @@ export default function ReportPage() {
                 </span>
                 {[
                   { label: '총매출', value: allMonthSummary.total_sales },
-                  { label: '상품원가', value: allMonthSummary.product_cost },
-                  { label: '선물원가', value: allMonthSummary.gift_cost },
                   { label: '가이드 커미션', value: allMonthSummary.guide_commission },
-                  { label: '매출이익', value: allMonthSummary.sales_profit },
-                  { label: '지출', value: allMonthSummary.operating_cost_total },
+                  { label: '총지출', value: allMonthSummary.total_expense },
+                  { label: '사입지출', value: allMonthSummary.purchase_expense },
                   { label: '순수익', value: allMonthSummary.net_profit },
-                  { label: '최종순수익', value: allMonthSummary.final_net_profit },
                 ].map(({ label, value }) => (
                   <span
                     key={label}
