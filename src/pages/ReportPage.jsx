@@ -688,7 +688,7 @@ export default function ReportPage() {
               label="월 판매 요약"
               value={`${formatNumber(selectedSummary?.total_sales_qty || 0)}개 / ${Number(selectedSummary?.total_sales || 0) > 0 ? ((Number(selectedSummary?.net_profit || 0) / Number(selectedSummary.total_sales)) * 100).toFixed(1) : '0.0'}%`}
               tone="blue"
-              formula={`총매출 ${formatPhp(selectedSummary?.total_sales || 0)} 기준 · 판매갯수 / 수익 퍼센트`}
+              formula={`순수익 ${formatPhp(selectedSummary?.net_profit || 0)} 기준 · 판매갯수 / 수익 퍼센트`}
             />
           </div>
 
