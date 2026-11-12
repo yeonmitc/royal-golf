@@ -2079,6 +2079,7 @@ export async function getAnalytics({
         ownerProfit: -expenseAmount,
         expenseAmount,
         transactionCount: 0,
+        soldQuantity: 0,
         aov: 0,
         companyGuideCommission: 0,
         localGuideCommission: 0,
@@ -2230,6 +2231,10 @@ export async function getAnalytics({
   // Use saleGroupId for transaction counting if available, otherwise fallback to soldAt
   const transactionKeys = new Set(rows.map((r) => r.saleGroupId || String(r.soldAt || '')));
   const transactionCount = transactionKeys.size;
+  const soldQuantity = rows.reduce(
+    (sum, row) => sum + (row.freeGift ? 0 : Number(row.qty || 0) || 0),
+    0
+  );
 
   const includedRefunds = refundedRows.filter((r) => {
     if (isExcludedRevenueSale(r)) return false;
@@ -2365,6 +2370,7 @@ export async function getAnalytics({
     profitCommissionExpense,
     totalCommission: displayedGuideCommission,
     transactionCount,
+    soldQuantity,
     aov,
     mrMoonDiscountAmount: mrMoonDiscount,
     mrMoonRevenue,

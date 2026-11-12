@@ -457,7 +457,7 @@ async function buildMonthlyReport(year, onProgress) {
     const sales_profit =
       bucket.total_sales - bucket.product_cost - bucket.gift_cost;
     const operating_cost_total =
-      bucket.salary_cost + bucket.operation_cost + bucket.logistics_cost + bucket.supplies_cost + bucket.other_cost;
+      bucket.salary_cost + bucket.operation_cost + bucket.logistics_cost + bucket.supplies_cost;
     const net_profit = sales_profit - bucket.guide_commission - operating_cost_total;
     const final_net_profit = net_profit - bucket.inventory_purchase_cost;
 
@@ -695,7 +695,7 @@ export default function ReportPage() {
               label="운영비 합계"
               value={formatPhp(selectedSummary?.operating_cost_total || 0)}
               tone="red"
-              formula="운영비 합계 = 직원 월급 + 가게 운영비 + 물류비 + 부자재 + 기타 지출"
+              formula="운영비 합계 = 직원 월급 + 가게 운영비 + 물류비 + 부자재"
             />
             <KpiCard
               label="순수익"

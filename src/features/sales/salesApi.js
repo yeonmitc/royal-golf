@@ -727,6 +727,7 @@ export async function getAnalytics({
         rentAmount: 0,
         ownerProfit: 0,
         transactionCount: 0,
+        soldQuantity: 0,
         aov: 0,
         discountAmount: 0,
         discountRate: 0,
@@ -759,6 +760,10 @@ export async function getAnalytics({
   const totalRevenue = rows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
   const saleIds = [...new Set(rows.map((r) => r.saleId))];
   const transactionCount = saleIds.length;
+  const soldQuantity = rows.reduce(
+    (sum, row) => sum + (row.freeGift ? 0 : Number(row.qty || 0) || 0),
+    0
+  );
   const aov = transactionCount ? totalRevenue / transactionCount : 0;
 
   const refundAmount = refunds.reduce((sum, r) => sum + (Number(r.amountPhp || 0) || 0), 0);
@@ -779,6 +784,7 @@ export async function getAnalytics({
     ownerProfit,
     totalCommission: 0,
     transactionCount,
+    soldQuantity,
     aov,
     discountAmount: 0,
     discountRate: 0.1,

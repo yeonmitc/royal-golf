@@ -232,7 +232,6 @@ export default function AnalyzePage() {
                 )}{' '}
                 PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>선택 기간의 판매 금액 합계</div>
             </div>
             <div className="page-card">
               <div>가이드 커미션 차감 매출</div>
@@ -244,7 +243,6 @@ export default function AnalyzePage() {
                 ).toLocaleString('en-PH')}{' '}
                 PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>총매출에서 가이드 커미션을 뺀 금액</div>
             </div>
             <div className="page-card">
               <div>상품 원가</div>
@@ -265,7 +263,6 @@ export default function AnalyzePage() {
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.expenseAmount || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>선택 기간에 기록된 지출 합계</div>
             </div>
             <div className="page-card">
               <div>순이익</div>
@@ -275,59 +272,49 @@ export default function AnalyzePage() {
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>총매출 − 원가 − 가이드 커미션 − 운영비</div>
             </div>
             <div className="page-card">
-              <div>거래 건수</div>
-              <div style={{ fontWeight: 700 }}>{data.summary.transactionCount}</div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>판매 그룹 기준 건수</div>
+              <div>판매 수량</div>
+              <div style={{ fontWeight: 700 }}>{data.summary.soldQuantity || 0}개</div>
             </div>
             <div className="page-card">
               <div>회사 소속 가이드 커미션</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.companyGuideCommission || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>회사 소속 가이드에게 계산된 커미션 합계</div>
             </div>
             <div className="page-card">
               <div>현지 가이드 커미션</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.localGuideCommission || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>현지 가이드에게 계산된 커미션 합계</div>
             </div>
             <div className="page-card">
               <div>Mr. Moon 적용 매출 (10% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.mrMoonRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>Mr. Moon 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
               <div>Peter 적용 매출 (20% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.peterRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>Peter 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
               <div>카카오 적용 매출 (10% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.kakaoRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>카카오 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
               <div>나우트래블 적용 매출 (15% 할인)</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.nowtravelRevenue || 0).toLocaleString('en-PH')} PHP
               </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>나우트래블 할인 대상 판매 금액 합계</div>
             </div>
             <div className="page-card">
               <div>환불액</div>
               <div style={{ fontWeight: 700 }}>
                 {Math.round(data.summary.refundAmount || 0).toLocaleString('en-PH')} PHP
-              </div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-                선택 기간 판매분 중 환불된 금액 합계
               </div>
             </div>
           </div>
