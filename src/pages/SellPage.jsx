@@ -13,6 +13,7 @@ import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
 import {
   getGuideSelectOptions,
+  normalizeGuideName,
   KAKAO_FRIEND_ID,
   NOWTRAVEL_ID,
   LOCAL_GUIDE_ID,
@@ -31,6 +32,15 @@ import {
 } from '../utils/rentalMeta';
 import { formatSizeDisplay } from '../utils/sizeMapper';
 import { isBrowserOnline } from '../features/offline/offlineDB';
+
+function calculateGuidePrice(price, { isPeter, isMrMoon, isKakaoFriend, isNowtravel }) {
+  const amount = Number(price || 0);
+  if (amount <= 1000) return amount;
+  if (isPeter) return Math.ceil((amount * 0.8) / 100) * 100;
+  if (isNowtravel) return Math.ceil((amount * 0.85) / 100) * 100;
+  if (isMrMoon || isKakaoFriend) return Math.ceil((amount * 0.9) / 100) * 100;
+  return amount;
+}
 
 export default function SellPage() {
   const [code, setCode] = useState('');
@@ -119,20 +129,13 @@ export default function SellPage() {
   // Mr.Moon: 10%, Sir Peter: 20%, Kakao: 10%, nowtravel: 15%
   // 정상가 1,000 PHP 이하: 할인 없음
   // 정상가 1,000 PHP 초과: 할인 적용 후 100 PHP 단위 올림
-  const calculateItemPrice = (price) => {
-    const p = Number(price || 0);
-    if (p <= 1000) return p;
-    if (isPeterSelected) {
-      return Math.ceil((p * 0.8) / 100) * 100;
-    }
-    if (isNowtravelSelected && p > 1000) {
-      return Math.ceil((p * 0.85) / 100) * 100;
-    }
-    if (isMrMoonSelected || isKakaoFriendSelected) {
-      return Math.ceil((p * 0.9) / 100) * 100;
-    }
-    return p;
-  };
+  const calculateItemPrice = (price) =>
+    calculateGuidePrice(price, {
+      isPeter: isPeterSelected,
+      isMrMoon: isMrMoonSelected,
+      isKakaoFriend: isKakaoFriendSelected,
+      isNowtravel: isNowtravelSelected,
+    });
 
   // Calculate total based on displayed prices
   const displayTotalPrice = cartItems.reduce((sum, item) => {
@@ -161,6 +164,16 @@ export default function SellPage() {
     }
 
     const currentGuideKey = String(currentGuideId || '');
+    const checkoutGuideName = normalizeGuideName(
+      (guides || []).find((g) => String(g.id) === currentGuideKey)?.name
+    );
+    const checkoutPricing = {
+      isPeter: checkoutGuideName.includes('peter'),
+      isMrMoon: checkoutGuideName.includes('mrmoon'),
+      isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
+      isNowtravel: currentGuideKey === NOWTRAVEL_ID,
+    };
+    const checkoutItemPrice = (price) => calculateGuidePrice(price, checkoutPricing);
     if (currentGuideKey === LOCAL_GUIDE_ID) {
       const name = String(currentLocalGuideName || '').trim();
       if (!name) {
@@ -173,7 +186,10 @@ export default function SellPage() {
 
     try {
       const result = await checkoutCart({
-        items: currentItems,
+        items: currentItems.map((item) => ({
+          ...item,
+          displayedUnitPricePhp: checkoutItemPrice(item.unitPricePhp),
+        })),
         guideId:
           currentGuideKey === LOCAL_GUIDE_ID ||
           currentGuideKey === KAKAO_FRIEND_ID ||
@@ -191,14 +207,11 @@ export default function SellPage() {
                 : currentGuideKey === ONLINE_ID
                   ? ONLINE_ID
                   : '',
-        isMrMoon: isMrMoonSelected,
-        isPeter: isPeterSelected,
-        isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
-        isNowtravel: currentGuideKey === NOWTRAVEL_ID,
+        ...checkoutPricing,
       });
 
       const receiptItems = currentItems.map((item) => {
-        const finalPrice = calculateItemPrice(item.unitPricePhp);
+        const finalPrice = checkoutItemPrice(item.unitPricePhp);
         return {
           code: item.code,
           name: item.name || item.nameKo,

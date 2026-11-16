@@ -36,6 +36,7 @@ export function useSalesHistoryFiltered({ fromDate, toDate, query }) {
     queryFn: () => getSalesHistoryFilteredResult({ fromDate, toDate, query }),
     staleTime: 0,
     refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 

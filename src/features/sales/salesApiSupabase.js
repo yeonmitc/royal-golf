@@ -407,9 +407,12 @@ export async function checkoutCart(payload) {
 
     const isExplicitlyFree = item.unitPricePhp === 0 || Boolean(product.freeGift);
 
+    const displayedPrice = item.displayedUnitPricePhp;
     const unitPriceCharged = isExplicitlyFree
       ? 0
-      : isPeter || isMrMoon || isNowtravel
+      : displayedPrice != null && Number.isFinite(Number(displayedPrice))
+        ? Number(displayedPrice)
+        : isPeter || isMrMoon || isNowtravel
         ? calculatedPrice
         : isKakaoFriend
           ? calculatedPrice
@@ -675,9 +678,12 @@ export async function checkoutCartWithOfflineFallback(payload) {
       }
       const unitPriceChargedCandidate = Number(item.unitPricePhp ?? calculatedPrice);
       const isExplicitlyFree = item.unitPricePhp === 0 || Boolean(product.freeGift);
+      const displayedPrice = item.displayedUnitPricePhp;
       const unitPriceCharged = isExplicitlyFree
         ? 0
-        : isPeter || isMrMoon || isNowtravel
+        : displayedPrice != null && Number.isFinite(Number(displayedPrice))
+          ? Number(displayedPrice)
+          : isPeter || isMrMoon || isNowtravel
           ? calculatedPrice
           : isKakaoFriend
             ? calculatedPrice
