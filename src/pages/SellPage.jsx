@@ -164,8 +164,19 @@ export default function SellPage() {
     }
 
     const currentGuideKey = String(currentGuideId || '');
+    const isNamedGuide = currentGuideKey && ![
+      LOCAL_GUIDE_ID,
+      KAKAO_FRIEND_ID,
+      NOWTRAVEL_ID,
+      ONLINE_ID,
+    ].includes(currentGuideKey);
+    const checkoutGuide = (guides || []).find((g) => String(g.id) === currentGuideKey);
+    if (isNamedGuide && !checkoutGuide) {
+      showToast('Guide is still loading. Please try again.');
+      return;
+    }
     const checkoutGuideName = normalizeGuideName(
-      (guides || []).find((g) => String(g.id) === currentGuideKey)?.name
+      checkoutGuide?.name
     );
     const checkoutPricing = {
       isPeter: checkoutGuideName.includes('peter'),
@@ -186,10 +197,7 @@ export default function SellPage() {
 
     try {
       const result = await checkoutCart({
-        items: currentItems.map((item) => ({
-          ...item,
-          displayedUnitPricePhp: checkoutItemPrice(item.unitPricePhp),
-        })),
+        items: currentItems,
         guideId:
           currentGuideKey === LOCAL_GUIDE_ID ||
           currentGuideKey === KAKAO_FRIEND_ID ||
