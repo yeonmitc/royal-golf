@@ -16,6 +16,7 @@ import {
   normalizeGuideName,
   KAKAO_FRIEND_ID,
   MR_MOON_DISCOUNT_GUIDE_ID,
+  MR_MOON_CASH_DISCOUNT_ID,
   PETER_DISCOUNT_GUIDE_ID,
   PETER_CASH_DISCOUNT_ID,
   NOWTRAVEL_ID,
@@ -206,6 +207,7 @@ export default function SellPage() {
         guideId:
           currentGuideKey === LOCAL_GUIDE_ID ||
           currentGuideKey === KAKAO_FRIEND_ID ||
+          currentGuideKey === MR_MOON_DISCOUNT_GUIDE_ID ||
           currentGuideKey === PETER_DISCOUNT_GUIDE_ID ||
           currentGuideKey === NOWTRAVEL_ID ||
           currentGuideKey === ONLINE_ID
@@ -216,6 +218,8 @@ export default function SellPage() {
             ? String(currentLocalGuideName || '').trim()
             : currentGuideKey === KAKAO_FRIEND_ID
               ? KAKAO_FRIEND_ID
+              : currentGuideKey === MR_MOON_DISCOUNT_GUIDE_ID
+                ? MR_MOON_CASH_DISCOUNT_ID
               : currentGuideKey === PETER_DISCOUNT_GUIDE_ID
                 ? PETER_CASH_DISCOUNT_ID
               : currentGuideKey === NOWTRAVEL_ID

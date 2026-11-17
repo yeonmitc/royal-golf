@@ -25,7 +25,7 @@
  *   - Old caches are cleaned up on activate
  */
 
-const CACHE_VERSION = 'v5'; // <-- bump this on each production release
+const CACHE_VERSION = 'v6'; // <-- bump this on each production release
 const CACHE_NAME = `royal-shop-shell-${CACHE_VERSION}`;
 
 const BASE = (() => {

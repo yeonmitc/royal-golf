@@ -1,7 +1,7 @@
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
-import { KAKAO_FRIEND_ID, MR_MOON_DISCOUNT_GUIDE_ID, NOWTRAVEL_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../guides/guideSelectOptions';
+import { KAKAO_FRIEND_ID, MR_MOON_CASH_DISCOUNT_ID, MR_MOON_DISCOUNT_GUIDE_ID, NOWTRAVEL_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../guides/guideSelectOptions';
 import { addOfflineSales, getAllCachedProducts, isBrowserOnline } from '../offline/offlineDB';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
@@ -251,7 +251,7 @@ export async function checkoutCart(payload) {
     cartItems = payload.items;
     guideId = payload.guideId;
     localGuideName = String(payload.localGuideName || '').trim();
-    isMrMoon = Boolean(payload.isMrMoon) || String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID;
+    isMrMoon = Boolean(payload.isMrMoon) || String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID || localGuideName === MR_MOON_CASH_DISCOUNT_ID;
     isPeter = Boolean(payload.isPeter) || String(guideId) === PETER_DISCOUNT_GUIDE_ID || localGuideName === PETER_CASH_DISCOUNT_ID;
     isKakaoFriend = Boolean(payload.isKakaoFriend);
     isNowtravel = Boolean(payload.isNowtravel);
@@ -261,6 +261,11 @@ export async function checkoutCart(payload) {
     guideId = null;
     localGuideName = PETER_CASH_DISCOUNT_ID;
     isPeter = true;
+  }
+  if (String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID) {
+    guideId = null;
+    localGuideName = MR_MOON_CASH_DISCOUNT_ID;
+    isMrMoon = true;
   }
 
   if (guideId) {
@@ -370,7 +375,7 @@ export async function checkoutCart(payload) {
       const msg = String(e?.message || '').toLowerCase();
       if (
         (msg.includes('local_guide_name') || msg.includes('local guide')) &&
-        withLocal !== baseRow && !isPeter
+        withLocal !== baseRow && !isPeter && !isMrMoon
       ) {
         await sbInsert('sale_groups', [baseRow], { returning: 'minimal' });
       } else {
@@ -629,7 +634,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
     cartItems = payload.items;
     guideId = payload.guideId;
     localGuideName = String(payload.localGuideName || '').trim();
-    isMrMoon = Boolean(payload.isMrMoon) || String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID;
+    isMrMoon = Boolean(payload.isMrMoon) || String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID || localGuideName === MR_MOON_CASH_DISCOUNT_ID;
     isPeter = Boolean(payload.isPeter) || String(guideId) === PETER_DISCOUNT_GUIDE_ID || localGuideName === PETER_CASH_DISCOUNT_ID;
     isKakaoFriend = Boolean(payload.isKakaoFriend);
     isNowtravel = Boolean(payload.isNowtravel);
@@ -639,6 +644,11 @@ export async function checkoutCartWithOfflineFallback(payload) {
     guideId = null;
     localGuideName = PETER_CASH_DISCOUNT_ID;
     isPeter = true;
+  }
+  if (String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID) {
+    guideId = null;
+    localGuideName = MR_MOON_CASH_DISCOUNT_ID;
+    isMrMoon = true;
   }
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -894,7 +904,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
       const msg = String(e?.message || '').toLowerCase();
       if (
         (msg.includes('local_guide_name') || msg.includes('local guide')) &&
-        withLocal !== baseRow && !isPeter
+        withLocal !== baseRow && !isPeter && !isMrMoon
       ) {
         await sbInsert('sale_groups', [baseRow], { returning: 'minimal' });
       } else {
@@ -933,13 +943,14 @@ export async function checkoutCartWithOfflineFallback(payload) {
       console.error('Failed to finalize sale group:', e);
     }
 
-    if (isPeter) {
+    if (isPeter || isMrMoon) {
+      const discountRate = isPeter ? 0.8 : 0.9;
       const savedRows = await sbSelect('sales', {
         select: 'id,list_price,price,free_gift',
         filters: [{ column: 'sale_group_id', op: 'eq', value: saleGroupId }],
       });
       if (savedRows.length !== salesToInsert.length) {
-        throw new Error('Sale saved, but Peter price verification failed. Check Sales List before retrying.');
+        throw new Error('Sale saved, but cash discount verification failed. Check Sales List before retrying.');
       }
       let corrected = false;
       for (const row of savedRows) {
@@ -947,7 +958,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
         const expectedPrice = row.free_gift || listPrice === 0
           ? 0
           : listPrice > 1000
-            ? Math.ceil((listPrice * 0.8) / 100) * 100
+            ? Math.ceil((listPrice * discountRate) / 100) * 100
             : listPrice;
         if (Number(row.price) === expectedPrice) continue;
         const updated = await sbUpdate('sales', { price: expectedPrice }, {
@@ -955,7 +966,7 @@ export async function checkoutCartWithOfflineFallback(payload) {
           returning: 'representation',
         });
         if (Number(updated?.[0]?.price) !== expectedPrice) {
-          throw new Error('Sale saved, but Peter price verification failed. Check Sales List before retrying.');
+          throw new Error('Sale saved, but cash discount verification failed. Check Sales List before retrying.');
         }
         corrected = true;
       }
@@ -967,8 +978,8 @@ export async function checkoutCartWithOfflineFallback(payload) {
 
     return { saleId, soldAt, totalAmount, itemCount: totalQty };
   } catch (e) {
-    if (isPeter && saleRowsCreated) {
-      throw new Error('Sale saved, but Peter price verification failed. Check Sales List before retrying.', { cause: e });
+    if ((isPeter || isMrMoon) && saleRowsCreated) {
+      throw new Error('Sale saved, but cash discount verification failed. Check Sales List before retrying.', { cause: e });
     }
     const msg = String(e?.message || '').toLowerCase();
     const isNetwork =
@@ -1268,7 +1279,7 @@ export async function setSaleGroupGuide({
   }
 
   const isPeter = String(guide) === PETER_DISCOUNT_GUIDE_ID || guideNameNorm.includes('peter') || specialLocalGuideName === PETER_CASH_DISCOUNT_ID;
-  const isMrMoon = String(guide) === MR_MOON_DISCOUNT_GUIDE_ID || guideNameNorm.includes('mrmoon');
+  const isMrMoon = String(guide) === MR_MOON_DISCOUNT_GUIDE_ID || guideNameNorm.includes('mrmoon') || specialLocalGuideName === MR_MOON_CASH_DISCOUNT_ID;
   const finalGuideRate = 0; // DB will calculate via recalculate_guide_commission
 
   async function insertSaleGroupRecord(row) {
@@ -1726,7 +1737,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
       const localGuideName = String(ginfo?.localGuideName || '').trim();
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const nameLower = guideName.toLowerCase().replace(/[\s.]/g, '');
-      const isMrMoon = nameLower.includes('mrmoon');
+      const isMrMoon = nameLower.includes('mrmoon') || localGuideName === MR_MOON_CASH_DISCOUNT_ID;
       const isElla = nameLower.includes('ella');
       const isPeter = nameLower.includes('peter') || localGuideName === PETER_CASH_DISCOUNT_ID;
       const isExchanged = Boolean(r.is_exchanged ?? false);
@@ -1905,7 +1916,7 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
       const guideId = ginfo?.guideId ?? null;
       const guideName = guideId ? String(guideNameMap.get(String(guideId)) || '').trim() : '';
       const guideNameNorm = guideName.toLowerCase().replace(/[\s.]/g, '');
-      const isMrMoon = guideNameNorm.includes('mrmoon');
+      const isMrMoon = guideNameNorm.includes('mrmoon') || ginfo?.localGuideName === MR_MOON_CASH_DISCOUNT_ID;
       const isElla = guideNameNorm.includes('ella');
       const isPeter = guideNameNorm.includes('peter') || ginfo?.localGuideName === PETER_CASH_DISCOUNT_ID;
       const isExchanged = Boolean(row?.is_exchanged ?? false);
@@ -2176,7 +2187,7 @@ export async function getAnalytics({
   const withGuideFlags = analyzedRows.map((r) => {
     const raw = r.guideId ? String(guideMap.get(String(r.guideId)) || '') : '';
     const norm = raw.toLowerCase().replace(/[\s.]/g, '');
-    const isMrMoon = norm.includes('mrmoon');
+    const isMrMoon = norm.includes('mrmoon') || String(r.localGuideName || '') === MR_MOON_CASH_DISCOUNT_ID;
     const isElla = norm.includes('ella');
     const isPeter = norm.includes('peter') || String(r.localGuideName || '') === PETER_CASH_DISCOUNT_ID;
     const isKakaoFriend = !r.guideId && String(r.localGuideName || '') === KAKAO_FRIEND_ID;

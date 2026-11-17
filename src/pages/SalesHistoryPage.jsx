@@ -9,7 +9,7 @@ import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
-import { isSpecialLocalGuideName, KAKAO_FRIEND_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
+import { isSpecialLocalGuideName, KAKAO_FRIEND_ID, MR_MOON_CASH_DISCOUNT_ID, MR_MOON_DISCOUNT_GUIDE_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
@@ -229,11 +229,11 @@ export default function SalesHistoryPage() {
     const filtered = base.filter((r) => {
       const gid = r.guideId;
       const localGuideName = String(r?.localGuideName || '').trim();
-      const isMrMoon = gid && mrMoonGuideIds.has(String(gid));
+      const isMrMoon = (gid && mrMoonGuideIds.has(String(gid))) || localGuideName === MR_MOON_CASH_DISCOUNT_ID;
       const isElla = gid && ellaGuideIds.has(String(gid));
       const isKakao = !gid && localGuideName === KAKAO_FRIEND_ID;
 
-      if (selectedGuideId && String(gid || '') !== selectedGuideId && !(selectedGuideId === PETER_DISCOUNT_GUIDE_ID && localGuideName === PETER_CASH_DISCOUNT_ID)) {
+      if (selectedGuideId && String(gid || '') !== selectedGuideId && !(selectedGuideId === PETER_DISCOUNT_GUIDE_ID && localGuideName === PETER_CASH_DISCOUNT_ID) && !(selectedGuideId === MR_MOON_DISCOUNT_GUIDE_ID && localGuideName === MR_MOON_CASH_DISCOUNT_ID)) {
         return false;
       }
 
@@ -453,7 +453,7 @@ export default function SalesHistoryPage() {
         variant={filterMode === 'mr-moon' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
       >
-        Mr.Moon
+        Mr.moon(10% cash discount)
       </Button>,
       <Button
         key="kakao-toggle"

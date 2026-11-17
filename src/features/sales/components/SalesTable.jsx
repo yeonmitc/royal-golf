@@ -264,7 +264,7 @@ export default function SalesTable({
       const qty = Number(row.qty || 0) || 0;
       const qtyForTotal = isRefunded ? 0 : qty;
       const commission = Number(row.commission || 0);
-      const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+      const isMrMoon = Boolean(row.isMrMoon) || (row.guideId != null && mrMoonGuideIds.has(String(row.guideId)));
       const isPeter = Boolean(row.isPeter) || (row.guideId != null && peterGuideIds.has(String(row.guideId)));
       const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
       const commissionForTotal = isRefunded || isMrMoon || isElla || isPeter ? 0 : commission;
@@ -328,7 +328,7 @@ export default function SalesTable({
     const finalUnit = isRefunded ? 0 : finalUnitRaw;
     const isExchanged = Boolean(row?.isExchanged);
     const giftChecked = !isExchanged && (Boolean(row.freeGift) || finalUnit === 0);
-    const isMrMoon = row.guideId != null && mrMoonGuideIds.has(String(row.guideId));
+    const isMrMoon = Boolean(row.isMrMoon) || (row.guideId != null && mrMoonGuideIds.has(String(row.guideId)));
     const isElla = row.guideId != null && ellaGuideIds.has(String(row.guideId));
     const isPeter = Boolean(row.isPeter) || (row.guideId != null && peterGuideIds.has(String(row.guideId)));
     const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
@@ -461,7 +461,7 @@ export default function SalesTable({
             ? 'gift'
             : isElla
               ? '-'
-              : isPeter ? 'Peter (20% Cash Discount)' : localGuideLabel || guideName || '-',
+              : isPeter ? 'Peter (20% Cash Discount)' : isMrMoon ? 'Mr.moon(10% cash discount)' : localGuideLabel || guideName || '-',
       unitPricePhp: (
         <div
           style={{
