@@ -1,7 +1,7 @@
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { sbInsert, sbRpc, sbSelect, sbUpdate } from '../../db/supabaseRest';
 import { requireAdminOrThrow } from '../../utils/admin';
-import { KAKAO_FRIEND_ID, NOWTRAVEL_ID } from '../guides/guideSelectOptions';
+import { KAKAO_FRIEND_ID, MR_MOON_DISCOUNT_GUIDE_ID, NOWTRAVEL_ID, PETER_DISCOUNT_GUIDE_ID } from '../guides/guideSelectOptions';
 import { addOfflineSales, getAllCachedProducts, isBrowserOnline } from '../offline/offlineDB';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
@@ -251,8 +251,8 @@ export async function checkoutCart(payload) {
     cartItems = payload.items;
     guideId = payload.guideId;
     localGuideName = String(payload.localGuideName || '').trim();
-    isMrMoon = payload.isMrMoon;
-    isPeter = Boolean(payload.isPeter);
+    isMrMoon = Boolean(payload.isMrMoon) || String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID;
+    isPeter = Boolean(payload.isPeter) || String(guideId) === PETER_DISCOUNT_GUIDE_ID;
     isKakaoFriend = Boolean(payload.isKakaoFriend);
     isNowtravel = Boolean(payload.isNowtravel);
   }
@@ -517,10 +517,8 @@ async function fallbackSaveOfflineCart(params) {
   let guideRateSnapshot = 0;
   if (isPeter) {
     guideNameSnapshot = 'Sir Peter';
-    guideRateSnapshot = 0.2;
   } else if (isMrMoon) {
     guideNameSnapshot = 'Mr.Moon';
-    guideRateSnapshot = 0.1;
   } else if (isKakaoFriend) {
     guideNameSnapshot = 'Kakao Friend';
     guideRateSnapshot = 0;
@@ -625,8 +623,8 @@ export async function checkoutCartWithOfflineFallback(payload) {
     cartItems = payload.items;
     guideId = payload.guideId;
     localGuideName = String(payload.localGuideName || '').trim();
-    isMrMoon = payload.isMrMoon;
-    isPeter = Boolean(payload.isPeter);
+    isMrMoon = Boolean(payload.isMrMoon) || String(guideId) === MR_MOON_DISCOUNT_GUIDE_ID;
+    isPeter = Boolean(payload.isPeter) || String(guideId) === PETER_DISCOUNT_GUIDE_ID;
     isKakaoFriend = Boolean(payload.isKakaoFriend);
     isNowtravel = Boolean(payload.isNowtravel);
   }
@@ -1223,8 +1221,8 @@ export async function setSaleGroupGuide({
       .replace(/[\s.]/g, '');
   }
 
-  const isPeter = guideNameNorm.includes('peter');
-  const isMrMoon = guideNameNorm.includes('mrmoon');
+  const isPeter = String(guide) === PETER_DISCOUNT_GUIDE_ID || guideNameNorm.includes('peter');
+  const isMrMoon = String(guide) === MR_MOON_DISCOUNT_GUIDE_ID || guideNameNorm.includes('mrmoon');
   const finalGuideRate = 0; // DB will calculate via recalculate_guide_commission
 
   async function insertSaleGroupRecord(row) {

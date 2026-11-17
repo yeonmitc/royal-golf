@@ -15,6 +15,8 @@ import {
   getGuideSelectOptions,
   normalizeGuideName,
   KAKAO_FRIEND_ID,
+  MR_MOON_DISCOUNT_GUIDE_ID,
+  PETER_DISCOUNT_GUIDE_ID,
   NOWTRAVEL_ID,
   LOCAL_GUIDE_ID,
   ONLINE_ID,
@@ -108,8 +110,8 @@ export default function SellPage() {
         .replace(/[\s.]/g, '')
     : '';
 
-  const isMrMoonSelected = selectedGuideNameNorm.includes('mrmoon');
-  const isPeterSelected = selectedGuideNameNorm.includes('peter');
+  const isMrMoonSelected = guideKey === MR_MOON_DISCOUNT_GUIDE_ID || selectedGuideNameNorm.includes('mrmoon');
+  const isPeterSelected = guideKey === PETER_DISCOUNT_GUIDE_ID || selectedGuideNameNorm.includes('peter');
 
   const guideOptions = getGuideSelectOptions(guides);
 
@@ -167,6 +169,8 @@ export default function SellPage() {
     const isNamedGuide = currentGuideKey && ![
       LOCAL_GUIDE_ID,
       KAKAO_FRIEND_ID,
+      MR_MOON_DISCOUNT_GUIDE_ID,
+      PETER_DISCOUNT_GUIDE_ID,
       NOWTRAVEL_ID,
       ONLINE_ID,
     ].includes(currentGuideKey);
@@ -179,8 +183,8 @@ export default function SellPage() {
       checkoutGuide?.name
     );
     const checkoutPricing = {
-      isPeter: checkoutGuideName.includes('peter'),
-      isMrMoon: checkoutGuideName.includes('mrmoon'),
+      isPeter: currentGuideKey === PETER_DISCOUNT_GUIDE_ID || checkoutGuideName.includes('peter'),
+      isMrMoon: currentGuideKey === MR_MOON_DISCOUNT_GUIDE_ID || checkoutGuideName.includes('mrmoon'),
       isKakaoFriend: currentGuideKey === KAKAO_FRIEND_ID,
       isNowtravel: currentGuideKey === NOWTRAVEL_ID,
     };

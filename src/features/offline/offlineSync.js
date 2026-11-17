@@ -1,5 +1,6 @@
 // src/features/offline/offlineSync.js
 import { sbInsert, sbRpc, sbSelect, sbUpsert } from '../../db/supabaseRest';
+import { MR_MOON_DISCOUNT_GUIDE_ID, PETER_DISCOUNT_GUIDE_ID } from '../guides/guideSelectOptions';
 import {
   countUnsyncedOfflineSales,
   getAllCachedProducts,
@@ -373,6 +374,13 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
   // If individual rows have guide_commission_snapshot per line, sum them.
   // Otherwise fall back to subtotal * guide_rate.
   for (const [, g] of byGroup.entries()) {
+    const isCashDiscount = [MR_MOON_DISCOUNT_GUIDE_ID, PETER_DISCOUNT_GUIDE_ID]
+      .includes(String(g.guide_id));
+    if (isCashDiscount) {
+      g.guide_rate = 0;
+      g.guide_commission = 0;
+      continue;
+    }
     const lineCommSum = g.rows.reduce(
       (acc, r) => acc + (Number(r.guide_commission_snapshot ?? 0) || 0),
       0

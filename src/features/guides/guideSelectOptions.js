@@ -1,4 +1,6 @@
 export const KAKAO_FRIEND_ID = '__KAKAO_FRIEND__';
+export const MR_MOON_DISCOUNT_GUIDE_ID = '7';
+export const PETER_DISCOUNT_GUIDE_ID = '10';
 export const NOWTRAVEL_ID = '__NOWTRAVEL__';
 export const ONLINE_ID = '__ONLINE__';
 export const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
@@ -24,8 +26,6 @@ export function formatLocalGuideLabel(name) {
 
 export function getGuideSelectOptions(guides = []) {
   const guideList = Array.isArray(guides) ? guides.slice() : [];
-  const mrMoonGuide = guideList.find((g) => normalizeGuideName(g?.name) === 'mrmoon') || null;
-  const peterGuide = guideList.find((g) => normalizeGuideName(g?.name).includes('peter')) || null;
   const ellaGuide = guideList.find((g) => normalizeGuideName(g?.name).includes('ella')) || null;
   const otherGuides = guideList
     .filter((g) => {
@@ -42,13 +42,11 @@ export function getGuideSelectOptions(guides = []) {
 
   return [
     { value: '', label: 'No Guide' },
-    mrMoonGuide
-      ? {
-          value: String(mrMoonGuide.id),
-          label: 'Mr.Moon (10% Cash Discount)',
-          style: { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' },
-        }
-      : null,
+    {
+      value: MR_MOON_DISCOUNT_GUIDE_ID,
+      label: 'Mr.Moon (10% Cash Discount)',
+      style: { backgroundColor: 'rgba(212,175,55,0.5)', color: '#000' },
+    },
     {
       value: KAKAO_FRIEND_ID,
       label: 'Kakao (10% Cash Discount)',
@@ -59,13 +57,11 @@ export function getGuideSelectOptions(guides = []) {
       label: 'Local Guide',
       style: { backgroundColor: 'rgba(34,197,94,0.2)', color: 'var(--text-main)' },
     },
-    peterGuide
-      ? {
-          value: String(peterGuide.id),
-          label: 'Sir Peter (20% Cash Discount)',
-          style: { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' },
-        }
-      : null,
+    {
+      value: PETER_DISCOUNT_GUIDE_ID,
+      label: 'Sir Peter (20% Cash Discount)',
+      style: { backgroundColor: 'rgba(56,189,248,0.2)', color: 'var(--text-main)' },
+    },
     ellaGuide
       ? {
           value: String(ellaGuide.id),
