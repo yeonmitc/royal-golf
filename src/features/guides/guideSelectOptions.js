@@ -1,6 +1,7 @@
 export const KAKAO_FRIEND_ID = '__KAKAO_FRIEND__';
 export const MR_MOON_DISCOUNT_GUIDE_ID = '7';
 export const PETER_DISCOUNT_GUIDE_ID = '10';
+export const PETER_CASH_DISCOUNT_ID = '__PETER_20_DISCOUNT__';
 export const NOWTRAVEL_ID = '__NOWTRAVEL__';
 export const ONLINE_ID = '__ONLINE__';
 export const LOCAL_GUIDE_ID = '__LOCAL_GUIDE__';
@@ -13,13 +14,14 @@ export function normalizeGuideName(name) {
 
 export function isSpecialLocalGuideName(name) {
   const value = String(name || '').trim();
-  return value === ONLINE_ID || value === KAKAO_FRIEND_ID || value === NOWTRAVEL_ID;
+  return value === ONLINE_ID || value === KAKAO_FRIEND_ID || value === PETER_CASH_DISCOUNT_ID || value === NOWTRAVEL_ID;
 }
 
 export function formatLocalGuideLabel(name) {
   const value = String(name || '').trim();
   if (value === ONLINE_ID) return 'Online';
   if (value === KAKAO_FRIEND_ID) return 'Kakao (10% Cash Discount)';
+  if (value === PETER_CASH_DISCOUNT_ID) return 'Peter (20% Cash Discount)';
   if (value === NOWTRAVEL_ID) return 'nowtravel (15% Cash Discount)';
   return value;
 }
@@ -88,6 +90,7 @@ export function resolveGuideSelectValue({ guideId, localGuideName, fallbackValue
   const localValue = String(localGuideName || '').trim();
   if (localValue === ONLINE_ID) return ONLINE_ID;
   if (localValue === KAKAO_FRIEND_ID) return KAKAO_FRIEND_ID;
+  if (localValue === PETER_CASH_DISCOUNT_ID) return PETER_DISCOUNT_GUIDE_ID;
   if (localValue) return LOCAL_GUIDE_ID;
 
   return String(fallbackValue || '');
@@ -102,6 +105,9 @@ export function buildGuideAssignmentPayload({ selectedGuide, localGuideName } = 
   }
   if (value === KAKAO_FRIEND_ID) {
     return { guideId: null, localGuideName: KAKAO_FRIEND_ID, isKakaoFriend: true };
+  }
+  if (value === PETER_DISCOUNT_GUIDE_ID) {
+    return { guideId: null, localGuideName: PETER_CASH_DISCOUNT_ID, isKakaoFriend: false };
   }
   if (value === ONLINE_ID) {
     return { guideId: null, localGuideName: ONLINE_ID, isKakaoFriend: false };

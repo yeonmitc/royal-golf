@@ -9,7 +9,7 @@ import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
-import { isSpecialLocalGuideName, KAKAO_FRIEND_ID } from '../features/guides/guideSelectOptions';
+import { isSpecialLocalGuideName, KAKAO_FRIEND_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
@@ -233,7 +233,7 @@ export default function SalesHistoryPage() {
       const isElla = gid && ellaGuideIds.has(String(gid));
       const isKakao = !gid && localGuideName === KAKAO_FRIEND_ID;
 
-      if (selectedGuideId && String(gid || '') !== selectedGuideId) {
+      if (selectedGuideId && String(gid || '') !== selectedGuideId && !(selectedGuideId === PETER_DISCOUNT_GUIDE_ID && localGuideName === PETER_CASH_DISCOUNT_ID)) {
         return false;
       }
 

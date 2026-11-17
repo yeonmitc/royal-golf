@@ -17,6 +17,7 @@ import {
   KAKAO_FRIEND_ID,
   MR_MOON_DISCOUNT_GUIDE_ID,
   PETER_DISCOUNT_GUIDE_ID,
+  PETER_CASH_DISCOUNT_ID,
   NOWTRAVEL_ID,
   LOCAL_GUIDE_ID,
   ONLINE_ID,
@@ -205,6 +206,7 @@ export default function SellPage() {
         guideId:
           currentGuideKey === LOCAL_GUIDE_ID ||
           currentGuideKey === KAKAO_FRIEND_ID ||
+          currentGuideKey === PETER_DISCOUNT_GUIDE_ID ||
           currentGuideKey === NOWTRAVEL_ID ||
           currentGuideKey === ONLINE_ID
             ? null
@@ -214,6 +216,8 @@ export default function SellPage() {
             ? String(currentLocalGuideName || '').trim()
             : currentGuideKey === KAKAO_FRIEND_ID
               ? KAKAO_FRIEND_ID
+              : currentGuideKey === PETER_DISCOUNT_GUIDE_ID
+                ? PETER_CASH_DISCOUNT_ID
               : currentGuideKey === NOWTRAVEL_ID
                 ? NOWTRAVEL_ID
                 : currentGuideKey === ONLINE_ID
@@ -670,7 +674,7 @@ export default function SellPage() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(180px, 220px) auto minmax(300px, 1fr)',
+                    gridTemplateColumns: 'auto repeat(2, minmax(0, 1fr))',
                     alignItems: 'center',
                     gap: 12,
                     marginTop: 8,
@@ -682,7 +686,7 @@ export default function SellPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="whitespace-nowrap min-w-[180px]"
+                    className="whitespace-nowrap"
                     style={{ justifySelf: 'start' }}
                     onClick={clearCart}
                   >
@@ -698,7 +702,9 @@ export default function SellPage() {
                       color: 'var(--text-main)',
                       fontWeight: 600,
                       fontSize: 15,
-                      whiteSpace: 'nowrap',
+                      minWidth: 0,
+                      textAlign: 'center',
+                      overflowWrap: 'anywhere',
                     }}
                   >
                     Total{' '}
@@ -715,6 +721,7 @@ export default function SellPage() {
                       flexDirection: 'column',
                       alignItems: 'center',
                       gap: 4,
+                      minWidth: 0,
                     }}
                   >
                     {isCheckoutPending && (
@@ -724,7 +731,7 @@ export default function SellPage() {
                           color: '#b45309',
                           textAlign: 'center',
                           fontWeight: 600,
-                          whiteSpace: 'nowrap',
+                          overflowWrap: 'anywhere',
                         }}
                       >
                         Do not close this page while the sale is being saved.
@@ -735,7 +742,8 @@ export default function SellPage() {
                       variant="primary"
                       size="sm"
                       disabled={isCheckoutPending}
-                      className="w-full whitespace-nowrap px-5"
+                      className="w-full whitespace-nowrap"
+                      style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                       onClick={handleCheckout}
                     >
                       {isCheckoutPending ? 'Processing sale...' : 'Payment'}
