@@ -12,7 +12,7 @@ import ReceiptModal from '../../../components/sales/ReceiptModal';
 import RefundModal from '../../../components/sales/RefundModal';
 import { useToast } from '../../../context/ToastContext';
 import { normalizeAppError } from '../../../utils/errorHandler';
-import codePartsSeed from '../../../db/seed/seed-code-parts.json';
+import { brandFromCode, copyTextToClipboard, formatSaleCopyLine, formatSoldAtParts } from '../salesClipboard';
 import {
   buildGuideAssignmentPayload,
   formatLocalGuideLabel,
@@ -86,52 +86,6 @@ export default function SalesTable({
     if (normalized.startsWith('SU-OT')) return true;
     if (normalized.startsWith('SA')) return true;
     return normalized.split('-').includes('EA');
-  }
-
-  async function copyTextToClipboard(text) {
-    const v = String(text || '').trim();
-    if (!v) return;
-    try {
-      await navigator.clipboard.writeText(v);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = v;
-      ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-  }
-
-  function brandFromCode(code) {
-    const parts = String(code || '').split('-');
-    const brandCode = String(parts[2] || '').trim();
-    if (!brandCode) return '';
-    const arr = codePartsSeed.brand || [];
-    const hit = arr.find((i) => i.code === brandCode);
-    const label = String(hit?.label || brandCode).trim();
-    return label === 'NoBrand' ? 'nobrand' : label;
-  }
-
-  function formatSoldAtParts(iso) {
-    const s = String(iso || '').trim();
-    if (!s) return { date: '', time: '' };
-    const dateHit = s.match(/\d{4}-\d{2}-\d{2}/);
-    const timeHit = s.match(/[T\s](\d{2}:\d{2})/);
-    const date = dateHit ? dateHit[0] : '';
-    const time = timeHit ? timeHit[1] : '';
-    if (!date) return { date: s, time: '' };
-
-    const [y, m, d] = date.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dow = days[dt.getUTCDay()] || '';
-    const mm = String(m || '').padStart(2, '0');
-    const dd = String(d || '').padStart(2, '0');
-    return { date: `${mm}-${dd} ${dow}`.trim(), time };
   }
 
   const visibleRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
@@ -340,7 +294,6 @@ export default function SalesTable({
     const qtyForDisplay = isRefunded ? 0 : qty;
     const lineTotalDisplay = finalUnit * qtyForDisplay;
     const qtyForTotal = isRefunded || isElla ? 0 : qty;
-    const priceForCopy = lineTotalDisplay.toLocaleString('en-US');
 
     const brand = brandFromCode(row.code);
     let rentalIndex = 0;
@@ -723,18 +676,14 @@ export default function SalesTable({
                         ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
                         : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
                       : undefined,
-      __copyText: [
-        soldAtDate ? `\u200B${soldAtDate}` : '',
-        soldAtTime,
-        row.code,
-        row.sizeDisplay,
-        row.color || '',
-        qtyForTotal,
-        brand,
-        priceForCopy,
-      ]
-        .filter(Boolean)
-        .join('\t'),
+      __copyText: formatSaleCopyLine({
+        soldAt: row.soldAt,
+        code: row.code,
+        sizeDisplay: row.sizeDisplay,
+        color: row.color,
+        qty: qtyForTotal,
+        price: lineTotalDisplay,
+      }),
     };
   });
 
@@ -821,8 +770,12 @@ export default function SalesTable({
             if (r?.clickable === false) return;
             const text = String(r?.__copyText || '').trim();
             if (!text) return;
-            await copyTextToClipboard(text);
-            showToast('Copied.');
+            try {
+              await copyTextToClipboard(text);
+              showToast('Copied.');
+            } catch {
+              showToast('Copy failed. Please try again.');
+            }
           }}
           pagination={pagination}
         />

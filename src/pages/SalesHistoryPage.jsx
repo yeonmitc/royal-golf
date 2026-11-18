@@ -453,7 +453,7 @@ export default function SalesHistoryPage() {
         variant={filterMode === 'mr-moon' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
       >
-        Mr.moon(10% cash discount)
+        Mr.Moon
       </Button>,
       <Button
         key="kakao-toggle"

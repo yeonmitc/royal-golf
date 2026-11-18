@@ -26,6 +26,7 @@ import {
 import { useProductInventoryList } from '../features/products/productHooks';
 import ProductScanResult from '../features/products/components/ProductScanResult';
 import { useCheckoutCartMutation } from '../features/sales/salesHooks';
+import { copyTextToClipboard, formatSaleCopyLine } from '../features/sales/salesClipboard';
 import { useCartStore } from '../store/cartStore';
 import { normalizeAppError } from '../utils/errorHandler';
 import {
@@ -125,6 +126,7 @@ export default function SellPage() {
   }, [guides]);
 
   const [localGuideModalOpen, setLocalGuideModalOpen] = useState(false);
+  const [copiedItemCount, setCopiedItemCount] = useState(0);
   const [localGuideDraft, setLocalGuideDraft] = useState('');
   const [localGuideErr, setLocalGuideErr] = useState('');
   const [selectedLocalGuideId, setSelectedLocalGuideId] = useState(''); // existing local guide ID
@@ -266,15 +268,35 @@ export default function SellPage() {
         saveRentalMetaForSoldAt(result.soldAt, rentalEntries);
       }
 
+      let copied = false;
+      try {
+        const saleLines = receiptItems.map((item) => formatSaleCopyLine({
+          soldAt: result.soldAt,
+          code: item.code,
+          sizeDisplay: item.size,
+          color: item.color,
+          qty: item.qty,
+          price: item.price * item.qty,
+        }));
+        await copyTextToClipboard(saleLines.join('\n'));
+        copied = true;
+      } catch (copyError) {
+        console.error('Sale saved, but clipboard copy failed.', copyError);
+      }
+
       clearCart();
       if (result && result.isOffline) {
         showToast(
           'Sale saved on this device. This sale will be synced when the internet connection is restored.'
         );
-      } else {
-        showToast('Sale completed successfully.');
       }
-      navigate('/sales');
+      if (copied) {
+        setCopiedItemCount(receiptItems.length);
+        setTimeout(() => navigate('/sales'), 1000);
+      } else {
+        showToast('Sale saved, but clipboard copy failed. Copy the rows from Sales History.');
+        navigate('/sales');
+      }
     } catch (e) {
       console.error(e);
       const {
@@ -759,6 +781,13 @@ export default function SellPage() {
           </Card>
         </div>
       </div>
+      <Modal
+        open={copiedItemCount > 0}
+        onClose={() => {}}
+        title={`${copiedItemCount} items data is copied`}
+        size="content"
+        hideCloseButton
+      />
       <Modal
         open={localGuideModalOpen}
         onClose={() => {
