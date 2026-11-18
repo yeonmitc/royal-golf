@@ -324,7 +324,7 @@ export default function SalesTable({
               fontSize: 10,
               padding: '1px 5px',
               borderRadius: 3,
-              backgroundColor: 'rgba(251, 191, 36, 0.25)',
+              backgroundColor: 'rgba(251, 191, 36, 0.15)',
               color: '#fbbf24',
               fontWeight: 600,
               whiteSpace: 'nowrap',
@@ -655,26 +655,26 @@ export default function SalesTable({
       ),
       style: row._offlinePending
         ? {
-            backgroundColor: 'rgba(251, 191, 36, 0.12)',
+            backgroundColor: 'rgba(251, 191, 36, 0.15)',
             color: 'var(--text-main)',
             borderLeft: '3px solid rgba(251, 191, 36, 0.5)',
           }
         : isRefunded
-          ? { backgroundColor: 'rgba(239, 68, 68, 0.30)', color: 'var(--text-main)' }
+          ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--text-main)' }
           : isExchanged
-            ? { backgroundColor: 'rgba(255, 182, 193, 0.10)', color: 'var(--text-main)' }
+            ? { backgroundColor: 'rgba(255, 182, 193, 0.15)', color: 'var(--text-main)' }
             : giftChecked
-              ? { backgroundColor: 'rgba(239, 68, 68, 0.10)', color: 'var(--text-main)' }
+              ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--text-main)' }
               : isMrMoon
-                ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
+                ? { backgroundColor: 'rgba(253, 239, 183, 0.15)', color: 'var(--text-main)' }
                 : isElla
-                  ? { backgroundColor: 'rgba(255, 182, 193, 0.2)', color: 'var(--text-main)' }
+                  ? { backgroundColor: 'rgba(255, 182, 193, 0.15)', color: 'var(--text-main)' }
                   : isPeter
-                    ? { backgroundColor: 'rgba(59, 130, 246, 0.30)', color: 'var(--text-main)' }
+                    ? { backgroundColor: 'rgba(59, 130, 246, 0.15)', color: 'var(--text-main)' }
                   : isRental
-                    ? { backgroundColor: 'rgba(255, 165, 0, 0.2)', color: 'var(--text-main)' }
+                    ? { backgroundColor: 'rgba(255, 165, 0, 0.15)', color: 'var(--text-main)' }
                     : row.guideId
-                      ? { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
+                      ? { backgroundColor: 'rgba(34, 197, 94, 0.15)', color: 'var(--text-main)' }
                       : undefined,
       __copyText: formatSaleCopyLine({
         soldAt: row.soldAt,
