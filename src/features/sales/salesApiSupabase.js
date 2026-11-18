@@ -1567,12 +1567,22 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
   const hasTo = !!toDate;
   const fromKey = String(fromDate || '').trim();
   const toKey = String(toDate || '').trim();
+  const filters = [];
+  if (hasFrom) {
+    const lower = localDayStartAsUtcIso(fromKey);
+    if (lower) filters.push({ column: 'sold_at', op: 'gte', value: lower });
+  }
+  if (hasTo) {
+    const upper = localDayStartAsUtcIso(nextDayKey(toKey));
+    if (upper) filters.push({ column: 'sold_at', op: 'lt', value: upper });
+  }
 
   let sales;
   try {
     sales = await sbSelectAll('sales', {
       select:
         'id,sold_at,code,color,size_std,qty,list_price,price,free_gift,is_exchanged,refunded_at,refund_reason,sale_group_id',
+      filters,
       order: { column: 'sold_at', ascending: false },
     });
   } catch (e) {
@@ -1586,6 +1596,7 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     ) {
       sales = await sbSelectAll('sales', {
         select: 'id,sold_at,code,size_std,qty,price,refunded_at,refund_reason,sale_group_id',
+        filters,
         order: { column: 'sold_at', ascending: false },
       });
     } else {
@@ -1818,9 +1829,11 @@ export async function getSalesHistoryFilteredResult({
   toDate = '',
   query = '',
 } = {}) {
-  const head = await sbSelect('sales', { select: 'id', limit: 1 });
+  const [head, rows] = await Promise.all([
+    sbSelect('sales', { select: 'id', limit: 1 }),
+    getSalesHistoryFlatFiltered({ fromDate, toDate, query }),
+  ]);
   const hasAnySales = Array.isArray(head) && head.length > 0;
-  const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query });
   return { hasAnySales, rows };
 }
 

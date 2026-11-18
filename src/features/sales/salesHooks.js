@@ -34,7 +34,9 @@ export function useSalesHistoryFiltered({ fromDate, toDate, query }) {
       { fromDate: fromDate || '', toDate: toDate || '', query: query || '' },
     ],
     queryFn: () => getSalesHistoryFilteredResult({ fromDate, toDate, query }),
-    staleTime: 0,
+    // Avoid repeating the same history request during immediate remount/focus.
+    // Checkout and sale mutations invalidate this query when data changes.
+    staleTime: 15 * 1000,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
