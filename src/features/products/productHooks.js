@@ -57,6 +57,7 @@ export function useProductInventoryList(options = {}) {
     queryKey: ['inventory', 'withProducts'],
     queryFn: getProductInventoryList,
     networkMode: 'always',       // run query even when browser is offline, so IDB fallback works
+    staleTime: 1000 * 60 * 2,   // 2분간 재사용 (느린 인터넷에서 반복 조회 방지)
     ...options,
   });
 }
