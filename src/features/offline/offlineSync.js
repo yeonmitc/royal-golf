@@ -159,6 +159,27 @@ export async function syncTodaySalesToCache({ onInfo } = {}) {
   _syncTodaySalesInFlight = (async () => {
     try {
       const dateKey = todayDateKey();
+
+      // If React Query already has fresh data for today, reuse it instead of re-fetching.
+      try {
+        const { default: queryClient } = await import('../../providers/queryClient');
+        const queryKey = [
+          'sales',
+          'historyFlat',
+          { fromDate: dateKey, toDate: dateKey, query: '' },
+        ];
+        const state = queryClient.getQueryState(queryKey);
+        const isFresh = state?.dataUpdatedAt && Date.now() - state.dataUpdatedAt < 15_000;
+        if (isFresh && state?.data?.rows) {
+          const rows = state.data.rows;
+          await replaceTodaySalesCache(rows, dateKey);
+          if (onInfo) onInfo(`Today's sales cached from query cache: ${rows.length} records`);
+          return { count: rows.length, dateKey };
+        }
+      } catch {
+        // QueryProvider not available (e.g. in tests) — fall through to direct fetch
+      }
+
       const { getSalesHistoryFilteredResult } = await import('../sales/salesApiSupabase');
       const result = await getSalesHistoryFilteredResult({
         fromDate: dateKey,
@@ -374,8 +395,9 @@ export async function syncOfflineSalesToServer({ onInfo } = {}) {
   // If individual rows have guide_commission_snapshot per line, sum them.
   // Otherwise fall back to subtotal * guide_rate.
   for (const [, g] of byGroup.entries()) {
-    const isCashDiscount = [MR_MOON_DISCOUNT_GUIDE_ID, PETER_DISCOUNT_GUIDE_ID]
-      .includes(String(g.guide_id));
+    const isCashDiscount = [MR_MOON_DISCOUNT_GUIDE_ID, PETER_DISCOUNT_GUIDE_ID].includes(
+      String(g.guide_id)
+    );
     if (isCashDiscount) {
       g.guide_rate = 0;
       g.guide_commission = 0;
