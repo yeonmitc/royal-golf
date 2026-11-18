@@ -6,6 +6,7 @@ import DataTable from '../components/common/DataTable';
 import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
 import { normalizeAppError } from '../utils/errorHandler';
+import { sbSelect } from '../db/supabaseRest';
 import {
   getGuideStats,
   getGuideUnsettledSales,
@@ -44,6 +45,10 @@ function isMrMoon(g) {
     .includes('mrmoon');
 }
 
+function isElla(g) {
+  return String(g.name || '').toLowerCase().replace(/[\s.]/g, '') === 'ella';
+}
+
 function getRateLabel(g) {
   if (g.guide_type === 'local') return '10%';
   if (g.guide_type === 'regular') return '10%/20%';
@@ -64,6 +69,45 @@ export default function GuidesPage() {
     queryFn: () => getSettlementHistory(),
   });
 
+  const { data: allSettlements, isLoading: isLoadingAllSettlements } = useQuery({
+    queryKey: ['guideSettlementTotals'],
+    queryFn: async () => {
+      const all = [];
+      for (let offset = 0; ; offset += 1000) {
+        const page = await sbSelect('guide_commission_settlements', {
+          select: 'id, guide_id, amount, paid_at, note, created_at',
+          order: { column: 'created_at', ascending: false }, limit: 1000, offset,
+        });
+        all.push(...(page || []));
+        if (!page || page.length < 1000) return all;
+      }
+    },
+  });
+
+  const { data: guideSales = [], isLoading: isLoadingGuideSales } = useQuery({
+    queryKey: ['guideSalesTotals'],
+    queryFn: async () => {
+      const sales = [];
+      for (let offset = 0; ; offset += 1000) {
+        const page = await sbSelect('sales', {
+          select: 'price,qty,sold_at,refunded_at,free_gift,sale_group_id',
+          order: { column: 'sold_at', ascending: false }, limit: 1000, offset,
+        });
+        sales.push(...(page || []));
+        if (!page || page.length < 1000) break;
+      }
+      const groupGuideMap = new Map();
+      for (let offset = 0; ; offset += 1000) {
+        const page = await sbSelect('sale_groups', {
+          select: 'id,guide_id', order: { column: 'sold_at', ascending: false }, limit: 1000, offset,
+        });
+        (page || []).forEach((group) => groupGuideMap.set(group.id, group.guide_id));
+        if (!page || page.length < 1000) break;
+      }
+      return sales.map((sale) => ({ ...sale, guide_id: groupGuideMap.get(sale.sale_group_id) }));
+    },
+  });
+
   const guideNameMap = useMemo(() => {
     const map = {};
     (guideStats || []).forEach((g) => {
@@ -73,6 +117,8 @@ export default function GuidesPage() {
   }, [guideStats]);
 
   const [typeFilter, setTypeFilter] = useState('all');
+  const [rankingYear, setRankingYear] = useState(() => String(new Date().getFullYear()));
+  const [selectedRankingMonth, setSelectedRankingMonth] = useState(() => String(new Date().getMonth() + 1).padStart(2, '0'));
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [selectedGroupIds, setSelectedGroupIds] = useState(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
@@ -89,7 +135,10 @@ export default function GuidesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guideStats'] });
       queryClient.invalidateQueries({ queryKey: ['settlementHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['guideSettlementTotals'] });
+      queryClient.invalidateQueries({ queryKey: ['guideSalesTotals'] });
       queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSalesAmounts'] });
       showToast('정산이 완료되었습니다.');
       setShowConfirm(false);
       setSelectedGuide(null);
@@ -102,21 +151,54 @@ export default function GuidesPage() {
   });
 
   const groups = unsettledGroups || [];
+  const unsettledGroupIds = useMemo(
+    () => [...new Set(groups.map((group) => group.sale_group_id).filter(Boolean))].sort(),
+    [groups],
+  );
+  const { data: unsettledSaleRows = [], isLoading: isLoadingUnsettledSaleRows } = useQuery({
+    queryKey: ['unsettledSalesAmounts', selectedGuide?.guide_id, unsettledGroupIds],
+    enabled: !!selectedGuide && unsettledGroupIds.length > 0,
+    queryFn: async () => {
+      const rows = [];
+      for (let index = 0; index < unsettledGroupIds.length; index += 100) {
+        const ids = unsettledGroupIds.slice(index, index + 100);
+        const inValue = `(${ids.map((id) => `"${id}"`).join(',')})`;
+        for (let offset = 0; ; offset += 1000) {
+          const page = await sbSelect('sales', {
+            select: 'sale_group_id,price,qty,refunded_at,free_gift',
+            filters: [{ column: 'sale_group_id', op: 'in', value: inValue }],
+            limit: 1000,
+            offset,
+          });
+          rows.push(...(page || []));
+          if (!page || page.length < 1000) break;
+        }
+      }
+      return rows;
+    },
+  });
 
   // 날짜별 그룹화
   const groupedDates = useMemo(() => {
     const map = {};
+    const salesByGroup = {};
+    unsettledSaleRows.forEach((sale) => {
+      if (sale.refunded_at || sale.free_gift) return;
+      salesByGroup[sale.sale_group_id] = (salesByGroup[sale.sale_group_id] || 0)
+        + (Number(sale.price) || 0) * (Number(sale.qty) || 0);
+    });
     groups.forEach((g) => {
       const dateKey = g.sold_at ? String(g.sold_at).match(/\d{4}-\d{2}-\d{2}/)?.[0] || 'unknown' : 'unknown';
       if (!map[dateKey]) {
-        map[dateKey] = { dateKey, soldAt: g.sold_at, commission: 0, itemCount: 0, groupIds: [] };
+        map[dateKey] = { dateKey, soldAt: g.sold_at, salesAmount: 0, commission: 0, itemCount: 0, groupIds: [] };
       }
+      map[dateKey].salesAmount += salesByGroup[g.sale_group_id] || 0;
       map[dateKey].commission += Number(g.guide_commission) || 0;
       map[dateKey].itemCount += Number(g.item_count) || 0;
       map[dateKey].groupIds.push(g.sale_group_id);
     });
     return Object.values(map).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
-  }, [groups]);
+  }, [groups, unsettledSaleRows]);
 
   const selectedItems = useMemo(
     () => groupedDates.filter((d) => selectedGroupIds.has(d.dateKey)),
@@ -179,6 +261,7 @@ export default function GuidesPage() {
     if (!guideStats) return [];
     return guideStats.filter((g) => {
       if (isMrMoon(g)) return false;
+      if (isElla(g)) return false;
       if (g.guide_type === 'employee') return false;
       return true;
     });
@@ -189,18 +272,77 @@ export default function GuidesPage() {
     return visibleGuides.filter((g) => g.guide_type === typeFilter);
   }, [visibleGuides, typeFilter]);
 
+  const guideTotals = useMemo(() => {
+    const totals = {};
+    guideSales.forEach((sale) => {
+      if (!sale.guide_id || sale.refunded_at || sale.free_gift) return;
+      const amount = (Number(sale.price) || 0) * (Number(sale.qty) || 0);
+      totals[sale.guide_id] = totals[sale.guide_id] || { sales: 0, settled: 0 };
+      totals[sale.guide_id].sales += amount;
+    });
+    (allSettlements || []).forEach((settlement) => {
+      totals[settlement.guide_id] = totals[settlement.guide_id] || { sales: 0, settled: 0 };
+      totals[settlement.guide_id].settled += Number(settlement.amount) || 0;
+    });
+    return totals;
+  }, [allSettlements, guideSales]);
+
+  const monthlyGuideRankings = useMemo(() => {
+    const totals = new Map();
+    const guideIds = new Set(visibleGuides.map((guide) => String(guide.guide_id)));
+    guideSales.forEach((sale) => {
+      if (!sale.guide_id || !guideIds.has(String(sale.guide_id)) || !sale.sold_at || sale.refunded_at || sale.free_gift) return;
+      const month = String(sale.sold_at).slice(0, 7);
+      const key = `${month}::${sale.guide_id}`;
+      totals.set(key, (totals.get(key) || 0) + (Number(sale.price) || 0) * (Number(sale.qty) || 0));
+    });
+
+    const byMonth = new Map();
+    totals.forEach((amount, key) => {
+      if (amount <= 0) return;
+      const [month, guideId] = key.split('::');
+      if (!byMonth.has(month)) byMonth.set(month, []);
+      byMonth.get(month).push({ guideId, amount });
+    });
+
+    return [...byMonth.entries()]
+      .sort(([monthA], [monthB]) => monthB.localeCompare(monthA))
+      .flatMap(([month, guides]) => guides
+        .sort((a, b) => b.amount - a.amount)
+        .map((guide, index) => ({
+          id: `${month}-${guide.guideId}`,
+          month,
+          rank: index + 1,
+          guide: guideNameMap[guide.guideId] || `ID: ${guide.guideId}`,
+          amount: guide.amount.toLocaleString('en-US'),
+        })));
+  }, [guideNameMap, guideSales, visibleGuides]);
+
+  const rankingYears = useMemo(() => (
+    [...new Set(guideSales
+      .map((sale) => String(sale.sold_at || '').slice(0, 4))
+      .filter((year) => /^\d{4}$/.test(year)))]
+      .concat(String(new Date().getFullYear()))
+      .filter((year, index, years) => years.indexOf(year) === index)
+      .sort((a, b) => b.localeCompare(a))
+  ), [guideSales]);
+  const activeRankingYear = rankingYear || rankingYears[0] || String(new Date().getFullYear());
+  const selectedMonthRows = useMemo(() => monthlyGuideRankings.filter(
+    (row) => row.month === `${activeRankingYear}-${selectedRankingMonth}`,
+  ), [activeRankingYear, monthlyGuideRankings, selectedRankingMonth]);
+
   if (isLoading) {
     return <div className="p-8">Loading guides...</div>;
   }
 
   return (
     <div className="p-4 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
         <h1 className="text-2xl font-bold text-gray-900">Guide Management</h1>
       </div>
 
       {/* Type Filter Tabs */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
         {[
           { key: 'all', label: 'All' },
           { key: 'regular', label: 'Guide' },
@@ -233,10 +375,11 @@ export default function GuidesPage() {
       <Card>
         <DataTable
           columns={[
-            { key: 'name', header: 'Name' },
-            { key: 'type', header: 'Type', className: 'text-center', tdClassName: 'text-center' },
-            { key: 'rate', header: 'Rate', className: 'text-center', tdClassName: 'text-center' },
-            { key: 'balance', header: 'Balance', className: 'text-right', tdClassName: 'text-right font-mono font-bold' },
+            { key: 'name', header: '이름' },
+            { key: 'type', header: '타입', className: 'text-center', tdClassName: 'text-center' },
+            { key: 'salesTotal', header: '총 판매금', className: 'text-right', tdClassName: 'text-right font-mono' },
+            { key: 'settledTotal', header: '총정산금', className: 'text-right', tdClassName: 'text-right font-mono' },
+            { key: 'unsettledTotal', header: '미정산금', className: 'text-right', tdClassName: 'text-right font-mono font-bold' },
             { key: 'action', header: 'Action', className: 'text-center', tdClassName: 'text-center' },
           ]}
           rows={filteredGuides.map((g) => {
@@ -247,8 +390,9 @@ export default function GuidesPage() {
               id: g.guide_id,
               name: g.name,
               type: <TypeBadge type={g.guide_type} />,
-              rate: getRateLabel(g),
-              balance: balance.toLocaleString('en-US'),
+              salesTotal: isLoadingGuideSales ? '...' : (guideTotals[g.guide_id]?.sales || 0).toLocaleString('en-US'),
+              settledTotal: isLoadingAllSettlements ? '...' : (guideTotals[g.guide_id]?.settled || 0).toLocaleString('en-US'),
+              unsettledTotal: balance.toLocaleString('en-US'),
               action: (
                 <button
                   type="button"
@@ -274,8 +418,78 @@ export default function GuidesPage() {
         />
       </Card>
 
+      <Card title="월별 가이드 판매 순위">
+        {isLoadingGuideSales ? (
+          <div className="text-sm text-[var(--text-muted)]">Loading...</div>
+        ) : (
+          <>
+            <div
+              className="month-selector-controls mb-4 pb-1"
+              style={{ display: 'flex', flexFlow: 'row nowrap', alignItems: 'center', gap: 12, overflowX: 'auto' }}
+            >
+              <select
+                aria-label="순위 연도 선택"
+                value={activeRankingYear}
+                onChange={(event) => setRankingYear(event.target.value)}
+                className="month-year-select shrink-0 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-4 text-sm"
+                style={{ width: 160, minWidth: 160, maxWidth: 160, height: 38, lineHeight: '20px', flex: '0 0 160px' }}
+              >
+                {rankingYears.map((year) => <option key={year} value={year}>{year}년</option>)}
+              </select>
+              <div
+                className="month-selector-tags"
+                role="group"
+                aria-label="월 선택"
+                style={{ display: 'flex', flexFlow: 'row nowrap', flex: '0 0 auto', gap: 8, marginBottom: 2 }}
+              >
+                {Array.from({ length: 12 }, (_, index) => {
+                  const month = String(index + 1).padStart(2, '0');
+                  const selected = selectedRankingMonth === month;
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setSelectedRankingMonth(month)}
+                      className="month-selector-tag"
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: 999,
+                        border: selected ? '1px solid rgba(212,175,55,0.6)' : '1px solid var(--border-soft)',
+                        background: selected ? 'rgba(212,175,55,0.14)' : 'transparent',
+                        color: selected ? 'var(--gold-soft)' : 'var(--text-main)',
+                        fontWeight: selected ? 700 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {index + 1}월
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {selectedRankingMonth && (
+              <>
+                <div aria-hidden="true" style={{ height: 2, minHeight: 2 }} />
+                {selectedMonthRows.length === 0 ? (
+                  <div className="text-sm text-[var(--text-muted)]">해당 월 판매 내역이 없습니다.</div>
+                ) : (
+                  <DataTable
+                    columns={[
+                      { key: 'guide', header: '가이드 이름' },
+                      { key: 'amount', header: `${Number(selectedRankingMonth)}월 판매금`, className: 'text-right', tdClassName: 'text-right font-mono font-bold' },
+                    ]}
+                    rows={selectedMonthRows.map((row) => ({ id: row.id, guide: row.guide, amount: row.amount }))}
+                  />
+                )}
+              </>
+            )}
+          </>
+        )}
+      </Card>
+
       {/* Settlement History */}
-      <Card title="Settlement History">
+      <Card title="정산기록">
         {isLoadingSettlements ? (
           <div className="text-sm text-[var(--text-muted)]">Loading...</div>
         ) : !settlements || settlements.length === 0 ? (
@@ -353,8 +567,8 @@ export default function GuidesPage() {
                           />
                         </th>
                         <th style={{ padding: '8px 6px', textAlign: 'left' }}>판매일</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'right' }}>커미션율</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'right' }}>커미션 금액</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'right' }}>총 판매금</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'right' }}>커미션 금액 (10%/20%)</th>
                         <th style={{ padding: '8px 6px', textAlign: 'right' }}>항목수</th>
                       </tr>
                     </thead>
@@ -382,8 +596,8 @@ export default function GuidesPage() {
                             <td style={{ padding: '8px 6px' }}>
                               {d.soldAt ? String(d.soldAt).match(/\d{4}-\d{2}-\d{2}/)?.[0] || '-' : '-'}
                             </td>
-                            <td style={{ padding: '8px 6px', textAlign: 'right' }}>
-                              {selectedGuide.guide_type === 'local' ? '10%' : '10%/20%'}
+                            <td style={{ padding: '8px 6px', textAlign: 'right', fontFamily: 'monospace' }}>
+                              {isLoadingUnsettledSaleRows ? '...' : d.salesAmount.toLocaleString('en-US')}
                             </td>
                             <td
                               style={{

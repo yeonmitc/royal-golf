@@ -374,6 +374,35 @@ input {
   width: 100% !important;
 }
 
+.month-year-select {
+  width: 160px !important;
+  min-width: 160px !important;
+  max-width: 160px !important;
+  flex: 0 0 160px !important;
+}
+
+.month-selector-controls {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.month-selector-tags {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  flex: 0 0 auto !important;
+  gap: 8px;
+}
+
+.month-selector-tag {
+  flex: 0 0 auto !important;
+  white-space: nowrap;
+  margin-right: 1px !important;
+}
+
 .select-gold {
   background: var(--bg-card);
   color: var(--gold-soft);

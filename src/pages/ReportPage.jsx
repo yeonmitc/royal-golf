@@ -552,23 +552,6 @@ export default function ReportPage() {
           <div className="page-title">Report</div>
           <div className="page-subtitle">Monthly owner dashboard for sales, cost, and real remaining profit</div>
         </div>
-        <div className="page-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="input-field"
-            style={{ minWidth: 120 }}
-          >
-            {years.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-          <Button variant="outline" size="sm" onClick={() => setSelectedYear(new Date().getFullYear())}>
-            This Year
-          </Button>
-        </div>
       </div>
 
       <Card title="Month Selector" subtitle="Select a month to update KPI cards and cost breakdown">
@@ -609,29 +592,44 @@ export default function ReportPage() {
             </div>
           </div>
         ) : null}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {MONTH_LABELS.map((label, idx) => {
-            const month = idx + 1;
-            const active = month === selectedMonth;
-            return (
-              <button
-                key={label}
-                type="button"
-                onClick={() => setSelectedMonth(month)}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: 999,
-                  border: active ? '1px solid rgba(212,175,55,0.6)' : '1px solid var(--border-soft)',
-                  background: active ? 'rgba(212,175,55,0.14)' : 'transparent',
-                  color: active ? 'var(--gold-soft)' : 'var(--text-main)',
-                  fontWeight: active ? 700 : 500,
-                  cursor: 'pointer',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+        <div className="month-selector-controls" style={{ paddingBottom: 4 }}>
+          <select
+            aria-label="Report year"
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="input-field month-year-select"
+            style={{ width: 160, minWidth: 160, maxWidth: 160, height: 38, lineHeight: '20px', borderRadius: 999, flex: '0 0 160px' }}
+          >
+            {years.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+          <div className="month-selector-tags" role="group" aria-label="Report month">
+            {MONTH_LABELS.map((label, idx) => {
+              const month = idx + 1;
+              const active = month === selectedMonth;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setSelectedMonth(month)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 999,
+                    border: active ? '1px solid rgba(212,175,55,0.6)' : '1px solid var(--border-soft)',
+                    background: active ? 'rgba(212,175,55,0.14)' : 'transparent',
+                    color: active ? 'var(--gold-soft)' : 'var(--text-main)',
+                    fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                  }}
+                  className="month-selector-tag"
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </Card>
 
