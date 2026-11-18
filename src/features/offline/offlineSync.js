@@ -148,6 +148,16 @@ function todayDateKey() {
 
 let _syncTodaySalesInFlight = null;
 
+function toTodaySalesCacheRows(rows) {
+  return (rows || [])
+    .filter((row) => row && !row._offlinePending && (row.id || row.saleId))
+    .map((row) => ({
+      ...row,
+      id: row.id || row.saleId,
+      sold_at: row.sold_at || row.soldAt,
+    }));
+}
+
 /**
  * Fetch today's sales from server and cache in IndexedDB.
  * Uses getSalesHistoryFilteredResult with today's date range.
@@ -161,6 +171,7 @@ export async function syncTodaySalesToCache({ onInfo } = {}) {
       const dateKey = todayDateKey();
 
       // If React Query already has fresh data for today, reuse it instead of re-fetching.
+      let cachedRows = null;
       try {
         const { default: queryClient } = await import('../../providers/queryClient');
         const queryKey = [
@@ -169,15 +180,20 @@ export async function syncTodaySalesToCache({ onInfo } = {}) {
           { fromDate: dateKey, toDate: dateKey, query: '' },
         ];
         const state = queryClient.getQueryState(queryKey);
-        const isFresh = state?.dataUpdatedAt && Date.now() - state.dataUpdatedAt < 15_000;
-        if (isFresh && state?.data?.rows) {
-          const rows = state.data.rows;
-          await replaceTodaySalesCache(rows, dateKey);
-          if (onInfo) onInfo(`Today's sales cached from query cache: ${rows.length} records`);
-          return { count: rows.length, dateKey };
-        }
+        const isFresh =
+          state?.status === 'success' &&
+          !state.isInvalidated &&
+          state.fetchStatus === 'idle' &&
+          state.dataUpdatedAt &&
+          Date.now() - state.dataUpdatedAt < 15_000;
+        if (isFresh && Array.isArray(state?.data?.rows)) cachedRows = state.data.rows;
       } catch {
-        // QueryProvider not available (e.g. in tests) — fall through to direct fetch
+        // Query client unavailable — fall through to direct fetch.
+      }
+      if (cachedRows) {
+        const count = await replaceTodaySalesCache(toTodaySalesCacheRows(cachedRows), dateKey);
+        if (onInfo) onInfo(`Today's sales cached from query cache: ${count} records`);
+        return { count, dateKey };
       }
 
       const { getSalesHistoryFilteredResult } = await import('../sales/salesApiSupabase');
@@ -185,10 +201,9 @@ export async function syncTodaySalesToCache({ onInfo } = {}) {
         fromDate: dateKey,
         toDate: dateKey,
       });
-      const rows = result?.rows || [];
-      await replaceTodaySalesCache(rows, dateKey);
-      if (onInfo) onInfo(`Today's sales cached: ${rows.length} records`);
-      return { count: rows.length, dateKey };
+      const count = await replaceTodaySalesCache(toTodaySalesCacheRows(result?.rows), dateKey);
+      if (onInfo) onInfo(`Today's sales cached: ${count} records`);
+      return { count, dateKey };
     } catch (e) {
       console.error('[offlineSync] syncTodaySalesToCache failed:', e);
       if (onInfo) onInfo("Could not refresh today's sales.");
