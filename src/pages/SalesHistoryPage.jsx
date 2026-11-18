@@ -233,6 +233,9 @@ export default function SalesHistoryPage() {
       const isElla = gid && ellaGuideIds.has(String(gid));
       const isKakao = !gid && localGuideName === KAKAO_FRIEND_ID;
 
+      if (selectedGuideId === '__ALL_GUIDES__') {
+        return gid != null;
+      }
       if (selectedGuideId && String(gid || '') !== selectedGuideId && !(selectedGuideId === PETER_DISCOUNT_GUIDE_ID && localGuideName === PETER_CASH_DISCOUNT_ID) && !(selectedGuideId === MR_MOON_DISCOUNT_GUIDE_ID && localGuideName === MR_MOON_CASH_DISCOUNT_ID)) {
         return false;
       }
@@ -605,7 +608,7 @@ export default function SalesHistoryPage() {
               padding: 6,
             }}
           >
-            {[{ value: '', label: 'guide(All)' }, ...guideFilterOptions].map((option) => {
+            {[{ value: '__ALL_GUIDES__', label: 'guide(All)' }, ...guideFilterOptions].map((option) => {
               const isSelected = option.value === selectedGuideId;
               return (
                 <button
@@ -614,7 +617,6 @@ export default function SalesHistoryPage() {
                   onClick={() => {
                     setSelectedGuideId(option.value);
                     setFilterMode('all');
-                    setLocalGuideInput('');
                     setGuideMenuOpen(false);
                   }}
                   style={{
