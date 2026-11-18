@@ -9,7 +9,7 @@ import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides } from '../features/guides/guideApi';
-import { isSpecialLocalGuideName, KAKAO_FRIEND_ID, MR_MOON_CASH_DISCOUNT_ID, MR_MOON_DISCOUNT_GUIDE_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
+import { KAKAO_FRIEND_ID, MR_MOON_CASH_DISCOUNT_ID, MR_MOON_DISCOUNT_GUIDE_ID, NOWTRAVEL_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
@@ -35,8 +35,7 @@ export default function SalesHistoryPage() {
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
   const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'kakao', 'ella', 'no-ella'
-  const [refundOnly, setRefundOnly] = useState(false);
-  const [localGuideInput, setLocalGuideInput] = useState('');
+  const [noRefundNoGift, setNoRefundNoGift] = useState(false);
   const [selectedGuideId, setSelectedGuideId] = useState('');
   const [guideMenuOpen, setGuideMenuOpen] = useState(false);
   const [guideMenuPosition, setGuideMenuPosition] = useState({ top: 0, left: 0, width: 160 });
@@ -206,7 +205,8 @@ export default function SalesHistoryPage() {
   const visibleRows = useMemo(() => {
     const base = (allRows || []).filter((r) => {
       const isRefunded = Boolean(r?.isRefunded) || Boolean(r?.refundedAt);
-      if (refundOnly && isRefunded) return false;
+      const isGift = Boolean(r?.freeGift) || Number(r?.unitPricePhp ?? 0) === 0;
+      if (noRefundNoGift && (isRefunded || isGift)) return false;
       return true;
     });
 
@@ -255,13 +255,8 @@ export default function SalesHistoryPage() {
       if (filterMode === 'no-ella') {
         return !isElla;
       }
-      if (filterMode === 'local-guide') {
-        if (!localGuideName || isSpecialLocalGuideName(localGuideName)) return false;
-        const q = String(localGuideInput || '')
-          .trim()
-          .toLowerCase();
-        if (!q) return true;
-        return localGuideName.toLowerCase().includes(q);
+      if (filterMode === 'nowtravel') {
+        return localGuideName === NOWTRAVEL_ID;
       }
       return true;
     });
@@ -272,7 +267,7 @@ export default function SalesHistoryPage() {
       const bt = new Date(b.soldAt || 0).getTime();
       return at - bt;
     });
-  }, [allRows, sortAscending, filterMode, guides, refundOnly, localGuideInput, selectedGuideId]);
+  }, [allRows, sortAscending, filterMode, guides, noRefundNoGift, selectedGuideId]);
 
   const exportActions = useMemo(() => {
     const rows = visibleRows || [];
@@ -482,27 +477,27 @@ export default function SalesHistoryPage() {
         NoGuide
       </Button>,
       <Button
-        key="local-guide-toggle"
+        key="nowtravel-toggle"
         type="button"
         onClick={() => {
           setSelectedGuideId('');
-          setFilterMode((prev) => (prev === 'local-guide' ? 'all' : 'local-guide'));
+          setFilterMode((prev) => (prev === 'nowtravel' ? 'all' : 'nowtravel'));
         }}
         size="sm"
-        variant={filterMode === 'local-guide' ? 'primary' : 'outline'}
+        variant={filterMode === 'nowtravel' ? 'primary' : 'outline'}
         style={{ minWidth: 90 }}
       >
-        Local
+        NowTravel
       </Button>,
       <Button
-        key="refund-toggle"
+        key="refund-gift-toggle"
         type="button"
-        onClick={() => setRefundOnly((prev) => !prev)}
+        onClick={() => setNoRefundNoGift((prev) => !prev)}
         size="sm"
-        variant={refundOnly ? 'primary' : 'outline'}
-        style={{ minWidth: 90 }}
+        variant={noRefundNoGift ? 'primary' : 'outline'}
+        style={{ minWidth: 120 }}
       >
-        No Refund
+        No Refund & No Gift
       </Button>,
       <Button
         key="ella-toggle"
@@ -580,7 +575,7 @@ export default function SalesHistoryPage() {
   }, [
     sortAscending,
     filterMode,
-    refundOnly,
+    noRefundNoGift,
     exportActions,
     guideFilterOptions,
     selectedGuideId,
@@ -825,15 +820,6 @@ export default function SalesHistoryPage() {
             }}
             style={{ flex: '1 1 0', minWidth: 0 }}
           />
-          {filterMode === 'local-guide' ? (
-            <input
-              type="text"
-              placeholder="Local Guide name"
-              value={localGuideInput}
-              onChange={(e) => setLocalGuideInput(e.target.value)}
-              style={{ width: 180, maxWidth: '40vw' }}
-            />
-          ) : null}
           <Button
             type="button"
             onClick={applySearch}
@@ -889,7 +875,7 @@ export default function SalesHistoryPage() {
               <span style={{ color: 'var(--gold-soft)', fontWeight: 'bold' }}>
                 {summary.totalAmount.toLocaleString()} PHP
               </span>
-              {filterMode === 'local-guide' ? (
+              {filterMode === 'nowtravel' ? (
                 <span style={{ marginLeft: 10 }}>
                   Comm:{' '}
                   <span style={{ color: 'var(--gold-soft)', fontWeight: 'bold' }}>
