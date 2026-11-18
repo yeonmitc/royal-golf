@@ -18,7 +18,9 @@ import {
   formatLocalGuideLabel,
   getGuideSelectOptions,
   isSpecialLocalGuideName,
+  KAKAO_FRIEND_ID,
   LOCAL_GUIDE_ID,
+  NOWTRAVEL_ID,
   resolveGuideSelectValue,
 } from '../../guides/guideSelectOptions';
 import { useAdminStore } from '../../../store/adminStore';
@@ -122,6 +124,16 @@ export default function SalesTable({
           .replace(/[\s.]/g, '')
           .includes('peter')
       )
+      .map((g) => String(g.id))
+  );
+  const companyGuideIds = new Set(
+    (guides || [])
+      .filter((g) => g.guide_type === 'regular')
+      .map((g) => String(g.id))
+  );
+  const localGuideIds = new Set(
+    (guides || [])
+      .filter((g) => g.guide_type === 'local')
       .map((g) => String(g.id))
   );
 
@@ -288,6 +300,11 @@ export default function SalesTable({
     const guideName = row.guideId != null ? guideNameById.get(String(row.guideId)) : '';
     const localGuideName = String(row?.localGuideName || '').trim();
     const localGuideLabel = formatLocalGuideLabel(localGuideName);
+    const isKakao = Boolean(row.isKakaoFriend) || localGuideName === KAKAO_FRIEND_ID;
+    const isNowTravel = Boolean(row.isNowtravel) || localGuideName === NOWTRAVEL_ID;
+    const isLocalGuide = (row.guideId != null && localGuideIds.has(String(row.guideId)))
+      || (Boolean(localGuideName) && !isSpecialLocalGuideName(localGuideName));
+    const isCompanyGuide = row.guideId != null && companyGuideIds.has(String(row.guideId));
     const isRental = row.code === RENTAL_CODE;
     const { date: soldAtDate, time: soldAtTime } = formatSoldAtParts(row.soldAt);
     const qty = Number(row.qty || 0) || 0;
@@ -655,27 +672,33 @@ export default function SalesTable({
       ),
       style: row._offlinePending
         ? {
-            backgroundColor: 'rgba(251, 191, 36, 0.15)',
+            backgroundColor: 'rgba(148, 163, 184, 0.12)',
             color: 'var(--text-main)',
-            borderLeft: '3px solid rgba(251, 191, 36, 0.5)',
+            borderLeft: '3px solid rgba(148, 163, 184, 0.55)',
           }
         : isRefunded
           ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--text-main)' }
           : isExchanged
-            ? { backgroundColor: 'rgba(255, 182, 193, 0.15)', color: 'var(--text-main)' }
-            : giftChecked
-              ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--text-main)' }
+            ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--text-main)' }
+          : giftChecked
+              ? { backgroundColor: 'rgba(244, 114, 182, 0.17)', color: 'var(--text-main)' }
               : isMrMoon
-                ? { backgroundColor: 'rgba(253, 239, 183, 0.15)', color: 'var(--text-main)' }
+                ? { backgroundColor: 'rgba(250, 204, 21, 0.16)', color: 'var(--text-main)' }
                 : isElla
-                  ? { backgroundColor: 'rgba(255, 182, 193, 0.15)', color: 'var(--text-main)' }
+                  ? { backgroundColor: 'rgba(244, 114, 182, 0.17)', color: 'var(--text-main)' }
                   : isPeter
                     ? { backgroundColor: 'rgba(59, 130, 246, 0.15)', color: 'var(--text-main)' }
-                  : isRental
-                    ? { backgroundColor: 'rgba(255, 165, 0, 0.15)', color: 'var(--text-main)' }
-                    : row.guideId
-                      ? { backgroundColor: 'rgba(34, 197, 94, 0.15)', color: 'var(--text-main)' }
-                      : undefined,
+                    : isRental
+                      ? { backgroundColor: 'rgba(249, 115, 22, 0.16)', color: 'var(--text-main)' }
+                      : isKakao
+                        ? { backgroundColor: 'rgba(196, 181, 253, 0.18)', color: 'var(--text-main)' }
+                        : isNowTravel
+                          ? { backgroundColor: 'rgba(125, 211, 252, 0.18)', color: 'var(--text-main)' }
+                          : isLocalGuide
+                            ? { backgroundColor: 'rgba(94, 234, 212, 0.16)', color: 'var(--text-main)' }
+                            : isCompanyGuide
+                              ? { backgroundColor: 'rgba(134, 239, 172, 0.16)', color: 'var(--text-main)' }
+                              : undefined,
       __copyText: formatSaleCopyLine({
         soldAt: row.soldAt,
         code: row.code,
