@@ -669,12 +669,12 @@ export default function SalesTable({
                 ? { backgroundColor: 'rgba(253, 239, 183, 0.18)', color: 'var(--text-main)' }
                 : isElla
                   ? { backgroundColor: 'rgba(255, 182, 193, 0.2)', color: 'var(--text-main)' }
+                  : isPeter
+                    ? { backgroundColor: 'rgba(59, 130, 246, 0.30)', color: 'var(--text-main)' }
                   : isRental
                     ? { backgroundColor: 'rgba(255, 165, 0, 0.2)', color: 'var(--text-main)' }
                     : row.guideId
-                      ? isPeter
-                        ? { backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-main)' }
-                        : { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
+                      ? { backgroundColor: 'rgba(34, 197, 94, 0.10)', color: 'var(--text-main)' }
                       : undefined,
       __copyText: formatSaleCopyLine({
         soldAt: row.soldAt,
