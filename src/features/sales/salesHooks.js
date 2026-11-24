@@ -67,6 +67,7 @@ export function useCheckoutCartMutation() {
     retry: 0,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['offline', 'sales'] });
@@ -92,6 +93,7 @@ export function useProcessRefundMutation() {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
@@ -111,6 +113,7 @@ export function useInstantSaleMutation() {
     retry: 0,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['offline', 'sales'] });
@@ -131,6 +134,7 @@ export function useSetSaleFreeGiftMutation() {
     mutationFn: setSaleFreeGift,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
     },
   });
 }
@@ -144,6 +148,7 @@ export function useSetSaleGroupGuideMutation() {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
     },
   });
 }
@@ -157,6 +162,7 @@ export function useSetSaleTimeMutation() {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
     },
   });
 }
@@ -170,6 +176,7 @@ export function useUpdateSalePriceMutation() {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'historyFlat'] });
       queryClient.invalidateQueries({ queryKey: ['sales', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettledSales'] });
     },
   });
 }

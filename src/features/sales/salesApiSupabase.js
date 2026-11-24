@@ -227,7 +227,7 @@ async function attachLocalProductMeta(items) {
     const qtyN = Number(i.qty || 0) || 0;
     const listUnit = Number((i.listPricePhp ?? product?.salePricePhp ?? i.unitPricePhp) || 0) || 0;
     const localGuideName = String(i.localGuideName || '').trim();
-    const commission = 0; // commission comes from sale_groups.guide_commission via DB
+    const commission = Number(i.commission ?? 0) || 0;
     const unitForTotal = Number(i.discountUnitPricePhp ?? i.unitPricePhp ?? 0) || 0;
     return {
       ...i,
@@ -1839,10 +1839,24 @@ async function getSalesHistoryFlatFiltered({ fromDate = '', toDate = '', query =
     })
     .filter((r) => r.qty > 0);
 
+  const groupSalesTotals = new Map();
+  normalized.forEach((row) => {
+    if (!row.saleGroupId || row.isRefunded || row.freeGift) return;
+    const groupId = String(row.saleGroupId);
+    groupSalesTotals.set(groupId, (groupSalesTotals.get(groupId) || 0) + row.lineTotalPhp);
+  });
+  const withCommission = normalized.map((row) => {
+    const groupId = String(row.saleGroupId || '');
+    const groupTotal = groupSalesTotals.get(groupId) || 0;
+    const groupCommission = groupMap.get(row.saleGroupId)?.guideCommission || 0;
+    if (!groupTotal || !groupCommission || row.isRefunded || row.freeGift) return row;
+    return { ...row, commission: groupCommission * row.lineTotalPhp / groupTotal };
+  });
+
   // History reads must preserve saved prices, including administrator overrides.
   // Guide discounts are applied when selling or explicitly changing the guide.
 
-  const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(normalized));
+  const withMetaRaw = await attachLocalProductMeta(withNormalizedNameFallback(withCommission));
   const withMeta = withMetaRaw.map((r) => ({
     ...r,
     commission:

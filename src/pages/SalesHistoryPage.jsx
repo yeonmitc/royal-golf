@@ -8,7 +8,7 @@ import Card from '../components/common/Card';
 import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
 import codePartsSeed from '../db/seed/seed-code-parts.json';
-import { getGuides } from '../features/guides/guideApi';
+import { getGuides, getGuideUnsettledSales } from '../features/guides/guideApi';
 import { KAKAO_FRIEND_ID, MR_MOON_CASH_DISCOUNT_ID, MR_MOON_DISCOUNT_GUIDE_ID, NOWTRAVEL_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
@@ -134,6 +134,15 @@ export default function SalesHistoryPage() {
     queryFn: getGuides,
     staleTime: 1000 * 60 * 5,
   });
+  const hasSelectedGuide = !!selectedGuideId && selectedGuideId !== '__ALL_GUIDES__';
+  const { data: unsettledSales, isPending: isUnsettledLoading, isError: isUnsettledError } = useQuery({
+    queryKey: ['unsettledSales', selectedGuideId],
+    queryFn: () => getGuideUnsettledSales(selectedGuideId),
+    enabled: hasSelectedGuide,
+  });
+  const unsettledGuideCommission = (unsettledSales || []).reduce(
+    (total, group) => total + (Number(group.guide_commission) || 0), 0
+  );
   const guideFilterOptions = useMemo(
     () =>
       (guides || [])
@@ -904,6 +913,12 @@ export default function SalesHistoryPage() {
           {cardActions}
         </div>
         <SalesTable rows={visibleRows} isLoading={isLoading} isError={isError} error={error} />
+        {hasSelectedGuide && (
+          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '6px 24px', marginTop: 12, color: 'var(--gold-soft)', fontSize: 16, fontWeight: 700, textAlign: 'center' }}>
+            <span>가이드 해당 날짜 커미션: {isLoading ? '조회 중...' : isError ? '조회 실패' : `${Math.round(summary.totalCommission).toLocaleString('en-US')} PHP`}</span>
+            <span>미정산 커미션: {isUnsettledLoading ? '조회 중...' : isUnsettledError ? '조회 실패' : `${Math.round(unsettledGuideCommission).toLocaleString('en-US')} PHP`}</span>
+          </div>
+        )}
       </Card>
       {guideMenu}
     </div>
