@@ -1137,18 +1137,52 @@ export default function SchedulerPage() {
   const monthLabel = `${monthDate.getFullYear()}.${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
   const dowLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  const badgeStyle = (shiftType, employeeId) => {
+  const badgeStyle = (row) => {
+    const shiftType = String(row.shift_type || '');
+    const employeeId = row.employee_id;
+    const manualHours = Number(row.manual_hours);
+    if (shiftType === 'manual' && manualHours > 0 &&
+        ![9, 6, 6.5, 5.5].some((hours) => Math.abs(hours - manualHours) < 0.001)) {
+      return {
+        bg: 'rgba(34, 197, 94, 0.24)',
+        border: 'rgba(74, 222, 128, 0.75)',
+        accent: '#86efac',
+      };
+    }
+    const employeeKey = employeeKeyById.get(employeeId);
+    if (employeeKey === 'berlyn') {
+      return {
+        bg: 'rgba(59, 130, 246, 0.24)',
+        border: 'rgba(96, 165, 250, 0.72)',
+        accent: '#93c5fd',
+      };
+    }
+    if (employeeKey === 'janice') {
+      return {
+        bg: 'rgba(249, 115, 22, 0.24)',
+        border: 'rgba(251, 146, 60, 0.72)',
+        accent: '#fdba74',
+      };
+    }
+    if (employeeKey === 'new' || String(employeeId) === String(thirdEmployee?.id)) {
+      return {
+        bg: 'rgba(168, 85, 247, 0.24)',
+        border: 'rgba(192, 132, 252, 0.72)',
+        accent: '#d8b4fe',
+      };
+    }
     if (shiftType === 'manual') {
       return {
         bg: 'rgba(236, 72, 153, 0.22)',
         border: 'rgba(244, 114, 182, 0.58)',
+        accent: '#f9a8d4',
       };
     }
-    const employeeKey = employeeKeyById.get(employeeId);
     if (employeeKey === 'maeshi') {
       return {
         bg: 'rgba(168, 85, 247, 0.18)',
         border: 'rgba(168, 85, 247, 0.45)',
+        accent: '#d8b4fe',
       };
     }
     const bg =
@@ -1163,7 +1197,24 @@ export default function SchedulerPage() {
         : shiftType === 'evening'
           ? 'rgba(59, 130, 246, 0.45)'
           : 'rgba(168, 85, 247, 0.45)';
-    return { bg, border };
+    return { bg, border, accent: 'white' };
+  };
+
+  const isFullTimeSchedule = (row) =>
+    row?.shift_type === 'all_day' ||
+    (row?.shift_type === 'manual' && Math.abs(Number(row.manual_hours) - 9) < 0.001);
+
+  const getScheduleDisplayName = (row) => {
+    const name = employeeNameById.get(row.employee_id) || row.employee_id;
+    if (isFullTimeSchedule(row)) return `F: ${name}`;
+    const shiftType = String(row.shift_type || '');
+    const startTime = String(row.manual_start_time || '').slice(0, 5);
+    const prefix = shiftType === 'morning' || (shiftType === 'manual' && startTime === '06:00')
+      ? 'M: '
+      : shiftType === 'evening' || (shiftType === 'manual' && ['10:30', '11:00', '11:30'].includes(startTime))
+        ? 'E: '
+        : '';
+    return `${prefix}${name}`;
   };
 
   const ShiftButton = ({ value, label }) => {
@@ -1197,10 +1248,10 @@ export default function SchedulerPage() {
 
   const ScheduleBadge = ({ row, date, dateKey, compact = false }) => {
     const shiftType = String(row.shift_type || '');
-    const { bg, border } = badgeStyle(shiftType, row.employee_id);
-    const name = employeeNameById.get(row.employee_id) || row.employee_id;
-    const metaTextColor =
-      shiftType === 'manual' ? 'rgba(255, 232, 244, 0.98)' : 'var(--text-muted)';
+    const { bg, border, accent } = badgeStyle(row);
+    const name = getScheduleDisplayName(row);
+    const fullTime = isFullTimeSchedule(row);
+    const metaTextColor = shiftType === 'manual' ? accent : 'var(--text-muted)';
     if (isMobile && compact) {
       return (
         <div
@@ -1222,11 +1273,11 @@ export default function SchedulerPage() {
           <div
             style={{
               color: 'rgba(255,255,255,0.98)',
-              fontWeight: 1000,
+              fontWeight: fullTime ? 1000 : 950,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: 10,
+              fontSize: fullTime ? 11 : 10,
               lineHeight: 1.05,
               letterSpacing: '0.01em',
               textShadow: '0 1px 1px rgba(0,0,0,0.35)',
@@ -1260,11 +1311,11 @@ export default function SchedulerPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <div
               style={{
-                fontWeight: 950,
+                fontWeight: fullTime ? 1000 : 950,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                fontSize: 11,
+                fontSize: fullTime ? 12 : 11,
                 lineHeight: 1.1,
                 minWidth: 0,
               }}
@@ -1325,7 +1376,8 @@ export default function SchedulerPage() {
           <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
             <div
               style={{
-                fontWeight: 950,
+                fontWeight: fullTime ? 1000 : 950,
+                fontSize: fullTime ? 13 : 12,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -2329,7 +2381,8 @@ export default function SchedulerPage() {
                       </div>
                     ) : (
                       todayList.map((r) => {
-                        const name = employeeNameById.get(r.employee_id) || r.employee_id;
+                        const { bg, border, accent } = badgeStyle(r);
+                        const fullTime = isFullTimeSchedule(r);
                         return (
                           <div
                             key={r.id}
@@ -2339,19 +2392,24 @@ export default function SchedulerPage() {
                               justifyContent: 'space-between',
                               gap: 10,
                               fontSize: 12,
-                              fontWeight: 900,
+                              padding: '5px 7px',
+                              borderRadius: 8,
+                              border: `1px solid ${border}`,
+                              background: bg,
                             }}
                           >
                             <div
                               style={{
+                                fontSize: fullTime ? 13 : 12,
+                                fontWeight: fullTime ? 1000 : 900,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
                               }}
                             >
-                              {name}
+                              {getScheduleDisplayName(r)}
                             </div>
-                            <div style={{ color: 'var(--text-muted)', flex: '0 0 auto' }}>
+                            <div style={{ color: r.shift_type === 'manual' ? accent : 'var(--text-muted)', flex: '0 0 auto' }}>
                               {getScheduleMetaLabel(todayDate, r)}
                             </div>
                           </div>
@@ -2481,6 +2539,8 @@ export default function SchedulerPage() {
                         style={{
                           marginTop: isMobile ? 6 : 8,
                           display: 'grid',
+                          alignContent: 'start',
+                          gridAutoRows: 'max-content',
                           gap: isMobile ? 4 : 6,
                           minHeight: 0,
                           flex: 1,
@@ -2554,15 +2614,20 @@ export default function SchedulerPage() {
                     <div className="text-xs" style={{ color: 'var(--text-muted)' }}>-</div>
                   ) : (
                     list.map((row) => {
-                      const { bg, border } = badgeStyle(String(row.shift_type || ''), row.employee_id);
+                      const { bg, border, accent } = badgeStyle(row);
+                      const fullTime = isFullTimeSchedule(row);
                       return (
                         <div
                           key={row.id}
                           className="scheduler-fullscreen-shift"
                           style={{ background: bg, borderColor: border }}
                         >
-                          <strong>{employeeNameById.get(row.employee_id) || row.employee_id}</strong>
-                          <span>{getScheduleMetaLabel(cell.date, row)}</span>
+                          <strong style={{ fontSize: fullTime ? 12 : 11, fontWeight: fullTime ? 1000 : 900 }}>
+                            {getScheduleDisplayName(row)}
+                          </strong>
+                          <span style={{ color: row.shift_type === 'manual' ? accent : 'var(--text-muted)' }}>
+                            {getScheduleMetaLabel(cell.date, row)}
+                          </span>
                         </div>
                       );
                     })
@@ -2600,9 +2665,8 @@ export default function SchedulerPage() {
                   <div style={{ color: 'var(--text-muted)', fontWeight: 800 }}>No schedule.</div>
                 ) : (
                   detailList.map((r) => {
-                    const shiftType = String(r.shift_type || '');
-                    const { bg, border } = badgeStyle(shiftType, r.employee_id);
-                    const name = employeeNameById.get(r.employee_id) || r.employee_id;
+                    const { bg, border, accent } = badgeStyle(r);
+                    const fullTime = isFullTimeSchedule(r);
                     return (
                       <div
                         key={r.id}
@@ -2615,8 +2679,10 @@ export default function SchedulerPage() {
                           gap: 4,
                         }}
                       >
-                        <div style={{ fontWeight: 1000, fontSize: 14 }}>{name}</div>
-                        <div style={{ fontWeight: 900, fontSize: 12, color: 'var(--text-muted)' }}>
+                        <div style={{ fontWeight: fullTime ? 1000 : 900, fontSize: fullTime ? 15 : 14 }}>
+                          {getScheduleDisplayName(r)}
+                        </div>
+                        <div style={{ fontWeight: 900, fontSize: 12, color: r.shift_type === 'manual' ? accent : 'var(--text-muted)' }}>
                           {getScheduleMetaLabel(detailDate, r)}
                         </div>
                       </div>
