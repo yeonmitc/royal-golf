@@ -285,6 +285,13 @@ export default function SchedulerPage() {
     let janiceSharedUnits = 0;
     let thirdSoloUnits = 0;
     let thirdSharedUnits = 0;
+    let berlynSixHourUnits = 0;
+    let janiceSixHourUnits = 0;
+    let thirdSixHourUnits = 0;
+    let berlynOtHours = 0;
+    let janiceOtHours = 0;
+    let thirdOtHours = 0;
+    const threeStaffIds = new Set([berlynEmp.id, janiceEmp.id, thirdEmp?.id].filter(Boolean).map(String));
 
     for (let i = 0; i < 14; i++) {
       const d = addDays(startDate, i);
@@ -296,19 +303,40 @@ export default function SchedulerPage() {
       const thirdEntries = thirdEmp
         ? dayList.filter((r) => String(r.employee_id) === String(thirdEmp.id))
         : [];
+      const isThreeStaffDay = Boolean(thirdEmp) && dayList.length === 2 &&
+        new Set(dayList.map((row) => String(row.employee_id))).size === 2 &&
+        dayList.every((row) => threeStaffIds.has(String(row.employee_id))) &&
+        ['06:00', '11:00'].every((start) => dayList.some((row) =>
+          row.shift_type === 'manual' && row.manual_start_time === start && Number(row.manual_hours) >= 6
+        ));
 
       // 8시간 미만 = shared (₱500), 8시간 이상 = solo (₱650)
       berlynEntries.forEach((r) => {
+        if (isThreeStaffDay) {
+          berlynSixHourUnits++;
+          berlynOtHours += Math.max(0, Number(r.manual_hours) - 6);
+          return;
+        }
         const h = getEntryHours(r, d);
         if (h >= 8) berlynSoloUnits++;
         else if (h > 0) berlynSharedUnits++;
       });
       janiceEntries.forEach((r) => {
+        if (isThreeStaffDay) {
+          janiceSixHourUnits++;
+          janiceOtHours += Math.max(0, Number(r.manual_hours) - 6);
+          return;
+        }
         const h = getEntryHours(r, d);
         if (h >= 8) janiceSoloUnits++;
         else if (h > 0) janiceSharedUnits++;
       });
       thirdEntries.forEach((r) => {
+        if (isThreeStaffDay) {
+          thirdSixHourUnits++;
+          thirdOtHours += Math.max(0, Number(r.manual_hours) - 6);
+          return;
+        }
         const h = getEntryHours(r, d);
         if (h >= 8) thirdSoloUnits++;
         else if (h > 0) thirdSharedUnits++;
@@ -318,6 +346,8 @@ export default function SchedulerPage() {
     const SHARED_RATE = 500;
     const SOLO_RATE = 650;
     const HOLIDAY_RATE = 150;
+    const SIX_HOUR_RATE = 600;
+    const OT_HOURLY_RATE = 50;
 
     const jHoliday = Number(janiceHolidayDays);
     const bHoliday = Number(berlynHolidayDays);
@@ -326,16 +356,22 @@ export default function SchedulerPage() {
     const janiceSharedPay = janiceSharedUnits * SHARED_RATE;
     const janiceSoloPay = janiceSoloUnits * SOLO_RATE;
     const janiceHolidayPay = jHoliday * HOLIDAY_RATE;
-    const janiceTotal = janiceSharedPay + janiceSoloPay + janiceHolidayPay;
+    const janiceSixHourPay = janiceSixHourUnits * SIX_HOUR_RATE;
+    const janiceOtPay = janiceOtHours * OT_HOURLY_RATE;
+    const janiceTotal = janiceSharedPay + janiceSoloPay + janiceHolidayPay + janiceSixHourPay + janiceOtPay;
 
     const berlynSharedPay = berlynSharedUnits * SHARED_RATE;
     const berlynSoloPay = berlynSoloUnits * SOLO_RATE;
     const berlynHolidayPay = bHoliday * HOLIDAY_RATE;
-    const berlynTotal = berlynSharedPay + berlynSoloPay + berlynHolidayPay;
+    const berlynSixHourPay = berlynSixHourUnits * SIX_HOUR_RATE;
+    const berlynOtPay = berlynOtHours * OT_HOURLY_RATE;
+    const berlynTotal = berlynSharedPay + berlynSoloPay + berlynHolidayPay + berlynSixHourPay + berlynOtPay;
     const thirdSharedPay = thirdSharedUnits * SHARED_RATE;
     const thirdSoloPay = thirdSoloUnits * SOLO_RATE;
     const thirdHolidayPay = tHoliday * HOLIDAY_RATE;
-    const thirdTotal = thirdSharedPay + thirdSoloPay + thirdHolidayPay;
+    const thirdSixHourPay = thirdSixHourUnits * SIX_HOUR_RATE;
+    const thirdOtPay = thirdOtHours * OT_HOURLY_RATE;
+    const thirdTotal = thirdSharedPay + thirdSoloPay + thirdHolidayPay + thirdSixHourPay + thirdOtPay;
 
     const endDate = toDateKey(addDays(startDate, 13));
     const payDate = toDateKey(addDays(startDate, 14));
@@ -357,15 +393,25 @@ export default function SchedulerPage() {
       sharedPayAmt,
       soloPayAmt,
       holidayPayAmt,
-      totalPayAmt
+      totalPayAmt,
+      sixHourUnits,
+      sixHourPayAmt,
+      otHours,
+      otPayAmt
     ) => {
       const lines = [empName, ''];
-      if (sharedUnits > 0 || soloUnits > 0 || hDays > 0) {
+      if (sharedUnits > 0 || soloUnits > 0 || hDays > 0 || sixHourUnits > 0) {
         if (sharedUnits > 0) {
           lines.push(`₱500 × ${sharedUnits} = ₱${sharedPayAmt.toLocaleString()}`);
         }
         if (soloUnits > 0) {
           lines.push(`₱650 × ${soloUnits} = ₱${soloPayAmt.toLocaleString()}`);
+        }
+        if (sixHourUnits > 0) {
+          lines.push(`₱600 × ${sixHourUnits} = ₱${sixHourPayAmt.toLocaleString()}`);
+        }
+        if (otHours > 0) {
+          lines.push(`OT ₱50 × ${otHours}h = ₱${otPayAmt.toLocaleString()}`);
         }
         if (hDays > 0) {
           lines.push('Holiday extra');
@@ -389,7 +435,11 @@ export default function SchedulerPage() {
       janiceSharedPay,
       janiceSoloPay,
       janiceHolidayPay,
-      janiceTotal
+      janiceTotal,
+      janiceSixHourUnits,
+      janiceSixHourPay,
+      janiceOtHours,
+      janiceOtPay
     );
     const berlynDetail = buildDetailText(
       'Berlyn',
@@ -399,7 +449,11 @@ export default function SchedulerPage() {
       berlynSharedPay,
       berlynSoloPay,
       berlynHolidayPay,
-      berlynTotal
+      berlynTotal,
+      berlynSixHourUnits,
+      berlynSixHourPay,
+      berlynOtHours,
+      berlynOtPay
     );
     const thirdName = thirdEmp?.english_name || 'Employee 3';
     const thirdDetail = thirdEmp
@@ -411,7 +465,11 @@ export default function SchedulerPage() {
           thirdSharedPay,
           thirdSoloPay,
           thirdHolidayPay,
-          thirdTotal
+          thirdTotal,
+          thirdSixHourUnits,
+          thirdSixHourPay,
+          thirdOtHours,
+          thirdOtPay
         )
       : '';
 
@@ -424,6 +482,8 @@ export default function SchedulerPage() {
           sharedPay: janiceSharedPay,
           soloPay: janiceSoloPay,
           holidayPay: janiceHolidayPay,
+          sixHourDays: janiceSixHourUnits,
+          otHours: janiceOtHours,
           totalPay: janiceTotal,
         },
         Berlyn: {
@@ -433,6 +493,8 @@ export default function SchedulerPage() {
           sharedPay: berlynSharedPay,
           soloPay: berlynSoloPay,
           holidayPay: berlynHolidayPay,
+          sixHourDays: berlynSixHourUnits,
+          otHours: berlynOtHours,
           totalPay: berlynTotal,
         },
         ...(thirdEmp
@@ -444,6 +506,8 @@ export default function SchedulerPage() {
                 sharedPay: thirdSharedPay,
                 soloPay: thirdSoloPay,
                 holidayPay: thirdHolidayPay,
+                sixHourDays: thirdSixHourUnits,
+                otHours: thirdOtHours,
                 totalPay: thirdTotal,
               },
             }
@@ -752,11 +816,29 @@ export default function SchedulerPage() {
     return blanks.concat(days);
   }, [monthStart, monthEnd]);
 
-  const autoGenerateMonthForRange = async ({ startDate, endDate, startMorningKey }) => {
-    const staff = employeeOptions.filter((employee) => employee?.id && employee?.english_name);
+  const autoGenerateMonthForRange = async ({ startDate, endDate, startMorningKey, employeeIds }) => {
+    const selectedIds = new Set(employeeIds.map(String));
+    let staff = employeeOptions.filter(
+      (employee) => employee?.id && employee?.english_name && selectedIds.has(String(employee.id))
+    );
     if (staff.length === 0) {
-      showToast('employees 테이블에 등록된 직원이 없습니다.');
+      showToast('Auto month에 사용할 직원을 선택해주세요.');
       return;
+    }
+    if (staff.length > 3) {
+      showToast('Auto month에는 직원을 최대 3명까지 선택할 수 있습니다.');
+      return;
+    }
+    if (staff.length === 3 && !manualScheduleAvailable) {
+      showToast('3인 자동 스케줄에는 수동 근무시간 저장 기능이 필요합니다.');
+      return;
+    }
+    if (staff.length === 3) {
+      const janice = staff.find((employee) => normalizeName(employee.english_name) === 'janice');
+      const berlyn = staff.find((employee) => normalizeName(employee.english_name) === 'berlyn');
+      if (janice && berlyn) {
+        staff = [berlyn, janice, staff.find((employee) => employee.id !== janice.id && employee.id !== berlyn.id)];
+      }
     }
 
     const startKey = toDateKey(startDate);
@@ -765,7 +847,9 @@ export default function SchedulerPage() {
     const employeeIndex = (employee) =>
       Math.max(0, staff.findIndex((item) => String(item.id) === String(employee?.id)));
     const nextEmployee = (employee) => staff[(employeeIndex(employee) + 1) % staff.length];
-    const defaultMorningForWeek = (monday) => staff[getWeekIndex(monday, staff.length)];
+    const defaultMorningForWeek = (monday) => staff.length === 3
+      ? staff.find((employee) => normalizeName(employee.english_name) === 'janice') || staff[0]
+      : staff[getWeekIndex(monday, staff.length)];
 
     const firstWeekMonday = getWeekMonday(startDate);
     const prevWeekMonday = addDays(firstWeekMonday, -7);
@@ -776,17 +860,26 @@ export default function SchedulerPage() {
     firstWeekMorning = staff.find((employee) => String(employee.id) === String(startMorningKey)) || null;
     try {
       const prevRows = await sbSelect('employee_schedules', {
-        select: 'employee_id,work_date,shift_type',
+        select: 'employee_id,work_date,shift_type,manual_start_time,manual_hours',
         filters: [
           { column: 'work_date', op: 'gte', value: prevWeekStartKey },
           { column: 'work_date', op: 'lte', value: prevWeekEndKey },
-          { column: 'shift_type', op: 'eq', value: 'morning' },
+          ...(staff.length === 3 ? [] : [{ column: 'shift_type', op: 'eq', value: 'morning' }]),
         ],
         orders: [{ column: 'work_date', ascending: true }],
         limit: 50,
       });
+      const previousThreeStaffWeek = staff.length === 3 && ['06:00', '11:00'].every(
+        (start) => (Array.isArray(prevRows) ? prevRows : []).some((row) =>
+          row.work_date === prevWeekStartKey && row.shift_type === 'manual' &&
+          row.manual_start_time === start && Number(row.manual_hours) >= 6 &&
+          staff.some((employee) => String(employee.id) === String(row.employee_id))
+        )
+      );
       const hit = (Array.isArray(prevRows) ? prevRows : []).find(
-          (r) => staff.some((employee) => String(r.employee_id) === String(employee.id))
+        (r) => staff.some((employee) => String(r.employee_id) === String(employee.id)) &&
+          (staff.length !== 3 || (previousThreeStaffWeek && r.work_date === prevWeekStartKey && r.shift_type === 'manual' &&
+            r.manual_start_time === '06:00' && Number(r.manual_hours) >= 6))
       );
       if (hit) {
         const previousMorning = staff.find(
@@ -795,12 +888,12 @@ export default function SchedulerPage() {
         if (previousMorning) firstWeekMorning = nextEmployee(previousMorning);
       }
     } catch {
-      firstWeekMorning = null;
+      if (staff.length !== 3) firstWeekMorning = null;
     }
     if (!firstWeekMorning) firstWeekMorning = defaultMorningForWeek(firstWeekMonday);
 
     const existingRows = await sbSelect('employee_schedules', {
-      select: 'employee_id,work_date',
+      select: 'employee_id,work_date,shift_type,manual_start_time,manual_hours',
       filters: [
         { column: 'work_date', op: 'gte', value: startKey },
         { column: 'work_date', op: 'lte', value: endKey },
@@ -816,8 +909,17 @@ export default function SchedulerPage() {
       existingSet.has(`${String(dateKey)}__${String(empId)}`);
 
     const weekMorningByMondayKey = new Map();
+    const existingByDate = new Map();
+    if (staff.length === 3) {
+      (Array.isArray(existingRows) ? existingRows : []).forEach((row) => {
+        const dayRows = existingByDate.get(row.work_date) || [];
+        dayRows.push(row);
+        existingByDate.set(row.work_date, dayRows);
+      });
+    }
 
     const rowsToInsert = [];
+    let conflictDate = null;
     for (let d = new Date(startDate); d <= endDate; d = addDays(d, 1)) {
       const dateKey = toDateKey(d);
       const dow = d.getDay();
@@ -838,6 +940,32 @@ export default function SchedulerPage() {
       }
       const weekMorning = weekMorningByMondayKey.get(weekMondayKey);
       const weekEvening = staff.length > 1 ? nextEmployee(weekMorning) : null;
+
+      if (staff.length === 3) {
+        const roleA = weekMorning;
+        const roleB = staff[(employeeIndex(roleA) + 2) % 3];
+        const roleC = weekEvening;
+        const weekend = dow === 0 || dow === 6;
+        const morning = weekend ? roleC : roleA;
+        const afternoon = dow === 3 || dow === 4 ? roleC : roleB;
+        const expected = [
+          { employee_id: morning.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '06:00', manual_hours: 6 },
+          { employee_id: afternoon.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '11:00', manual_hours: 6 },
+        ];
+        const actual = existingByDate.get(dateKey) || [];
+        if (actual.some((row) => !expected.some((shift) =>
+          String(row.employee_id) === String(shift.employee_id) &&
+          row.shift_type === shift.shift_type && row.manual_start_time === shift.manual_start_time &&
+          Number(row.manual_hours) >= shift.manual_hours
+        ))) {
+          conflictDate = dateKey;
+          break;
+        }
+        expected.forEach((shift) => {
+          if (!isExisting(dateKey, shift.employee_id)) rowsToInsert.push(shift);
+        });
+        continue;
+      }
 
       if (dow === 3) {
         continue;
@@ -865,6 +993,10 @@ export default function SchedulerPage() {
       }
     }
 
+    if (conflictDate) {
+      showToast(`기존 배정이 3인 규칙과 다릅니다: ${conflictDate}. 해당 날짜를 수정하거나 월 초기화 후 다시 생성해주세요.`);
+      return;
+    }
     if (rowsToInsert.length > 0) {
       await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
     }
@@ -1263,6 +1395,27 @@ export default function SchedulerPage() {
   };
 
   const [autoMonthStartMorning, setAutoMonthStartMorning] = useState('');
+  const [autoMonthEmployeeIds, setAutoMonthEmployeeIds] = useState(null);
+  const autoMonthEmployees = useMemo(
+    () => employeeOptions.filter(
+      (employee) => employee?.id && employee?.english_name &&
+        (autoMonthEmployeeIds === null || autoMonthEmployeeIds.includes(String(employee.id)))
+    ),
+    [employeeOptions, autoMonthEmployeeIds]
+  );
+  const selectedAutoMonthMorning = autoMonthEmployees.some(
+    (employee) => String(employee.id) === String(autoMonthStartMorning)
+  ) ? autoMonthStartMorning : autoMonthEmployees[0]?.id;
+
+  const toggleAutoMonthEmployee = (employeeId) => {
+    setAutoMonthEmployeeIds((current) => {
+      const ids = current ?? employeeOptions
+        .filter((employee) => employee?.id && employee?.english_name)
+        .map((employee) => String(employee.id));
+      const id = String(employeeId);
+      return ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
+    });
+  };
 
   const [resetMonthOpen, setResetMonthOpen] = useState(false);
   const handleResetMonth = async () => {
@@ -1293,7 +1446,10 @@ export default function SchedulerPage() {
       await autoGenerateMonthForRange({
         startDate: monthStart,
         endDate: monthEnd,
-        startMorningKey: autoMonthStartMorning || employeeOptions[0]?.id,
+        startMorningKey: autoMonthEmployees.length === 3
+          ? autoMonthEmployees.find((employee) => normalizeName(employee.english_name) === 'janice')?.id
+          : selectedAutoMonthMorning,
+        employeeIds: autoMonthEmployees.map((employee) => employee.id),
       });
       await loadMonth();
     } catch (err) {
@@ -1576,6 +1732,12 @@ export default function SchedulerPage() {
                   >
                     Solo
                   </th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', color: 'var(--text-muted)' }}>
+                    6h shifts
+                  </th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', color: 'var(--text-muted)' }}>
+                    OT hours
+                  </th>
                   <th
                     style={{
                       textAlign: 'center',
@@ -1604,6 +1766,8 @@ export default function SchedulerPage() {
                       <td style={{ padding: '6px 8px', color: 'white' }}>{name}</td>
                       <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.sharedDays}</td>
                       <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.soloDays}</td>
+                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.sixHourDays}</td>
+                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.otHours}</td>
                       <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.holidayDays}</td>
                       <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 1000 }}>
                         ₱{r.totalPay.toLocaleString()}
@@ -1995,26 +2159,59 @@ export default function SchedulerPage() {
                     ? ` (${getManualRangeLabel(manualStartTime, manualHours)})`
                     : ''}
                 </div>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  3인 근무 OT: 관리자가 Manual에서 시작 시간 06:00 또는 11:00과 6시간 초과 시간을 입력한 뒤 근무 배지를 같은 날짜로 드래그해 승인합니다. 초과시간은 시간당 ₱50입니다.
+                </div>
               </div>
               <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
-                Auto month 시작 Morning
+                Auto month 직원 선택 ({autoMonthEmployees.length}명)
               </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-                  gap: 10,
-                }}
-              >
-                {employeeOptions.map((employee, index) => {
-                  const active =
-                    (autoMonthStartMorning || employeeOptions[0]?.id) === employee.id;
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
+                {employeeOptions.filter((employee) => employee?.id && employee?.english_name).map((employee) => {
+                  const active = autoMonthEmployees.some((selected) => selected.id === employee.id);
+                  return (
+                    <button
+                      key={employee.id}
+                      type="button"
+                      onClick={() => toggleAutoMonthEmployee(employee.id)}
+                      disabled={busy || loading}
+                      aria-pressed={active}
+                      style={{
+                        width: '100%', height: 44, borderRadius: 14,
+                        border: `1px solid ${active ? 'rgba(250, 204, 21, 0.65)' : 'rgba(255,255,255,0.16)'}`,
+                        background: active ? 'rgba(250, 204, 21, 0.14)' : 'rgba(255,255,255,0.06)',
+                        color: 'white', fontWeight: 950, cursor: busy || loading ? 'not-allowed' : 'pointer',
+                        opacity: busy || loading ? 0.6 : 1,
+                      }}
+                    >
+                      {active ? '✓ ' : ''}{employee.english_name}
+                    </button>
+                  );
+                })}
+              </div>
+              {autoMonthEmployees.length === 3 ? (
+                <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                  3인 규칙: 월·화·금 A/B, 수·목 A/C, 토·일 C/B로 근무합니다. 역할은 3주마다 순환하며 이전 달에서 이어집니다.
+                </div>
+              ) : <>
+                <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
+                  Auto month 시작 Morning
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+                    gap: 10,
+                  }}
+                >
+                {autoMonthEmployees.map((employee, index) => {
+                  const active = selectedAutoMonthMorning === employee.id;
                   return (
                     <button
                       key={employee.id}
                       type="button"
                       onClick={() => setAutoMonthStartMorning(employee.id)}
-                      disabled={busy || loading || employeeOptions.length === 0}
+                      disabled={busy || loading}
                       style={{
                         width: '100%',
                         height: 44,
@@ -2043,12 +2240,13 @@ export default function SchedulerPage() {
                     </button>
                   );
                 })}
-              </div>
+                </div>
+              </>}
               <Button
                 variant="primary"
                 size="sm"
                 onClick={handleAutoMonth}
-                disabled={busy || loading}
+                disabled={busy || loading || autoMonthEmployees.length === 0 || autoMonthEmployees.length > 3}
                 style={{ width: '100%', whiteSpace: 'nowrap', justifyContent: 'center' }}
               >
                 Auto month
