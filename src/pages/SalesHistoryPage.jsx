@@ -11,6 +11,7 @@ import codePartsSeed from '../db/seed/seed-code-parts.json';
 import { getGuides, getGuideUnsettledSales } from '../features/guides/guideApi';
 import { KAKAO_FRIEND_ID, MR_MOON_CASH_DISCOUNT_ID, MR_MOON_DISCOUNT_GUIDE_ID, NOWTRAVEL_ID, PETER_CASH_DISCOUNT_ID, PETER_DISCOUNT_GUIDE_ID } from '../features/guides/guideSelectOptions';
 import SalesTable from '../features/sales/components/SalesTable';
+import { isJudyConsignmentCode, recognizedRevenue } from '../features/sales/judyRevenue';
 import { useSalesHistoryFiltered } from '../features/sales/salesHooks';
 
 const EMPTY_ROWS = [];
@@ -34,7 +35,7 @@ export default function SalesHistoryPage() {
   const toInputRef = useRef(null);
   const [qInput, setQInput] = useState('');
   const [sortAscending, setSortAscending] = useState(false);
-  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'kakao', 'ella', 'no-ella'
+  const [filterMode, setFilterMode] = useState('all'); // 'all', 'no-guide', 'guide', 'mr-moon', 'kakao', 'ella', 'judy', 'no-ella'
   const [noRefundNoGift, setNoRefundNoGift] = useState(false);
   const [selectedGuideId, setSelectedGuideId] = useState('');
   const [guideMenuOpen, setGuideMenuOpen] = useState(false);
@@ -264,6 +265,9 @@ export default function SalesHistoryPage() {
       if (filterMode === 'ella') {
         return isElla;
       }
+      if (filterMode === 'judy') {
+        return isJudyConsignmentCode(r.code);
+      }
       if (filterMode === 'no-ella') {
         return !isElla;
       }
@@ -385,7 +389,7 @@ export default function SalesHistoryPage() {
         if (txKey) txKeys.add(txKey);
         return {
           totalQty: acc.totalQty + qtyForTotal,
-          totalAmount: acc.totalAmount + finalUnit * qtyForTotal,
+          totalAmount: acc.totalAmount + recognizedRevenue(r.code, finalUnit * qtyForTotal),
           totalCommission: acc.totalCommission + (isRefunded ? 0 : comm),
           txCount: txKeys.size,
           txKeys,
@@ -808,6 +812,18 @@ export default function SalesHistoryPage() {
               }}
             >
               {filterMode === 'ella' ? '❤️' : '♡'}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setFilterMode((prev) => (prev === 'judy' ? 'all' : 'judy'))}
+              size="sm"
+              variant={filterMode === 'judy' ? 'primary' : 'outline'}
+              title="JUDY Only"
+              aria-label="JUDY Only"
+              aria-pressed={filterMode === 'judy'}
+              style={{ height: 28, width: 28, minWidth: 28, padding: 0, borderRadius: '50%', fontSize: 14, lineHeight: 1 }}
+            >
+              🌳
             </Button>
           </div>
         </div>

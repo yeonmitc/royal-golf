@@ -2,6 +2,7 @@
 import db from '../../db/dexieClient';
 import codePartsSeed from '../../db/seed/seed-code-parts.json';
 import { requireAdminOrThrow } from '../../utils/admin';
+import { recognizedRevenue } from './judyRevenue';
 
 /**
  * =========================
@@ -669,7 +670,7 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
     code: row.code,
     qty: row.qty,
     listPricePhp: row.listPricePhp,
-    lineTotalPhp: row.lineTotalPhp,
+    lineTotalPhp: recognizedRevenue(row.code, row.lineTotalPhp),
     freeGift: row.freeGift,
     refundedAt: row.refundedAt,
     isRefunded: row.isRefunded,
@@ -692,7 +693,10 @@ export async function getAnalytics({
   const report =
     typeof onProgress === 'function' ? (pct, label) => onProgress({ pct, label }) : () => {};
   report(10, '판매 데이터 조회 중…');
-  const rows = await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' });
+  const rows = (await getSalesHistoryFlatFiltered({ fromDate, toDate, query: '' })).map((row) => ({
+    ...row,
+    lineTotalPhp: recognizedRevenue(row.code, row.lineTotalPhp),
+  }));
   const soldAts = (rows || []).map((r) => String(r?.soldAt || '').trim()).filter(Boolean);
   let soldAtMin = '';
   let soldAtMax = '';

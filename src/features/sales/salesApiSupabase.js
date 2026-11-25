@@ -10,6 +10,7 @@ import {
   PETER_DISCOUNT_GUIDE_ID,
 } from '../guides/guideSelectOptions';
 import { addOfflineSales, getAllCachedProducts, isBrowserOnline } from '../offline/offlineDB';
+import { recognizedRevenue } from './judyRevenue';
 
 const SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', 'Free'];
 const SIZE_TO_COLUMN = {
@@ -2033,10 +2034,10 @@ export async function getSalesSummaryRows({ fromDate = '', toDate = '' } = {}) {
     const gid = String(row.saleGroupId || '').trim();
     const subtotal = groupSubtotalMap.get(gid) || 0;
     if (!gid || !commissionEligibleIds.has(String(row.guideId)) || row.freeGift || !subtotal)
-      return row;
+      return { ...row, lineTotalPhp: recognizedRevenue(row.code, row.lineTotalPhp) };
     const stored = groupMap.get(gid)?.guideCommission || 0;
     const commission = ((stored > 0 ? stored : subtotal * 0.1) * row.lineTotalPhp) / subtotal;
-    return { ...row, commission };
+    return { ...row, lineTotalPhp: recognizedRevenue(row.code, row.lineTotalPhp), commission };
   });
 }
 
@@ -2331,7 +2332,10 @@ export async function getAnalytics({
     const share = (Number(r.lineTotalPhp || 0) || 0) / subtotal;
     return { ...r, commission: gcomm * share };
   });
-  rows = rowsWithCommission;
+  rows = rowsWithCommission.map((row) => ({
+    ...row,
+    lineTotalPhp: recognizedRevenue(row.code, row.lineTotalPhp),
+  }));
 
   const totalRevenue = rows.reduce((sum, r) => sum + (Number(r.lineTotalPhp || 0) || 0), 0);
   let mrMoonRevenue = 0;
@@ -2397,7 +2401,7 @@ export async function getAnalytics({
   });
 
   const refundAmount = includedRefunds.reduce(
-    (sum, r) => sum + (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0),
+    (sum, r) => sum + recognizedRevenue(r.code, (Number(r.price ?? 0) || 0) * (Number(r.qty ?? 0) || 0)),
     0
   );
 
