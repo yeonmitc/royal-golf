@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import settingIcon from '../assets/setting.svg';
 import Button from '../components/common/Button';
 import DateInput from '../components/common/DateInput';
 import ExportActions from '../components/common/ExportActions';
@@ -7,7 +6,6 @@ import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
 import { normalizeAppError } from '../utils/errorHandler';
-import CashManagementModal from '../features/cash/CashManagementModal';
 import {
   useCreateExpenseMutation,
   useDeleteExpenseMutation,
@@ -68,7 +66,6 @@ export default function ExpensesPage() {
   // Mobile UI Optimization: Force Refresh
   const { showToast, showToastTyped } = useToast();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isCashModalOpen, setIsCashModalOpen] = useState(false);
 
   const todayStr = toInputDate(new Date());
   const [fromInput, setFromInput] = useState(todayStr.slice(0, 7) + '-01');
@@ -341,28 +338,6 @@ export default function ExpensesPage() {
             title="Reset"
             icon="reset"
           />
-          <button
-            type="button"
-            onClick={() => setIsCashModalOpen(true)}
-            style={{
-              width: '30px',
-              height: '30px',
-              minWidth: '30px',
-              flex: '0 0 30px',
-              borderRadius: '50%',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#ca8a04', // Yellow/Gold
-              border: 'none',
-              cursor: 'pointer',
-              marginLeft: '8px',
-            }}
-            title="Cash Management"
-          >
-            <img src={settingIcon} alt="Cash" style={{ width: '18px', height: '18px' }} />
-          </button>
         </div>
       </div>
 
@@ -542,10 +517,6 @@ export default function ExpensesPage() {
           </ErrorBoundary>
         </div>
       </Modal>
-
-      {isCashModalOpen && (
-        <CashManagementModal open={isCashModalOpen} onClose={() => setIsCashModalOpen(false)} />
-      )}
     </div>
   );
 }
