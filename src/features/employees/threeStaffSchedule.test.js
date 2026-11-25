@@ -99,5 +99,6 @@ test('six-week pattern repeats across month and year boundaries', () => {
 test('daily pay uses actual hours for automatic and manual schedules', () => {
   for (const hours of [4.5, 5, 5.5, 6, 6.5, 7, 7.99]) assert.equal(getThreeStaffDailyRate(hours), 500);
   for (const hours of [8, 8.5, 9, 9.5]) assert.equal(getThreeStaffDailyRate(hours), 650);
+  for (const hours of [10, 10.5, 11]) assert.equal(getThreeStaffDailyRate(hours), 750);
   for (const hours of [0, -1, NaN, Infinity]) assert.equal(getThreeStaffDailyRate(hours), null);
 });

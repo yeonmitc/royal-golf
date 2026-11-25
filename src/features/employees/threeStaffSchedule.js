@@ -8,6 +8,26 @@ const SHIFT_CONFIG = {
   E: { start: '11:00', hours: 6, rate: 500 },
 };
 
+// Sunday through Saturday. The third selected employee opens both weekend days.
+const WEEKEND_NEW_SCHEDULE = [
+  [{ idx: 2, type: 'FT-M' }, { idx: 0, type: 'E' }],
+  [{ idx: 1, type: 'FT-M' }, { idx: 0, type: 'FT-E' }],
+  [{ idx: 1, type: 'M' }, { idx: 0, type: 'E' }],
+  [{ idx: 0, type: 'M' }, { idx: 1, type: 'E' }],
+  [{ idx: 0, type: 'M' }, { idx: 1, type: 'E' }],
+  [{ idx: 0, type: 'FT-M' }, { idx: 1, type: 'E' }],
+  [{ idx: 2, type: 'FT-M' }, { idx: 1, type: 'FT-E' }],
+];
+
+export function getWeekendNewShiftsForDate(date, staff) {
+  const dayOfWeek = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())).getUTCDay();
+  return WEEKEND_NEW_SCHEDULE[dayOfWeek].map(({ idx, type }) => ({
+    employee: staff[idx],
+    type,
+    ...SHIFT_CONFIG[type],
+  }));
+}
+
 const WEEK_A = [
   [{ idx: 0, type: 'M' }, { idx: 1, type: 'FT-E' }],
   [{ idx: 0, type: 'FT-M' }, { idx: 2, type: 'FT-E' }],
@@ -85,5 +105,6 @@ export function getThreeStaffShiftsForDate(date, staff) {
 
 export function getThreeStaffDailyRate(hours) {
   if (!Number.isFinite(hours) || hours <= 0) return null;
-  return hours < 8 ? 500 : 650;
+  if (hours < 8) return 500;
+  return hours < 10 ? 650 : 750;
 }
