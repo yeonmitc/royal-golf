@@ -5,6 +5,7 @@ import Modal from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
 import { sbDelete, sbInsert, sbSelect, sbUpdate } from '../db/supabaseRest';
 import { useEmployees } from '../features/employees/employeesHooks';
+import { getThreeStaffDailyRate, getThreeStaffShiftsForDate } from '../features/employees/threeStaffSchedule';
 import { useAdminStore } from '../store/adminStore';
 import { normalizeAppError } from '../utils/errorHandler';
 
@@ -100,15 +101,15 @@ export default function SchedulerPage() {
     const parsedHours = parseHoursValue(hours);
     if (startMinutes == null || !parsedHours) return '';
     const endMinutes = startMinutes + parsedHours * 60;
-    return `${minutesToTimeLabel(startMinutes)} ~ ${minutesToTimeLabel(endMinutes)}`;
+    return `${minutesToTimeLabel(startMinutes)} - ${minutesToTimeLabel(endMinutes)}`;
   };
 
   const shiftTimeLabel = (d, shift) => {
     const peak = isPeakDay(d);
-    if (shift === 'all_day') return '7:00 ~ 16:00';
-    if (shift === 'morning') return peak ? '06:00~12:30' : '06:00~12:00';
+    if (shift === 'all_day') return '07:00 - 16:00';
+    if (shift === 'morning') return peak ? '06:00 - 12:30' : '06:00 - 12:00';
     if (shift === 'manual') return 'manual';
-    return peak ? '10:30~17:00' : '11:30~17:00';
+    return peak ? '10:30 - 17:00' : '11:30 - 17:00';
   };
 
   const [isMobile, setIsMobile] = useState(false);
@@ -150,6 +151,7 @@ export default function SchedulerPage() {
   const [selectedShift, setSelectedShift] = useState('morning');
   const [manualStartTime, setManualStartTime] = useState('07:00');
   const [manualHours, setManualHours] = useState('9');
+  const [manualPreset, setManualPreset] = useState('custom');
   const [manualScheduleAvailable, setManualScheduleAvailable] = useState(true);
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [copiedDay, setCopiedDay] = useState(null);
@@ -285,13 +287,6 @@ export default function SchedulerPage() {
     let janiceSharedUnits = 0;
     let thirdSoloUnits = 0;
     let thirdSharedUnits = 0;
-    let berlynSixHourUnits = 0;
-    let janiceSixHourUnits = 0;
-    let thirdSixHourUnits = 0;
-    let berlynOtHours = 0;
-    let janiceOtHours = 0;
-    let thirdOtHours = 0;
-    const threeStaffIds = new Set([berlynEmp.id, janiceEmp.id, thirdEmp?.id].filter(Boolean).map(String));
 
     for (let i = 0; i < 14; i++) {
       const d = addDays(startDate, i);
@@ -303,51 +298,30 @@ export default function SchedulerPage() {
       const thirdEntries = thirdEmp
         ? dayList.filter((r) => String(r.employee_id) === String(thirdEmp.id))
         : [];
-      const isThreeStaffDay = Boolean(thirdEmp) && dayList.length === 2 &&
-        new Set(dayList.map((row) => String(row.employee_id))).size === 2 &&
-        dayList.every((row) => threeStaffIds.has(String(row.employee_id))) &&
-        ['06:00', '11:00'].every((start) => dayList.some((row) =>
-          row.shift_type === 'manual' && row.manual_start_time === start && Number(row.manual_hours) >= 6
-        ));
-
-      // 8시간 미만 = shared (₱500), 8시간 이상 = solo (₱650)
+      // 인원수와 배정 방식에 관계없이 8시간 미만은 ₱500, 이상은 ₱650.
       berlynEntries.forEach((r) => {
-        if (isThreeStaffDay) {
-          berlynSixHourUnits++;
-          berlynOtHours += Math.max(0, Number(r.manual_hours) - 6);
-          return;
-        }
         const h = getEntryHours(r, d);
-        if (h >= 8) berlynSoloUnits++;
-        else if (h > 0) berlynSharedUnits++;
+        const rate = getThreeStaffDailyRate(h);
+        if (rate === 650) berlynSoloUnits++;
+        else if (rate === 500) berlynSharedUnits++;
       });
       janiceEntries.forEach((r) => {
-        if (isThreeStaffDay) {
-          janiceSixHourUnits++;
-          janiceOtHours += Math.max(0, Number(r.manual_hours) - 6);
-          return;
-        }
         const h = getEntryHours(r, d);
-        if (h >= 8) janiceSoloUnits++;
-        else if (h > 0) janiceSharedUnits++;
+        const rate = getThreeStaffDailyRate(h);
+        if (rate === 650) janiceSoloUnits++;
+        else if (rate === 500) janiceSharedUnits++;
       });
       thirdEntries.forEach((r) => {
-        if (isThreeStaffDay) {
-          thirdSixHourUnits++;
-          thirdOtHours += Math.max(0, Number(r.manual_hours) - 6);
-          return;
-        }
         const h = getEntryHours(r, d);
-        if (h >= 8) thirdSoloUnits++;
-        else if (h > 0) thirdSharedUnits++;
+        const rate = getThreeStaffDailyRate(h);
+        if (rate === 650) thirdSoloUnits++;
+        else if (rate === 500) thirdSharedUnits++;
       });
     }
 
     const SHARED_RATE = 500;
     const SOLO_RATE = 650;
     const HOLIDAY_RATE = 150;
-    const SIX_HOUR_RATE = 600;
-    const OT_HOURLY_RATE = 50;
 
     const jHoliday = Number(janiceHolidayDays);
     const bHoliday = Number(berlynHolidayDays);
@@ -356,22 +330,16 @@ export default function SchedulerPage() {
     const janiceSharedPay = janiceSharedUnits * SHARED_RATE;
     const janiceSoloPay = janiceSoloUnits * SOLO_RATE;
     const janiceHolidayPay = jHoliday * HOLIDAY_RATE;
-    const janiceSixHourPay = janiceSixHourUnits * SIX_HOUR_RATE;
-    const janiceOtPay = janiceOtHours * OT_HOURLY_RATE;
-    const janiceTotal = janiceSharedPay + janiceSoloPay + janiceHolidayPay + janiceSixHourPay + janiceOtPay;
+    const janiceTotal = janiceSharedPay + janiceSoloPay + janiceHolidayPay;
 
     const berlynSharedPay = berlynSharedUnits * SHARED_RATE;
     const berlynSoloPay = berlynSoloUnits * SOLO_RATE;
     const berlynHolidayPay = bHoliday * HOLIDAY_RATE;
-    const berlynSixHourPay = berlynSixHourUnits * SIX_HOUR_RATE;
-    const berlynOtPay = berlynOtHours * OT_HOURLY_RATE;
-    const berlynTotal = berlynSharedPay + berlynSoloPay + berlynHolidayPay + berlynSixHourPay + berlynOtPay;
+    const berlynTotal = berlynSharedPay + berlynSoloPay + berlynHolidayPay;
     const thirdSharedPay = thirdSharedUnits * SHARED_RATE;
     const thirdSoloPay = thirdSoloUnits * SOLO_RATE;
     const thirdHolidayPay = tHoliday * HOLIDAY_RATE;
-    const thirdSixHourPay = thirdSixHourUnits * SIX_HOUR_RATE;
-    const thirdOtPay = thirdOtHours * OT_HOURLY_RATE;
-    const thirdTotal = thirdSharedPay + thirdSoloPay + thirdHolidayPay + thirdSixHourPay + thirdOtPay;
+    const thirdTotal = thirdSharedPay + thirdSoloPay + thirdHolidayPay;
 
     const endDate = toDateKey(addDays(startDate, 13));
     const payDate = toDateKey(addDays(startDate, 14));
@@ -393,25 +361,15 @@ export default function SchedulerPage() {
       sharedPayAmt,
       soloPayAmt,
       holidayPayAmt,
-      totalPayAmt,
-      sixHourUnits,
-      sixHourPayAmt,
-      otHours,
-      otPayAmt
+      totalPayAmt
     ) => {
       const lines = [empName, ''];
-      if (sharedUnits > 0 || soloUnits > 0 || hDays > 0 || sixHourUnits > 0) {
+      if (sharedUnits > 0 || soloUnits > 0 || hDays > 0) {
         if (sharedUnits > 0) {
           lines.push(`₱500 × ${sharedUnits} = ₱${sharedPayAmt.toLocaleString()}`);
         }
         if (soloUnits > 0) {
           lines.push(`₱650 × ${soloUnits} = ₱${soloPayAmt.toLocaleString()}`);
-        }
-        if (sixHourUnits > 0) {
-          lines.push(`₱600 × ${sixHourUnits} = ₱${sixHourPayAmt.toLocaleString()}`);
-        }
-        if (otHours > 0) {
-          lines.push(`OT ₱50 × ${otHours}h = ₱${otPayAmt.toLocaleString()}`);
         }
         if (hDays > 0) {
           lines.push('Holiday extra');
@@ -435,11 +393,7 @@ export default function SchedulerPage() {
       janiceSharedPay,
       janiceSoloPay,
       janiceHolidayPay,
-      janiceTotal,
-      janiceSixHourUnits,
-      janiceSixHourPay,
-      janiceOtHours,
-      janiceOtPay
+      janiceTotal
     );
     const berlynDetail = buildDetailText(
       'Berlyn',
@@ -449,11 +403,7 @@ export default function SchedulerPage() {
       berlynSharedPay,
       berlynSoloPay,
       berlynHolidayPay,
-      berlynTotal,
-      berlynSixHourUnits,
-      berlynSixHourPay,
-      berlynOtHours,
-      berlynOtPay
+      berlynTotal
     );
     const thirdName = thirdEmp?.english_name || 'Employee 3';
     const thirdDetail = thirdEmp
@@ -465,11 +415,7 @@ export default function SchedulerPage() {
           thirdSharedPay,
           thirdSoloPay,
           thirdHolidayPay,
-          thirdTotal,
-          thirdSixHourUnits,
-          thirdSixHourPay,
-          thirdOtHours,
-          thirdOtPay
+          thirdTotal
         )
       : '';
 
@@ -482,8 +428,6 @@ export default function SchedulerPage() {
           sharedPay: janiceSharedPay,
           soloPay: janiceSoloPay,
           holidayPay: janiceHolidayPay,
-          sixHourDays: janiceSixHourUnits,
-          otHours: janiceOtHours,
           totalPay: janiceTotal,
         },
         Berlyn: {
@@ -493,8 +437,6 @@ export default function SchedulerPage() {
           sharedPay: berlynSharedPay,
           soloPay: berlynSoloPay,
           holidayPay: berlynHolidayPay,
-          sixHourDays: berlynSixHourUnits,
-          otHours: berlynOtHours,
           totalPay: berlynTotal,
         },
         ...(thirdEmp
@@ -506,8 +448,6 @@ export default function SchedulerPage() {
                 sharedPay: thirdSharedPay,
                 soloPay: thirdSoloPay,
                 holidayPay: thirdHolidayPay,
-                sixHourDays: thirdSixHourUnits,
-                otHours: thirdOtHours,
                 totalPay: thirdTotal,
               },
             }
@@ -798,15 +738,15 @@ export default function SchedulerPage() {
       const label = getManualRangeLabel(row?.manual_start_time, row?.manual_hours);
       return label || '';
     }
+    if (shiftType === 'FT-M') return '06:00 - 15:00';
+    if (shiftType === 'FT-E') return '08:00 - 17:00';
+    if (shiftType === 'M') return '06:00 - 12:00';
+    if (shiftType === 'E') return '11:00 - 17:00';
+    if (shiftType === 'F') return '07:00 - 16:00';
     return shiftTimeLabel(date, shiftType);
   };
 
-  const getScheduleMetaLabel = (date, row) => {
-    const shiftType = String(row?.shift_type || '');
-    const timeLabel = getScheduleTimeLabel(date, row);
-    if (shiftType === 'manual') return timeLabel;
-    return [shiftType, timeLabel].filter(Boolean).join(' ');
-  };
+  const getScheduleMetaLabel = (date, row) => getScheduleTimeLabel(date, row);
 
   const filterVisibleSchedules = useCallback(
     (list) => {
@@ -833,7 +773,7 @@ export default function SchedulerPage() {
 
   const autoGenerateMonthForRange = async ({ startDate, endDate, startMorningKey, employeeIds }) => {
     const selectedIds = new Set(employeeIds.map(String));
-    let staff = employeeOptions.filter(
+    const staff = employeeOptions.filter(
       (employee) => employee?.id && employee?.english_name && selectedIds.has(String(employee.id))
     );
     if (staff.length === 0) {
@@ -848,23 +788,67 @@ export default function SchedulerPage() {
       showToast('3인 자동 스케줄에는 수동 근무시간 저장 기능이 필요합니다.');
       return;
     }
+    const startKey = toDateKey(startDate);
+    const endKey = toDateKey(endDate);
+
     if (staff.length === 3) {
       const janice = staff.find((employee) => normalizeName(employee.english_name) === 'janice');
       const berlyn = staff.find((employee) => normalizeName(employee.english_name) === 'berlyn');
-      if (janice && berlyn) {
-        staff = [berlyn, janice, staff.find((employee) => employee.id !== janice.id && employee.id !== berlyn.id)];
-      }
-    }
+      const cycleStaff = janice && berlyn
+        ? [janice, berlyn, staff.find((employee) => employee.id !== janice.id && employee.id !== berlyn.id)]
+        : staff;
+      const existingRows = await sbSelect('employee_schedules', {
+        select: 'employee_id,work_date,shift_type,manual_start_time,manual_hours',
+        filters: [
+          { column: 'work_date', op: 'gte', value: startKey },
+          { column: 'work_date', op: 'lte', value: endKey },
+        ],
+        limit: 3000,
+      });
+      const existingByDate = new Map();
+      (Array.isArray(existingRows) ? existingRows : []).forEach((row) => {
+        const dayRows = existingByDate.get(row.work_date) || [];
+        dayRows.push(row);
+        existingByDate.set(row.work_date, dayRows);
+      });
 
-    const startKey = toDateKey(startDate);
-    const endKey = toDateKey(endDate);
+      const rowsToInsert = [];
+      for (let d = new Date(startDate); d <= endDate; d = addDays(d, 1)) {
+        const dateKey = toDateKey(d);
+        const expected = getThreeStaffShiftsForDate(d, cycleStaff).map((slot) => ({
+          employee_id: slot.employee.id,
+          work_date: dateKey,
+          shift_type: 'manual',
+          manual_start_time: slot.start,
+          manual_hours: slot.hours,
+        }));
+        const actual = existingByDate.get(dateKey) || [];
+        const matches = (row, shift) =>
+          String(row.employee_id) === String(shift.employee_id) &&
+          row.shift_type === shift.shift_type &&
+          String(row.manual_start_time || '').slice(0, 5) === shift.manual_start_time &&
+          Number(row.manual_hours) >= shift.manual_hours;
+        if (actual.length > expected.length ||
+            new Set(actual.map((row) => String(row.employee_id))).size !== actual.length ||
+            actual.some((row) => !expected.some((shift) => matches(row, shift)))) {
+          showToast(`기존 배정이 3인 규칙과 다릅니다: ${dateKey}. 해당 날짜를 수정하거나 월 초기화 후 다시 생성해주세요.`);
+          return;
+        }
+        expected.forEach((shift) => {
+          if (!actual.some((row) => matches(row, shift))) rowsToInsert.push(shift);
+        });
+      }
+      if (rowsToInsert.length > 0) {
+        await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
+      }
+      showToast(`Auto 생성 완료 (빈칸만 채움): ${startKey} ~ ${endKey} (${rowsToInsert.length}건 추가)`);
+      return;
+    }
 
     const employeeIndex = (employee) =>
       Math.max(0, staff.findIndex((item) => String(item.id) === String(employee?.id)));
     const nextEmployee = (employee) => staff[(employeeIndex(employee) + 1) % staff.length];
-    const defaultMorningForWeek = (monday) => staff.length === 3
-      ? staff.find((employee) => normalizeName(employee.english_name) === 'janice') || staff[0]
-      : staff[getWeekIndex(monday, staff.length)];
+    const defaultMorningForWeek = (monday) => staff[getWeekIndex(monday, staff.length)];
 
     const firstWeekMonday = getWeekMonday(startDate);
     const prevWeekMonday = addDays(firstWeekMonday, -7);
@@ -879,22 +863,13 @@ export default function SchedulerPage() {
         filters: [
           { column: 'work_date', op: 'gte', value: prevWeekStartKey },
           { column: 'work_date', op: 'lte', value: prevWeekEndKey },
-          ...(staff.length === 3 ? [] : [{ column: 'shift_type', op: 'eq', value: 'morning' }]),
+          { column: 'shift_type', op: 'eq', value: 'morning' },
         ],
         orders: [{ column: 'work_date', ascending: true }],
         limit: 50,
       });
-      const previousThreeStaffWeek = staff.length === 3 && ['06:00', '11:00'].every(
-        (start) => (Array.isArray(prevRows) ? prevRows : []).some((row) =>
-          row.work_date === prevWeekStartKey && row.shift_type === 'manual' &&
-          row.manual_start_time === start && Number(row.manual_hours) >= 6 &&
-          staff.some((employee) => String(employee.id) === String(row.employee_id))
-        )
-      );
       const hit = (Array.isArray(prevRows) ? prevRows : []).find(
-        (r) => staff.some((employee) => String(r.employee_id) === String(employee.id)) &&
-          (staff.length !== 3 || (previousThreeStaffWeek && r.work_date === prevWeekStartKey && r.shift_type === 'manual' &&
-            r.manual_start_time === '06:00' && Number(r.manual_hours) >= 6))
+        (r) => staff.some((employee) => String(r.employee_id) === String(employee.id))
       );
       if (hit) {
         const previousMorning = staff.find(
@@ -903,7 +878,7 @@ export default function SchedulerPage() {
         if (previousMorning) firstWeekMorning = nextEmployee(previousMorning);
       }
     } catch {
-      if (staff.length !== 3) firstWeekMorning = null;
+      firstWeekMorning = null;
     }
     if (!firstWeekMorning) firstWeekMorning = defaultMorningForWeek(firstWeekMonday);
 
@@ -924,17 +899,7 @@ export default function SchedulerPage() {
       existingSet.has(`${String(dateKey)}__${String(empId)}`);
 
     const weekMorningByMondayKey = new Map();
-    const existingByDate = new Map();
-    if (staff.length === 3) {
-      (Array.isArray(existingRows) ? existingRows : []).forEach((row) => {
-        const dayRows = existingByDate.get(row.work_date) || [];
-        dayRows.push(row);
-        existingByDate.set(row.work_date, dayRows);
-      });
-    }
-
     const rowsToInsert = [];
-    let conflictDate = null;
     for (let d = new Date(startDate); d <= endDate; d = addDays(d, 1)) {
       const dateKey = toDateKey(d);
       const dow = d.getDay();
@@ -955,32 +920,6 @@ export default function SchedulerPage() {
       }
       const weekMorning = weekMorningByMondayKey.get(weekMondayKey);
       const weekEvening = staff.length > 1 ? nextEmployee(weekMorning) : null;
-
-      if (staff.length === 3) {
-        const roleA = weekMorning;
-        const roleB = staff[(employeeIndex(roleA) + 2) % 3];
-        const roleC = weekEvening;
-        const weekend = dow === 0 || dow === 6;
-        const morning = weekend ? roleC : roleA;
-        const afternoon = dow === 3 || dow === 4 ? roleC : roleB;
-        const expected = [
-          { employee_id: morning.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '06:00', manual_hours: 6 },
-          { employee_id: afternoon.id, work_date: dateKey, shift_type: 'manual', manual_start_time: '11:00', manual_hours: 6 },
-        ];
-        const actual = existingByDate.get(dateKey) || [];
-        if (actual.some((row) => !expected.some((shift) =>
-          String(row.employee_id) === String(shift.employee_id) &&
-          row.shift_type === shift.shift_type && row.manual_start_time === shift.manual_start_time &&
-          Number(row.manual_hours) >= shift.manual_hours
-        ))) {
-          conflictDate = dateKey;
-          break;
-        }
-        expected.forEach((shift) => {
-          if (!isExisting(dateKey, shift.employee_id)) rowsToInsert.push(shift);
-        });
-        continue;
-      }
 
       if (dow === 3) {
         continue;
@@ -1008,10 +947,6 @@ export default function SchedulerPage() {
       }
     }
 
-    if (conflictDate) {
-      showToast(`기존 배정이 3인 규칙과 다릅니다: ${conflictDate}. 해당 날짜를 수정하거나 월 초기화 후 다시 생성해주세요.`);
-      return;
-    }
     if (rowsToInsert.length > 0) {
       await sbInsert('employee_schedules', rowsToInsert, { returning: 'minimal' });
     }
@@ -1159,53 +1094,69 @@ export default function SchedulerPage() {
     if (shiftType === 'manual' && manualHours > 0 &&
         ![9, 6, 6.5, 5.5].some((hours) => Math.abs(hours - manualHours) < 0.001)) {
       return {
-        bg: 'rgba(34, 197, 94, 0.24)',
+        bg: 'rgba(34, 197, 94, 0.136)',
         border: 'rgba(74, 222, 128, 0.75)',
         accent: '#86efac',
       };
     }
     const employeeKey = employeeKeyById.get(employeeId);
+    const fullTime = isFullTimeSchedule(row);
     if (employeeKey === 'berlyn') {
       return {
-        bg: 'rgba(59, 130, 246, 0.24)',
-        border: 'rgba(96, 165, 250, 0.72)',
-        accent: '#93c5fd',
+        bg: 'rgba(29, 78, 216, 0.376)',
+        border: fullTime ? 'rgba(56, 189, 248, 0.80)' : 'rgba(37, 99, 235, 0.50)',
+        accent: '#eff6ff',
+        leftAccent: fullTime ? '#7dd3fc' : null,
+        badgeBg: '#7dd3fc',
+        badgeText: '#172554',
+        outlineBg: 'rgba(23, 37, 84, 0.60)',
+        outlineText: '#bae6fd',
       };
     }
     if (employeeKey === 'janice') {
       return {
-        bg: 'rgba(249, 115, 22, 0.24)',
-        border: 'rgba(251, 146, 60, 0.72)',
-        accent: '#fdba74',
+        bg: 'rgba(180, 83, 9, 0.376)',
+        border: fullTime ? 'rgba(251, 191, 36, 0.80)' : 'rgba(217, 119, 6, 0.50)',
+        accent: '#fffbeb',
+        leftAccent: fullTime ? '#fcd34d' : null,
+        badgeBg: '#fcd34d',
+        badgeText: '#451a03',
+        outlineBg: 'rgba(69, 26, 3, 0.60)',
+        outlineText: '#fde68a',
       };
     }
     if (employeeKey === 'new' || String(employeeId) === String(thirdEmployee?.id)) {
       return {
-        bg: 'rgba(168, 85, 247, 0.24)',
-        border: 'rgba(192, 132, 252, 0.72)',
-        accent: '#d8b4fe',
+        bg: 'rgba(126, 34, 206, 0.376)',
+        border: fullTime ? 'rgba(192, 132, 252, 0.80)' : 'rgba(147, 51, 234, 0.50)',
+        accent: '#faf5ff',
+        leftAccent: fullTime ? '#d8b4fe' : null,
+        badgeBg: '#d8b4fe',
+        badgeText: '#3b0764',
+        outlineBg: 'rgba(59, 7, 100, 0.60)',
+        outlineText: '#e9d5ff',
       };
     }
     if (shiftType === 'manual') {
       return {
-        bg: 'rgba(236, 72, 153, 0.22)',
+        bg: 'rgba(236, 72, 153, 0.128)',
         border: 'rgba(244, 114, 182, 0.58)',
         accent: '#f9a8d4',
       };
     }
     if (employeeKey === 'maeshi') {
       return {
-        bg: 'rgba(168, 85, 247, 0.18)',
+        bg: 'rgba(168, 85, 247, 0.104)',
         border: 'rgba(168, 85, 247, 0.45)',
         accent: '#d8b4fe',
       };
     }
     const bg =
       shiftType === 'morning'
-        ? 'rgba(250, 204, 21, 0.18)'
+        ? 'rgba(250, 204, 21, 0.104)'
         : shiftType === 'evening'
-          ? 'rgba(59, 130, 246, 0.18)'
-          : 'rgba(168, 85, 247, 0.18)';
+          ? 'rgba(59, 130, 246, 0.104)'
+          : 'rgba(168, 85, 247, 0.104)';
     const border =
       shiftType === 'morning'
         ? 'rgba(250, 204, 21, 0.45)'
@@ -1215,92 +1166,105 @@ export default function SchedulerPage() {
     return { bg, border, accent: 'white' };
   };
 
-  const isFullTimeSchedule = (row) =>
-    row?.shift_type === 'all_day' ||
-    (row?.shift_type === 'manual' && Math.abs(Number(row.manual_hours) - 9) < 0.001);
-
-  const getScheduleDisplayName = (row) => {
-    const name = employeeNameById.get(row.employee_id) || row.employee_id;
-    if (isFullTimeSchedule(row)) return `F: ${name}`;
-    const shiftType = String(row.shift_type || '');
-    const startTime = String(row.manual_start_time || '').slice(0, 5);
-    const prefix = shiftType === 'morning' || (shiftType === 'manual' && startTime === '06:00')
-      ? 'M: '
-      : shiftType === 'evening' || (shiftType === 'manual' && ['10:30', '11:00', '11:30'].includes(startTime))
-        ? 'E: '
-        : '';
-    return `${prefix}${name}`;
+  const isFullTimeSchedule = (row) => {
+    const type = String(row?.shift_type || '').toUpperCase();
+    return ['ALL_DAY', 'F', 'FT-M', 'FT-E'].includes(type) ||
+      (type === 'MANUAL' && Math.abs(Number(row.manual_hours) - 9) < 0.001);
   };
 
-  const ShiftButton = ({ value, label }) => {
-    const active = selectedShift === value;
+  const getScheduleTag = (row) => {
+    const shiftType = String(row.shift_type || '').toUpperCase();
+    const startTime = String(row.manual_start_time || '').slice(0, 5);
+    if (shiftType === 'ALL_DAY' || shiftType === 'F') return 'F';
+    if (shiftType === 'FT-M' || shiftType === 'FT-E') return shiftType;
+    if (shiftType === 'MORNING' || shiftType === 'M') return 'M';
+    if (shiftType === 'EVENING' || shiftType === 'E') return 'E';
+    if (isFullTimeSchedule(row)) {
+      if (startTime === '06:00') return 'FT-M';
+      if (startTime === '08:00') return 'FT-E';
+      return 'F';
+    }
+    if (shiftType === 'MANUAL' && startTime) return startTime < '10:30' ? 'M' : 'E';
+    return shiftType || 'MAN';
+  };
+
+  const ShiftName = ({ row, fontSize = 12 }) => {
+    const fullTime = isFullTimeSchedule(row);
+    const { border, badgeBg = '#e2e8f0', badgeText = '#0f172a', outlineBg = 'rgba(15, 23, 42, 0.60)', outlineText = '#f1f5f9' } = badgeStyle(row);
+    const name = employeeNameById.get(row.employee_id) || row.employee_id;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 36px', height: 17, boxSizing: 'border-box', borderRadius: 4, border: `1px solid ${border}`, background: fullTime ? badgeBg : outlineBg, color: fullTime ? badgeText : outlineText, fontSize: 9, lineHeight: 1, fontWeight: 900 }}>
+          {getScheduleTag(row)}
+        </span>
+        <span style={{ color: 'white', fontWeight: fullTime ? 1000 : 900, fontSize: fullTime ? fontSize + 1 : fontSize, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {name}
+        </span>
+      </div>
+    );
+  };
+
+  const ShiftButton = ({ value, label, detail, active: activeOverride, onClick, disabled = false }) => {
+    const active = activeOverride ?? selectedShift === value;
     return (
       <button
         type="button"
-        onClick={() => setSelectedShift(value)}
-        disabled={!isAdmin || busy || loading}
+        onClick={onClick || (() => setSelectedShift(value))}
+        disabled={!isAdmin || busy || loading || disabled}
         style={{
           width: '100%',
-          height: 44,
+          minHeight: 78,
           borderRadius: 14,
           border: `1px solid ${active ? 'rgba(250, 204, 21, 0.6)' : 'rgba(255,255,255,0.16)'}`,
           background: active ? 'rgba(250, 204, 21, 0.14)' : 'rgba(255,255,255,0.06)',
           color: 'white',
           fontWeight: 900,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 14px',
-          whiteSpace: 'nowrap',
+          display: 'grid',
+          alignContent: 'center',
+          justifyItems: 'center',
+          gap: 4,
+          padding: '8px 6px',
+          whiteSpace: 'normal',
           cursor: !isAdmin ? 'default' : 'pointer',
           opacity: !isAdmin ? 0.7 : 1,
         }}
       >
-        {label}
+        <span>{label}</span>
+        {detail && <span style={{ fontSize: 12, fontWeight: 700, color: active ? 'var(--gold-soft)' : 'var(--text-muted)' }}>{detail}</span>}
       </button>
     );
   };
 
   const ScheduleBadge = ({ row, date, dateKey, compact = false }) => {
-    const shiftType = String(row.shift_type || '');
-    const { bg, border, accent } = badgeStyle(row);
-    const name = getScheduleDisplayName(row);
-    const fullTime = isFullTimeSchedule(row);
-    const metaTextColor = shiftType === 'manual' ? accent : 'var(--text-muted)';
+    const { bg, border, accent, leftAccent } = badgeStyle(row);
+    const name = employeeNameById.get(row.employee_id) || row.employee_id;
+    const metaTextColor = accent;
     if (isMobile && compact) {
+      const shiftTag = getScheduleTag(row);
+      const shortShift = shiftTag === 'FT-M' ? 'FM' : shiftTag === 'FT-E' ? 'FE' : shiftTag.length <= 2 ? shiftTag : 'X';
+      const mobileLabel = `${shortShift}:${String(name).trim().charAt(0).toUpperCase()}`;
       return (
         <div
           className="text-xs"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            padding: '3px 6px',
-            borderRadius: 10,
+            justifyContent: 'center',
+            padding: '2px 1px',
+            minHeight: 20,
+            borderRadius: 4,
             border: `1px solid ${border}`,
+            borderLeft: leftAccent ? `2px solid ${leftAccent}` : undefined,
             background: bg,
             maxWidth: '100%',
             boxSizing: 'border-box',
             overflow: 'hidden',
           }}
-          title={name}
+          title={`${shiftTag} ${name} ${getScheduleMetaLabel(date, row)}`}
         >
-          <div
-            style={{
-              color: 'rgba(255,255,255,0.98)',
-              fontWeight: fullTime ? 1000 : 950,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: fullTime ? 11 : 10,
-              lineHeight: 1.05,
-              letterSpacing: '0.01em',
-              textShadow: '0 1px 1px rgba(0,0,0,0.35)',
-              minWidth: 0,
-            }}
-          >
-            {name}
-          </div>
+          <span style={{ color: 'white', fontSize: '8.5px', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, whiteSpace: 'nowrap' }}>
+            {mobileLabel}
+          </span>
         </div>
       );
     }
@@ -1314,8 +1278,10 @@ export default function SchedulerPage() {
             justifyContent: 'space-between',
             gap: 6,
             padding: '6px 8px',
+            minHeight: 44,
             borderRadius: 12,
             border: `1px solid ${border}`,
+            borderLeft: leftAccent ? `4px solid ${leftAccent}` : undefined,
             background: bg,
             maxWidth: '100%',
             boxSizing: 'border-box',
@@ -1324,19 +1290,7 @@ export default function SchedulerPage() {
           title={name}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <div
-              style={{
-                fontWeight: fullTime ? 1000 : 950,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: fullTime ? 12 : 11,
-                lineHeight: 1.1,
-                minWidth: 0,
-              }}
-            >
-              {name}
-            </div>
+            <ShiftName row={row} fontSize={11} />
             <div style={{ fontSize: 10, color: metaTextColor, fontWeight: 800 }}>
               {getScheduleMetaLabel(date, row)}
             </div>
@@ -1377,8 +1331,10 @@ export default function SchedulerPage() {
           justifyContent: 'space-between',
           gap: 8,
           padding: '6px 8px',
+          minHeight: 48,
           borderRadius: 12,
           border: `1px solid ${border}`,
+          borderLeft: leftAccent ? `4px solid ${leftAccent}` : undefined,
           background: bg,
           cursor: isAdmin ? 'grab' : 'default',
           userSelect: 'none',
@@ -1388,21 +1344,7 @@ export default function SchedulerPage() {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
-            <div
-              style={{
-                fontWeight: fullTime ? 1000 : 950,
-                fontSize: fullTime ? 13 : 12,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                minWidth: 0,
-                flex: 1,
-              }}
-            >
-              {name}
-            </div>
-          </div>
+          <ShiftName row={row} fontSize={12} />
           <div style={{ fontSize: 11, color: metaTextColor, fontWeight: 800 }}>
             {getScheduleMetaLabel(date, row)}
           </div>
@@ -1788,7 +1730,7 @@ export default function SchedulerPage() {
                       color: 'var(--text-muted)',
                     }}
                   >
-                    Shared
+                    Under 8h (₱500)
                   </th>
                   <th
                     style={{
@@ -1797,13 +1739,7 @@ export default function SchedulerPage() {
                       color: 'var(--text-muted)',
                     }}
                   >
-                    Solo
-                  </th>
-                  <th style={{ textAlign: 'center', padding: '6px 8px', color: 'var(--text-muted)' }}>
-                    6h shifts
-                  </th>
-                  <th style={{ textAlign: 'center', padding: '6px 8px', color: 'var(--text-muted)' }}>
-                    OT hours
+                    8h or more (₱650)
                   </th>
                   <th
                     style={{
@@ -1833,8 +1769,6 @@ export default function SchedulerPage() {
                       <td style={{ padding: '6px 8px', color: 'white' }}>{name}</td>
                       <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.sharedDays}</td>
                       <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.soloDays}</td>
-                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.sixHourDays}</td>
-                      <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.otHours}</td>
                       <td style={{ textAlign: 'center', padding: '6px 8px' }}>{r.holidayDays}</td>
                       <td style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 1000 }}>
                         ₱{r.totalPay.toLocaleString()}
@@ -2151,10 +2085,47 @@ export default function SchedulerPage() {
               <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
                 1. 배정할 Shift 선택
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-                <ShiftButton value="morning" label="Morning" />
-                <ShiftButton value="evening" label="Evening" />
-                <ShiftButton value="all_day" label="All Day" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                <ShiftButton value="morning" label="Morning" detail="06:00 - 12:00" />
+                <ShiftButton value="evening" label="Evening" detail="11:00 - 17:00" />
+                <ShiftButton
+                  value="ft_m"
+                  label="FT-M"
+                  detail="06:00 - 15:00"
+                  active={selectedShift === 'manual' && manualPreset === 'ft_m'}
+                  onClick={() => {
+                    setSelectedShift('manual');
+                    setManualPreset('ft_m');
+                    setManualStartTime('06:00');
+                    setManualHours('9');
+                  }}
+                  disabled={!manualScheduleAvailable}
+                />
+                <ShiftButton
+                  value="ft_e"
+                  label="FT-E"
+                  detail="08:00 - 17:00"
+                  active={selectedShift === 'manual' && manualPreset === 'ft_e'}
+                  onClick={() => {
+                    setSelectedShift('manual');
+                    setManualPreset('ft_e');
+                    setManualStartTime('08:00');
+                    setManualHours('9');
+                  }}
+                  disabled={!manualScheduleAvailable}
+                />
+                <ShiftButton value="all_day" label="All Day" detail="07:00 - 16:00" />
+                <ShiftButton
+                  value="manual"
+                  label="Manual"
+                  detail="직접 입력"
+                  active={selectedShift === 'manual' && manualPreset === 'custom'}
+                  onClick={() => {
+                    setSelectedShift('manual');
+                    setManualPreset('custom');
+                  }}
+                  disabled={!manualScheduleAvailable}
+                />
               </div>
               <div
                 style={{
@@ -2163,75 +2134,70 @@ export default function SchedulerPage() {
                   padding: 12,
                   borderRadius: 14,
                   border:
-                    selectedShift === 'manual'
+                    selectedShift === 'manual' && manualPreset === 'custom'
                       ? '1px solid rgba(250, 204, 21, 0.6)'
                       : '1px solid rgba(255,255,255,0.12)',
                   background:
-                    selectedShift === 'manual'
+                    selectedShift === 'manual' && manualPreset === 'custom'
                       ? 'rgba(250, 204, 21, 0.08)'
                       : 'rgba(255,255,255,0.03)',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setSelectedShift('manual')}
-                  disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
-                  style={{
-                    width: '100%',
-                    height: 42,
-                    borderRadius: 12,
-                    border:
-                      selectedShift === 'manual'
-                        ? '1px solid rgba(250, 204, 21, 0.65)'
-                        : '1px solid rgba(255,255,255,0.16)',
-                    background:
-                      selectedShift === 'manual'
-                        ? 'rgba(250, 204, 21, 0.14)'
-                        : 'rgba(255,255,255,0.06)',
-                    color: 'white',
-                    fontWeight: 950,
-                    cursor:
-                      !isAdmin || busy || loading || !manualScheduleAvailable
-                        ? 'not-allowed'
-                        : 'pointer',
-                    opacity: !isAdmin || !manualScheduleAvailable ? 0.7 : 1,
-                  }}
-                >
-                  Manual Schedule
-                </button>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <Input
-                    label="시작 시간"
-                    type="time"
-                    value={manualStartTime}
-                    onChange={(e) => setManualStartTime(e.target.value)}
-                    disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
-                  />
-                  <Input
-                    label="몇 시간"
-                    type="number"
-                    min="0.5"
-                    step="0.5"
-                    value={manualHours}
-                    onChange={(e) => setManualHours(e.target.value)}
-                    disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
-                    placeholder="4"
-                  />
-                </div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
-                  {manualScheduleAvailable
-                    ? 'Manual 선택 후 직원을 드래그하면 입력한 시간대로 배정됩니다.'
-                    : '현재 DB에는 manual schedule 컬럼이 없어 수동 스케줄이 비활성화되었습니다.'}
-                  {manualScheduleAvailable && getManualRangeLabel(manualStartTime, manualHours)
-                    ? ` (${getManualRangeLabel(manualStartTime, manualHours)})`
-                    : ''}
-                </div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  3인 근무 OT: 관리자가 Manual에서 시작 시간 06:00 또는 11:00과 6시간 초과 시간을 입력한 뒤 근무 배지를 같은 날짜로 드래그해 승인합니다. 초과시간은 시간당 ₱50입니다.
-                </div>
+                {selectedShift === 'manual' && manualPreset === 'custom' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <Input
+                      label="시작 시간"
+                      type="time"
+                      value={manualStartTime}
+                      onChange={(e) => {
+                        setManualPreset('custom');
+                        setManualStartTime(e.target.value);
+                      }}
+                      disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
+                    />
+                    <Input
+                      label="몇 시간"
+                      type="number"
+                      min="0.5"
+                      step="0.5"
+                      value={manualHours}
+                      onChange={(e) => {
+                        setManualPreset('custom');
+                        setManualHours(e.target.value);
+                      }}
+                      disabled={!isAdmin || busy || loading || !manualScheduleAvailable}
+                      placeholder="4"
+                    />
+                  </div>
+                )}
+              </div>
+              <div
+                className="text-sm"
+                style={{ color: 'var(--text-muted)', fontWeight: 800, marginTop: 4 }}
+              >
+                2. 직원 목록 (드래그 하세요)
+              </div>
+              <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
+                {employeeOptions.map((e) => (
+                  <div
+                    key={e.id}
+                    draggable
+                    onDragStart={(evt) => setDragData(evt, { kind: 'employee', employeeId: e.id })}
+                    style={{
+                      borderRadius: 14,
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      background: 'rgba(255,255,255,0.05)',
+                      padding: '10px 12px',
+                      cursor: 'grab',
+                      fontWeight: 900,
+                    }}
+                  >
+                    {e.english_name}
+                  </div>
+                ))}
               </div>
               <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
-                Auto month 직원 선택 ({autoMonthEmployees.length}명)
+                3. Auto month 직원 선택 ({autoMonthEmployees.length}명)
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
                 {employeeOptions.filter((employee) => employee?.id && employee?.english_name).map((employee) => {
@@ -2258,7 +2224,7 @@ export default function SchedulerPage() {
               </div>
               {autoMonthEmployees.length === 3 ? (
                 <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
-                  3인 규칙: 월·화·금 A/B, 수·목 A/C, 토·일 C/B로 근무합니다. 역할은 3주마다 순환하며 이전 달에서 이어집니다.
+                  3인 규칙: 2026-11-30(월) A주부터 A/B주 14일 패턴을 반복합니다. 매일 2명이 근무하며 각 직원은 주 2회 9시간 풀타임을 맡습니다.
                 </div>
               ) : <>
                 <div className="text-sm" style={{ color: 'var(--text-muted)', fontWeight: 800 }}>
@@ -2318,31 +2284,6 @@ export default function SchedulerPage() {
               >
                 Auto month
               </Button>
-              <div
-                className="text-sm"
-                style={{ color: 'var(--text-muted)', fontWeight: 800, marginTop: 4 }}
-              >
-                2. 직원 목록 (드래그 하세요)
-              </div>
-              <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-                {employeeOptions.map((e) => (
-                  <div
-                    key={e.id}
-                    draggable
-                    onDragStart={(evt) => setDragData(evt, { kind: 'employee', employeeId: e.id })}
-                    style={{
-                      borderRadius: 14,
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      background: 'rgba(255,255,255,0.05)',
-                      padding: '10px 12px',
-                      cursor: 'grab',
-                      fontWeight: 900,
-                    }}
-                  >
-                    {e.english_name}
-                  </div>
-                ))}
-              </div>
               <Button
                 variant="danger"
                 size="sm"
@@ -2396,8 +2337,7 @@ export default function SchedulerPage() {
                       </div>
                     ) : (
                       todayList.map((r) => {
-                        const { bg, border, accent } = badgeStyle(r);
-                        const fullTime = isFullTimeSchedule(r);
+                        const { bg, border, accent, leftAccent } = badgeStyle(r);
                         return (
                           <div
                             key={r.id}
@@ -2410,21 +2350,12 @@ export default function SchedulerPage() {
                               padding: '5px 7px',
                               borderRadius: 8,
                               border: `1px solid ${border}`,
+                              borderLeft: leftAccent ? `4px solid ${leftAccent}` : undefined,
                               background: bg,
                             }}
                           >
-                            <div
-                              style={{
-                                fontSize: fullTime ? 13 : 12,
-                                fontWeight: fullTime ? 1000 : 900,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {getScheduleDisplayName(r)}
-                            </div>
-                            <div style={{ color: r.shift_type === 'manual' ? accent : 'var(--text-muted)', flex: '0 0 auto' }}>
+                            <ShiftName row={r} fontSize={12} />
+                            <div style={{ color: accent, flex: '0 0 auto' }}>
                               {getScheduleMetaLabel(todayDate, r)}
                             </div>
                           </div>
@@ -2501,7 +2432,7 @@ export default function SchedulerPage() {
                         background: dragging
                           ? 'rgba(250, 204, 21, 0.06)'
                           : 'rgba(255,255,255,0.03)',
-                        padding: isMobile ? 6 : 10,
+                        padding: isMobile ? 2 : 10,
                         minHeight: isMobile ? 92 : 124,
                         maxHeight: isMobile ? 128 : 176,
                         display: 'flex',
@@ -2522,7 +2453,9 @@ export default function SchedulerPage() {
                         <div
                           style={{
                             fontWeight: 1000,
-                            letterSpacing: '0.04em',
+                            fontSize: isMobile ? 10 : 14,
+                            lineHeight: isMobile ? 1 : undefined,
+                            letterSpacing: isMobile ? 0 : '0.04em',
                             color: weekend ? 'var(--gold-soft)' : 'var(--text-main)',
                           }}
                         >
@@ -2552,11 +2485,11 @@ export default function SchedulerPage() {
                       </div>
                       <div
                         style={{
-                          marginTop: isMobile ? 6 : 8,
+                          marginTop: isMobile ? 2 : 8,
                           display: 'grid',
                           alignContent: 'start',
                           gridAutoRows: 'max-content',
-                          gap: isMobile ? 4 : 6,
+                          gap: isMobile ? 2 : 6,
                           minHeight: 0,
                           flex: 1,
                           overflowY: 'auto',
@@ -2629,18 +2562,15 @@ export default function SchedulerPage() {
                     <div className="text-xs" style={{ color: 'var(--text-muted)' }}>-</div>
                   ) : (
                     list.map((row) => {
-                      const { bg, border, accent } = badgeStyle(row);
-                      const fullTime = isFullTimeSchedule(row);
+                      const { bg, border, accent, leftAccent } = badgeStyle(row);
                       return (
                         <div
                           key={row.id}
                           className="scheduler-fullscreen-shift"
-                          style={{ background: bg, borderColor: border }}
+                          style={{ background: bg, borderColor: border, borderLeft: leftAccent ? `4px solid ${leftAccent}` : undefined }}
                         >
-                          <strong style={{ fontSize: fullTime ? 12 : 11, fontWeight: fullTime ? 1000 : 900 }}>
-                            {getScheduleDisplayName(row)}
-                          </strong>
-                          <span style={{ color: row.shift_type === 'manual' ? accent : 'var(--text-muted)' }}>
+                          <ShiftName row={row} fontSize={11} />
+                          <span style={{ color: accent }}>
                             {getScheduleMetaLabel(cell.date, row)}
                           </span>
                         </div>
@@ -2680,8 +2610,7 @@ export default function SchedulerPage() {
                   <div style={{ color: 'var(--text-muted)', fontWeight: 800 }}>No schedule.</div>
                 ) : (
                   detailList.map((r) => {
-                    const { bg, border, accent } = badgeStyle(r);
-                    const fullTime = isFullTimeSchedule(r);
+                    const { bg, border, accent, leftAccent } = badgeStyle(r);
                     return (
                       <div
                         key={r.id}
@@ -2689,15 +2618,14 @@ export default function SchedulerPage() {
                           padding: '12px 12px',
                           borderRadius: 16,
                           border: `1px solid ${border}`,
+                          borderLeft: leftAccent ? `4px solid ${leftAccent}` : undefined,
                           background: bg,
                           display: 'grid',
                           gap: 4,
                         }}
                       >
-                        <div style={{ fontWeight: fullTime ? 1000 : 900, fontSize: fullTime ? 15 : 14 }}>
-                          {getScheduleDisplayName(r)}
-                        </div>
-                        <div style={{ fontWeight: 900, fontSize: 12, color: r.shift_type === 'manual' ? accent : 'var(--text-muted)' }}>
+                        <ShiftName row={r} fontSize={14} />
+                        <div style={{ fontWeight: 900, fontSize: 12, color: accent }}>
                           {getScheduleMetaLabel(detailDate, r)}
                         </div>
                       </div>
